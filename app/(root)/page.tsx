@@ -1,7 +1,16 @@
+import { sampleBooks } from "@/constants";
+import BookList from "../components/BookList";
+import BookOverview from "../components/BookOverview";
+
 export default function Home() {
   return (
     <>
-      <h1>Bookwise</h1>
+      <BookOverview {...sampleBooks[0]} />
+      <BookList
+        title="Popular Books"
+        books={sampleBooks}
+        containerClassName="mt-28"
+      />
     </>
   );
 }
