@@ -1,6 +1,6 @@
 import { sampleBooks } from "@/constants";
-import BookList from "../components/BookList";
-import BookOverview from "../components/BookOverview";
+import BookList from "../../components/BookList";
+import BookOverview from "../../components/BookOverview";
 
 export default function Home() {
   return (

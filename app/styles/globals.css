@@ -71,7 +71,7 @@
 
 @layer components {
   .form-btn {
-    @apply !bg-primary !text-dark-100 hover:!bg-primary !inline-flex !min-h-14 !w-full !items-center !justify-center !rounded-md !px-6 !py-2 !font-bold !text-base;
+    @apply !bg-primary !text-dark-100 hover:!bg-primary/90 cursor-pointer !inline-flex !min-h-14 !w-full !items-center !justify-center !rounded-md !px-6 !py-2 !font-bold !text-base;
   }
 
   .form-input {
@@ -166,12 +166,16 @@
   }
 
   /* File Upload */
-  .upload-btn {
-    @apply flex min-h-14 w-full items-center justify-center gap-1.5 rounded-md;
+  .upload-file {
+    @apply w-full min-h-14 border-2 border-dashed border-dark-500 rounded-lg flex items-center justify-center gap-2 hover:border-primary transition-colors bg-dark-300 cursor-pointer;
   }
 
   .upload-filename {
     @apply mt-1 text-center text-xs;
+  }
+
+  .file-remove-btn {
+    @apply absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white cursor-pointer rounded-full p-1.5 transition-colors;
   }
 
   .progress {

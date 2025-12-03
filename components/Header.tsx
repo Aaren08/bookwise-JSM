@@ -9,7 +9,10 @@ const Header = () => {
   return (
     <header className="my-10 flex justify-between gap-5">
       <Link href="/">
-        <Image src="/icons/logo.svg" alt="Logo" width={40} height={40} />
+        <div className="flex flex-row gap-3">
+          <Image src="/icons/logo.svg" alt="Logo" width={40} height={40} />
+          <h1 className="text-2xl font-semibold text-light-100">BookWise</h1>
+        </div>
       </Link>
 
       <ul className="flex flex-row items-center gap-8">
