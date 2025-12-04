@@ -100,9 +100,11 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
     } catch (error) {
       // Handle errors
       let errorMessage = "Upload failed";
+      let isAbortError = false;
 
       if (error instanceof ImageKitAbortError) {
         errorMessage = "Upload cancelled";
+        isAbortError = true;
         console.error("Upload aborted:", error.reason);
       } else if (error instanceof ImageKitInvalidRequestError) {
         errorMessage = "Invalid file or request";
@@ -127,18 +129,21 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
         fileInputRef.current.value = "";
       }
 
-      // Show error toast
-      toast.error("Upload failed", {
-        description:
-          "Your university card upload failed. Please try again later.",
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      // Show error toast only if it's not a cancellation
+      // (handleCancel already shows the "Upload cancelled" toast)
+      if (!isAbortError) {
+        toast.error("Upload failed", {
+          description:
+            "Your university card upload failed. Please try again later.",
+          position: "top-right",
+          style: {
+            background: "#fee2e2",
+            color: "#000000",
+            border: "1px solid #fca5a5",
+          },
+          className: "!bg-red-200 !text-black",
+        });
+      }
     }
   };
 
@@ -276,7 +281,7 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
             <button
               type="button"
               onClick={handleCancel}
-              className="text-red-500 hover:text-red-400 ml-2"
+              className="text-red-500 hover:text-red-400 ml-2 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
