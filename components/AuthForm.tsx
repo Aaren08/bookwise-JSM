@@ -23,6 +23,9 @@ import Link from "next/link";
 import { FIELD_NAMES, FIELD_TYPES } from "@/constants";
 import ImageUpload from "./ImageUpload";
 import { useState } from "react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 
 interface Props<T extends FieldValues> {
   schema: ZodType<T>;
@@ -39,6 +42,8 @@ const AuthForm = <T extends FieldValues>({
 }: Props<T>) => {
   const isSignIn = type === "SIGN_IN";
   const [uploadError, setUploadError] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const router = useRouter();
 
   const form = useForm({
     // @ts-expect-error - Zod v4 type incompatibility with @hookform/resolvers
@@ -47,15 +52,60 @@ const AuthForm = <T extends FieldValues>({
   });
 
   const handleSubmit: SubmitHandler<T> = async (data) => {
+    // Helper function to normalize error values into user-friendly strings
+    const normalizeError = (error: unknown): string => {
+      if (error instanceof Error) {
+        return error.message;
+      }
+      if (typeof error === "string") {
+        return error;
+      }
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return "An unexpected error occurred";
+      }
+    };
+
     try {
       const result = await onSubmit(data);
 
-      if (!result.success && result.error) {
-        // Handle error - you can show a toast or error message here
-        console.error("Form submission error:", result.error);
+      if (result.success) {
+        toast.success(isSignIn ? "Login successful" : "Sign up successful", {
+          position: "top-right",
+          style: {
+            background: "#dcfce7",
+            color: "#000000",
+            border: "1px solid #86efac",
+          },
+          className: "!bg-green-200 !text-black",
+        });
+        router.push("/");
+      } else {
+        // Handle the case when result.success is false
+        const errorMessage = result.error || "An error occurred";
+        toast.error(errorMessage, {
+          position: "top-right",
+          style: {
+            background: "#fee2e2",
+            color: "#000000",
+            border: "1px solid #fca5a5",
+          },
+          className: "!bg-red-200 !text-black",
+        });
       }
     } catch (error) {
-      console.error("Submission failed:", error);
+      console.log(error);
+      const errorMessage = normalizeError(error);
+      toast.error(errorMessage, {
+        position: "top-right",
+        style: {
+          background: "#fee2e2",
+          color: "#000000",
+          border: "1px solid #fca5a5",
+        },
+        className: "!bg-red-200 !text-black",
+      });
     }
   };
 
@@ -98,6 +148,29 @@ const AuthForm = <T extends FieldValues>({
                           field.onChange("");
                         }}
                       />
+                    ) : field.name === "password" ? (
+                      <div className="relative">
+                        <Input
+                          required
+                          type={showPassword ? "text" : "password"}
+                          {...field}
+                          className="form-input pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="password-toggle"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
                     ) : (
                       <Input
                         required
