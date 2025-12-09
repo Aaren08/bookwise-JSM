@@ -5,11 +5,21 @@ import { db } from "@/database/drizzle";
 import { users } from "@/database/schema";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
+import ratelimit from "../rateLimit";
+import { redirect } from "next/navigation";
 
 export const signInWithCredentials = async (
   credentials: Pick<AuthCredentials, "email" | "password">
 ) => {
   const { email, password } = credentials;
+
+  const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
+  const { success } = await ratelimit.limit(ip);
+
+  if (!success) {
+    return redirect("/too-fast");
+  }
 
   try {
     // Check if user exists
@@ -21,7 +31,7 @@ export const signInWithCredentials = async (
 
     // Dummy hash for timing attack prevention when user doesn't exist
     const dummyHash =
-      "$2a$10$YourDummyHashHereToPreventTimingAttacks1234567890";
+      "$4$10$561hasdANFfal35BSUoq#^#AFAfjioq#^#$%&MZNoqy3662qAhklo";
 
     // Always perform bcrypt comparison to prevent timing-based enumeration
     const userPassword =
@@ -53,6 +63,13 @@ export const signInWithCredentials = async (
 export const signUp = async (credentials: AuthCredentials) => {
   const { fullName, email, password, universityId, universityCard } =
     credentials;
+
+  const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
+  const { success } = await ratelimit.limit(ip);
+
+  if (!success) {
+    return redirect("/too-fast");
+  }
 
   try {
     // Check if user already exists
