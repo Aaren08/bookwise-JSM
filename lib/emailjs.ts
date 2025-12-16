@@ -1,17 +1,55 @@
-import emailjs from "@emailjs/browser";
 import config from "./config";
 
-// Initialize EmailJS with your public key
-emailjs.init(config.env.emailjs.publicKey);
-
 /**
- * Send an email using EmailJS
+ * Send an email using EmailJS REST API (for server-side use)
  * @param templateParams - Parameters to fill the email template
  * @returns Promise with the response
  */
 export const sendEmail = async (templateParams: EmailParams) => {
   try {
-    const response = await emailjs.send(
+    const response = await fetch(
+      "https://api.emailjs.com/api/v1.0/email/send",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          service_id: config.env.emailjs.serviceId,
+          template_id: config.env.emailjs.templateId,
+          user_id: config.env.emailjs.publicKey,
+          accessToken: config.env.emailjs.privateKey,
+          template_params: templateParams,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`EmailJS API error: ${response.status} - ${errorData}`);
+    }
+
+    const data = await response.text();
+    console.log("Email sent successfully:", data);
+    return { success: true, response: data };
+  } catch (error) {
+    console.error("Failed to send email:", error);
+    return { success: false, error };
+  }
+};
+
+/**
+ * Send an email using EmailJS browser SDK (for client-side use only)
+ * This should only be used in client components with "use client" directive
+ */
+export const sendEmailClient = async (templateParams: EmailParams) => {
+  // Dynamic import to prevent server-side errors
+  const emailjs = await import("@emailjs/browser");
+
+  try {
+    emailjs.default.init(config.env.emailjs.publicKey);
+
+    const response = await emailjs.default.send(
       config.env.emailjs.serviceId,
       config.env.emailjs.templateId,
       templateParams
