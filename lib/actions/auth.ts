@@ -8,6 +8,8 @@ import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import ratelimit from "../rateLimit";
 import { redirect } from "next/navigation";
+import config from "../config";
+import { workflowClient } from "../workflow";
 
 export const signInWithCredentials = async (
   credentials: Pick<AuthCredentials, "email" | "password">
@@ -30,12 +32,13 @@ export const signInWithCredentials = async (
       .limit(1);
 
     // Dummy hash for timing attack prevention when user doesn't exist
-    const dummyHash =
-      "$4$10$561hasdANFfal35BSUoq#^#AFAfjioq#^#$%&MZNoqy3662qAhklo";
+    // Valid bcrypt hash (result of bcrypt.hashSync('dummy', 10))
+    const DUMMY_HASH =
+      "$2b$10$rBV2u1C4JZwF3HJfCqYGpO7K9H9FhZ8Hk8fQ6yN2vJ4xX1Y0Z3K4G";
 
     // Always perform bcrypt comparison to prevent timing-based enumeration
     const userPassword =
-      existingUser.length > 0 ? existingUser[0].password : dummyHash;
+      existingUser.length > 0 ? existingUser[0].password : DUMMY_HASH;
     const isPasswordCorrect = await bcrypt.compare(password, userPassword);
 
     // Return generic error message for both cases to prevent user enumeration
@@ -96,6 +99,21 @@ export const signUp = async (credentials: AuthCredentials) => {
       password: hashedPassword,
       universityCard,
     });
+
+    // Fire-and-forget workflow trigger - don't block user signup
+    // User creation/sign-in should succeed regardless of workflow outcome
+    const workflowUrl = config.env.prodApiEndpoint || config.env.apiEndpoint;
+    workflowClient
+      .trigger({
+        url: `${workflowUrl}/api/workflows/onboarding`,
+        body: {
+          email,
+          fullName,
+        },
+      })
+      .catch((error) => {
+        console.error("Onboarding workflow trigger failed:", error);
+      });
 
     await signInWithCredentials({ email, password });
     return {

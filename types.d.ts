@@ -21,3 +21,12 @@ interface AuthCredentials {
   universityId: number;
   universityCard: string;
 }
+
+interface EmailParams {
+  to_name?: string;
+  from_name?: string;
+  user_name?: string;
+  user_email?: string;
+  message?: string;
+  [key: string]: unknown; // Allow additional custom parameters
+}
