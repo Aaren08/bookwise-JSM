@@ -20,7 +20,11 @@ const config = {
       privateKey: process.env.NEXT_EMAILJS_PRIVATE_KEY!,
       publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY!,
       serviceId: process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
-      templateId: process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+      templateId: {
+        welcome: process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_WELCOME!,
+        reEngagement:
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID_RE_ENGAGEMENT!,
+      },
     },
   },
 };

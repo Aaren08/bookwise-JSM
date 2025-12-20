@@ -2,10 +2,14 @@ import config from "./config";
 
 /**
  * Send an email using EmailJS REST API (for server-side use)
+ * @param templateId - The EmailJS template ID to use
  * @param templateParams - Parameters to fill the email template
  * @returns Promise with the response
  */
-export const sendEmail = async (templateParams: EmailParams) => {
+export const sendEmail = async (
+  templateId: string,
+  templateParams: EmailParams
+) => {
   try {
     const response = await fetch(
       "https://api.emailjs.com/api/v1.0/email/send",
@@ -16,7 +20,7 @@ export const sendEmail = async (templateParams: EmailParams) => {
         },
         body: JSON.stringify({
           service_id: config.env.emailjs.serviceId,
-          template_id: config.env.emailjs.templateId,
+          template_id: templateId,
           user_id: config.env.emailjs.publicKey,
           accessToken: config.env.emailjs.privateKey,
           template_params: templateParams,
@@ -41,8 +45,13 @@ export const sendEmail = async (templateParams: EmailParams) => {
 /**
  * Send an email using EmailJS browser SDK (for client-side use only)
  * This should only be used in client components with "use client" directive
+ * @param templateId - The EmailJS template ID to use
+ * @param templateParams - Parameters to fill the email template
  */
-export const sendEmailClient = async (templateParams: EmailParams) => {
+export const sendEmailClient = async (
+  templateId: string,
+  templateParams: EmailParams
+) => {
   // Dynamic import to prevent server-side errors
   const emailjs = await import("@emailjs/browser");
 
@@ -51,7 +60,7 @@ export const sendEmailClient = async (templateParams: EmailParams) => {
 
     const response = await emailjs.default.send(
       config.env.emailjs.serviceId,
-      config.env.emailjs.templateId,
+      templateId,
       templateParams
     );
 

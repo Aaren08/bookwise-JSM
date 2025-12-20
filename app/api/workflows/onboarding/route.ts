@@ -1,6 +1,7 @@
 import { db } from "@/database/drizzle";
 import { users } from "@/database/schema";
 import { sendEmail } from "@/lib/emailjs";
+import config from "@/lib/config";
 import { serve } from "@upstash/workflow/nextjs";
 import { eq } from "drizzle-orm";
 
@@ -49,9 +50,13 @@ const getUserState = async (email: string): Promise<UserState> => {
 export const { POST } = serve<InitialData>(async (context) => {
   const { email, fullName } = context.requestPayload;
 
+  // Get template IDs
+  const welcomeTemplateId = config.env.emailjs.templateId.welcome;
+  const reEngagementTemplateId = config.env.emailjs.templateId.reEngagement;
+
   // Welcome email
   await context.run("new-signup", async () => {
-    await sendEmail({
+    await sendEmail(welcomeTemplateId, {
       from_name: "BookWise Team",
       user_email: email,
       user_name: fullName,
@@ -61,31 +66,27 @@ export const { POST } = serve<InitialData>(async (context) => {
 
   await context.sleep("wait-for-3-days", 60 * 60 * 24 * 3);
 
+  let i = 0;
+
   while (true) {
-    const state = await context.run("check-user-state", async () => {
+    i++;
+    const state = await context.run(`check-user-state-${i}`, async () => {
       return await getUserState(email);
     });
 
+    // Only send reengagement email if user is non-active
     if (state === "non-active") {
-      await context.run("send-email-non-active", async () => {
-        await sendEmail({
+      await context.run(`send-email-non-active-${i}`, async () => {
+        await sendEmail(reEngagementTemplateId, {
           from_name: "BookWise Team",
           user_email: email,
           user_name: fullName,
           message: `Hey ${fullName}, we miss you! Come back and discover new books.`,
         });
       });
-    } else if (state === "active") {
-      await context.run("send-email-active", async () => {
-        await sendEmail({
-          from_name: "BookWise Team",
-          user_email: email,
-          user_name: fullName,
-          message: `Welcome back ${fullName}! Great to see you again.`,
-        });
-      });
     }
+    // If user is active, no email is sent, just continue the loop
 
-    await context.sleep("wait-for-1-month", 60 * 60 * 24 * 30);
+    await context.sleep(`wait-for-1-month-${i}`, 60 * 60 * 24 * 30);
   }
 });
