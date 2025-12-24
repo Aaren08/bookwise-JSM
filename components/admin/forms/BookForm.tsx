@@ -1,7 +1,6 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, SubmitHandler, UseFormReturn } from "react-hook-form";
+import { useForm, SubmitHandler, FieldErrors } from "react-hook-form";
 import z from "zod";
 import {
   Form,
@@ -28,12 +27,44 @@ interface Props extends Partial<Book> {
 
 type BookFormValues = z.infer<typeof bookSchema>;
 
+// Custom resolver for Zod v4 compatibility
+const zodFormResolver = <T extends z.ZodType>(schema: T) => {
+  return async (values: unknown) => {
+    try {
+      const validatedValues = await schema.parseAsync(values);
+      return {
+        values: validatedValues,
+        errors: {},
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors: FieldErrors = {};
+
+        error.issues.forEach((err: z.core.$ZodIssue) => {
+          const path = err.path.join(".");
+          if (path) {
+            fieldErrors[path] = {
+              type: err.code,
+              message: err.message,
+            };
+          }
+        });
+
+        return {
+          values: {},
+          errors: fieldErrors,
+        };
+      }
+      throw error;
+    }
+  };
+};
+
 const BookForm = ({ type, ...book }: Props) => {
   const router = useRouter();
 
   const form = useForm<BookFormValues>({
-    // @ts-expect-error - Zod v4 type incompatibility with @hookform/resolvers
-    resolver: zodResolver(bookSchema),
+    resolver: zodFormResolver(bookSchema),
     defaultValues: {
       title: book.title || "",
       description: book.description || "",
@@ -46,7 +77,7 @@ const BookForm = ({ type, ...book }: Props) => {
       videoUrl: book.videoUrl || "",
       summary: book.summary || "",
     },
-  }) as unknown as UseFormReturn<BookFormValues>;
+  });
 
   const onSubmit: SubmitHandler<BookFormValues> = async (values) => {
     const result = await createBook(values);
