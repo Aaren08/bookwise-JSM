@@ -1,8 +1,9 @@
 @import "tailwindcss";
+@import "./globals.css";
 
 @layer components {
   .admin-container {
-    @apply !flex w-[calc(100%-264px)] flex-1 flex-col bg-light-300 p-5 xs:p-10;
+    @apply !flex w-[calc(100%-264px)] flex-1 flex-col bg-light-300 p-5 sm:p-10;
   }
 
   .back-btn {
@@ -11,7 +12,7 @@
 
   /* Confirmation Dialog */
   .confirm-trigger {
-    @apply !font-semibold !text-sm !shadow-none hover:!bg-opacity-70 !w-full;
+    @apply !font-semibold !text-sm !shadow-none hover:!opacity-70 !w-full;
   }
 
   .confirm-approve {
@@ -23,7 +24,7 @@
   }
 
   .confirm-content {
-    @apply !sm:max-w-md !flex !flex-col !items-center !justify-center !p-6;
+    @apply sm:!max-w-md !flex !flex-col !items-center !justify-center !p-6;
   }
 
   .confirm-illustration {
@@ -160,7 +161,7 @@
   }
 
   .admin-search_input {
-    @apply !w-full !border-0 !shadow-none !bg-transparent !outline-none !focus:outline-none !focus:ring-0 !focus:border-0;
+    @apply !w-full !border-0 !shadow-none !bg-transparent !outline-none focus:!outline-none focus:!ring-0 focus:!border-0;
   }
 
   /* Sidebar */

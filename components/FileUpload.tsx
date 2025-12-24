@@ -6,20 +6,39 @@ import {
   ImageKitServerError,
   ImageKitUploadNetworkError,
   upload,
+  Video,
 } from "@imagekit/next";
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
+import config from "@/lib/config";
+import { cn } from "@/lib/utils";
 
-interface ImageUploadProps {
+interface FileUploadProps {
   onUploadComplete?: (url: string) => void;
   onUploadError?: (error: string) => void;
+  onChange?: (url: string) => void;
+  value?: string;
+  type?: "image" | "video";
+  variant?: "dark" | "light";
+  placeholder?: string;
+  folder?: string;
+  accept?: string;
 }
 
-const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
+const FileUpload = ({
+  onUploadComplete,
+  onUploadError,
+  onChange,
+  value,
+  type = "image",
+  variant = "dark",
+  placeholder = "Upload a file",
+  folder = "",
+  accept,
+}: FileUploadProps) => {
   const [progress, setProgress] = useState(0);
-  const [uploadedUrl, setUploadedUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string>("");
 
@@ -72,6 +91,7 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
         publicKey,
         file,
         fileName: file.name,
+        folder: folder,
         onProgress: (event) => {
           const progressPercentage = (event.loaded / event.total) * 100;
           setProgress(progressPercentage);
@@ -81,14 +101,16 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
 
       // Handle successful upload
       if (uploadResponse.url) {
-        setUploadedUrl(uploadResponse.url);
         onUploadComplete?.(uploadResponse.url);
+        onChange?.(uploadResponse.url);
       }
       setIsUploading(false);
 
       // Show success toast
       toast.success("Upload successful", {
-        description: "Your university card has been uploaded successfully",
+        description: `${
+          type === "image" ? "Image" : "Video"
+        } uploaded successfully`,
         position: "top-right",
         style: {
           background: "#dcfce7",
@@ -133,8 +155,7 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
       // (handleCancel already shows the "Upload cancelled" toast)
       if (!isAbortError) {
         toast.error("Upload failed", {
-          description:
-            "Your university card upload failed. Please try again later.",
+          description: `Your ${type} upload failed. Please try again later.`,
           position: "top-right",
           style: {
             background: "#fee2e2",
@@ -153,12 +174,10 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type (images only)
-      if (!file.type.startsWith("image/")) {
+      // Validate file type
+      if (type === "image" && !file.type.startsWith("image/")) {
         const errorMsg = "Please select an image file";
         onUploadError?.(errorMsg);
-
-        // Show error toast
         toast.error("Invalid file type", {
           description: errorMsg,
           position: "top-right",
@@ -172,12 +191,29 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
         return;
       }
 
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        const errorMsg = "File size must be less than 10MB";
+      if (type === "video" && !file.type.startsWith("video/")) {
+        const errorMsg = "Please select a video file";
         onUploadError?.(errorMsg);
+        toast.error("Invalid file type", {
+          description: errorMsg,
+          position: "top-right",
+          style: {
+            background: "#fee2e2",
+            color: "#000000",
+            border: "1px solid #fca5a5",
+          },
+          className: "!bg-red-200 !text-black",
+        });
+        return;
+      }
 
-        // Show error toast
+      // Validate file size
+      const maxSize = type === "image" ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+      if (file.size > maxSize) {
+        const errorMsg = `File size must be less than ${
+          type === "image" ? "10MB" : "50MB"
+        }`;
+        onUploadError?.(errorMsg);
         toast.error("File too large", {
           description: errorMsg,
           position: "top-right",
@@ -206,17 +242,17 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
    * Removes uploaded image
    */
   const handleRemove = () => {
-    setUploadedUrl("");
     setProgress(0);
     setFileName("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
     onUploadComplete?.("");
+    onChange?.("");
 
     // Show info toast
-    toast.info("Image removed", {
-      description: "You can upload a new university card",
+    toast.info("File removed", {
+      description: "You can upload a new file",
       position: "top-right",
       style: {
         background: "#fee2e2",
@@ -255,27 +291,48 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept="image/*"
+        accept={accept || (type === "image" ? "image/*" : "video/*")}
         className="hidden"
         disabled={isUploading}
       />
 
-      {!uploadedUrl && !isUploading && (
-        <button type="button" onClick={handleClick} className="upload-file">
+      {!value && !isUploading && (
+        <button
+          type="button"
+          onClick={handleClick}
+          className={cn(
+            "upload-file",
+            variant === "dark"
+              ? "bg-dark-300 text-light-100"
+              : "bg-light-600 text-dark-100 border border-gray-300"
+          )}
+        >
           <Image
             src="/icons/upload.svg"
-            alt="Upload university card"
+            alt="Upload file"
             width={20}
             height={20}
           />
-          <span className="text-light-100 font-normal">Upload a file</span>
+          <span
+            className={cn(
+              "font-normal",
+              variant === "dark" ? "text-light-100" : "text-dark-500"
+            )}
+          >
+            {placeholder}
+          </span>
         </button>
       )}
 
       {isUploading && (
         <div className="w-full space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-light-100 truncate flex-1">
+            <span
+              className={cn(
+                "text-sm truncate flex-1",
+                variant === "dark" ? "text-light-100" : "text-dark-500"
+              )}
+            >
               {fileName}
             </span>
             <button
@@ -295,15 +352,32 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
         </div>
       )}
 
-      {uploadedUrl && !isUploading && (
-        <div className="relative w-full min-h-14 border-2 border-green-600 rounded-lg overflow-hidden bg-dark-300">
-          <Image
-            src={uploadedUrl}
-            alt="Uploaded university card"
-            width={200}
-            height={100}
-            className="w-full h-auto object-contain"
-          />
+      {value && !isUploading && (
+        <div
+          className={cn(
+            "relative w-full rounded-lg overflow-hidden",
+            variant === "dark"
+              ? "bg-dark-300 border-green-600"
+              : "bg-light-600 border-gray-300",
+            type === "image" ? "min-h-14 border-2" : "aspect-video border-none"
+          )}
+        >
+          {type === "image" ? (
+            <Image
+              src={value}
+              alt="Uploaded file"
+              width={200}
+              height={100}
+              className="w-full h-auto object-contain"
+            />
+          ) : (
+            <Video
+              src={value}
+              controls={true}
+              className="w-full h-full rounded-lg"
+              urlEndpoint={config.env.imagekit.urlEndpoint}
+            />
+          )}
           <button
             type="button"
             onClick={handleRemove}
@@ -317,4 +391,4 @@ const ImageUpload = ({ onUploadComplete, onUploadError }: ImageUploadProps) => {
   );
 };
 
-export default ImageUpload;
+export default FileUpload;

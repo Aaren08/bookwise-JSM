@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Button } from "./ui/button";
 
 interface BookCardProps {
-  id: number;
+  id: string;
   title: string;
   genre: string;
   coverColor: string;
