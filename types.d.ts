@@ -1,5 +1,5 @@
 interface Book {
-  id: number;
+  id: string;
   title: string;
   author: string;
   genre: string;
@@ -11,7 +11,7 @@ interface Book {
   coverUrl: string;
   videoUrl: string;
   summary: string;
-  isLoanedBook?: boolean;
+  createdAt: Date | null;
 }
 
 interface AuthCredentials {
@@ -29,4 +29,17 @@ interface EmailParams {
   user_email?: string;
   message?: string;
   [key: string]: unknown; // Allow additional custom parameters
+}
+
+interface BookParams {
+  title: string;
+  author: string;
+  genre: string;
+  rating: number;
+  totalCopies: number;
+  description: string;
+  coverColor: string;
+  coverUrl: string;
+  videoUrl: string;
+  summary: string;
 }

@@ -12,7 +12,7 @@ const BookOverview = ({
   description,
   coverColor,
   coverUrl,
-}: Book) => {
+}: Book & { userId: string }) => {
   return (
     <section className="book-overview">
       <div className="flex flex-1 flex-col gap-5">
@@ -20,33 +20,33 @@ const BookOverview = ({
 
         <div className="book-info">
           <p>
-            By <span className="font-semibold text-light-200">{author}</span>
+            By: <span className="font-semibold text-light-200">{author}</span>
           </p>
 
           <p>
-            Category{" "}
+            Category:{" "}
             <span className="font-semibold text-light-200">{genre}</span>
           </p>
 
           <div className="flex flex-row gap-1">
             <Image src="/icons/star.svg" alt="star" width={22} height={22} />
-            <p>{rating}</p>
+            <p>{rating}/5</p>
           </div>
         </div>
 
         <div className="book-copies">
           <p>
-            Total Books: <span>{totalCopies}</span>
+            Total Books:<span>{totalCopies}</span>
           </p>
 
           <p>
-            Available Books: <span>{availableCopies}</span>
+            Available Books:<span>{availableCopies}</span>
           </p>
         </div>
 
         <p className="book-description">{description}</p>
 
-        <Button className="book-overview_btn">
+        <Button className="book-overview_btn cursor-pointer">
           <Image src="/icons/book.svg" alt="plus" width={20} height={20} />
           <p
             className="text-xl text-dark-100"
