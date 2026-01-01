@@ -1,8 +1,11 @@
 import Image from "next/image";
-import { Button } from "./ui/button";
 import BookCover from "./BookCover";
+import BorrowBook from "./BorrowBook";
+import { db } from "@/database/drizzle";
+import { users, borrowRecords } from "@/database/schema";
+import { eq, and } from "drizzle-orm";
 
-const BookOverview = ({
+const BookOverview = async ({
   title,
   author,
   genre,
@@ -12,7 +15,39 @@ const BookOverview = ({
   description,
   coverColor,
   coverUrl,
+  id,
+  userId,
 }: Book & { userId: string }) => {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) return null;
+
+  const [borrowing] = await db
+    .select()
+    .from(borrowRecords)
+    .where(
+      and(
+        eq(borrowRecords.userId, userId),
+        eq(borrowRecords.bookId, id),
+        eq(borrowRecords.borrowStatus, "BORROWED")
+      )
+    )
+    .limit(1);
+
+  const borrowingEligibility = {
+    isEligible: availableCopies > 0 && user.status === "APPROVED" && !borrowing,
+    message:
+      availableCopies <= 0
+        ? "Book is not available at the moment. Please check back later."
+        : !borrowing
+        ? "You are not eligible to borrow this book. Please contact the library for more information."
+        : "You have already borrowed this book.",
+  };
+
   return (
     <section className="book-overview">
       <div className="flex flex-1 flex-col gap-5">
@@ -46,15 +81,13 @@ const BookOverview = ({
 
         <p className="book-description">{description}</p>
 
-        <Button className="book-overview_btn cursor-pointer">
-          <Image src="/icons/book.svg" alt="plus" width={20} height={20} />
-          <p
-            className="text-xl text-dark-100"
-            style={{ fontFamily: "var(--bebas-neue)" }}
-          >
-            Borrow Book
-          </p>
-        </Button>
+        {user && (
+          <BorrowBook
+            bookId={id}
+            userId={userId}
+            borrowingEligibility={borrowingEligibility}
+          />
+        )}
       </div>
 
       <div className="relative flex flex-1 justify-center">
