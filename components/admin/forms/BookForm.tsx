@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { BookPlus } from "lucide-react";
 import ColorPicker from "../ColorPicker";
 import FileUpload from "@/components/FileUpload";
-import { createBook } from "@/lib/admin/actions/book";
+import { createBook, updateBook } from "@/lib/admin/actions/book";
 import { toast } from "sonner";
 
 interface Props extends Partial<Book> {
@@ -80,7 +80,10 @@ const BookForm = ({ type, ...book }: Props) => {
   });
 
   const onSubmit: SubmitHandler<BookFormValues> = async (values) => {
-    const result = await createBook(values);
+    const result =
+      type === "create"
+        ? await createBook(values)
+        : await updateBook({ ...values, id: book.id as string });
 
     if (result.success) {
       toast.success(result.message, {
