@@ -1,6 +1,6 @@
 "use server";
 
-import { signIn } from "@/auth";
+import { signIn, signOut } from "@/auth";
 import { db } from "@/database/drizzle";
 import { users } from "@/database/schema";
 import bcrypt from "bcryptjs";
@@ -126,4 +126,8 @@ export const signUp = async (credentials: AuthCredentials) => {
       error: "Something went wrong",
     };
   }
+};
+
+export const handleSignOut = async () => {
+  await signOut();
 };

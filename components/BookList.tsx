@@ -7,7 +7,6 @@ interface Props {
 }
 
 const BookList = ({ title, books, containerClassName }: Props) => {
-  if (books.length < 2) return null;
   return (
     <section className={containerClassName}>
       <h2
