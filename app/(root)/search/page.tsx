@@ -137,7 +137,7 @@ async function SearchContent({ searchParams }: SearchPageProps) {
         <h1 className="library-title">
           Explore and Search for
           <br />
-          Any Book In Our Library
+          <span className="text-primary">Any Book</span> In Our Library
         </h1>
 
         <SearchForm initialQuery={query} />
@@ -147,24 +147,7 @@ async function SearchContent({ searchParams }: SearchPageProps) {
       <Suspense
         fallback={
           <div className="mt-16">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
-              <div>
-                <h2
-                  className="text-4xl text-light-100"
-                  style={{ fontFamily: "var(--bebas-neue)" }}
-                >
-                  Loading Results...
-                </h2>
-              </div>
-            </div>
-            <div className="book-list">
-              {[...Array(12)].map((_, i) => (
-                <div
-                  key={i}
-                  className="animate-pulse bg-dark-300 rounded-lg h-[300px]"
-                />
-              ))}
-            </div>
+            <div className="loader"></div>
           </div>
         }
       >

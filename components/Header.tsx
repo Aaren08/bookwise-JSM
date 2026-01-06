@@ -60,7 +60,7 @@ const Header = ({ session }: { session?: Session | null }) => {
 
         {session && (
           <li>
-            <form action={handleSignOut}>
+            <form action={handleSignOut} className="mt-1">
               <button type="submit" className="cursor-pointer">
                 <Image
                   src="/icons/logout.svg"
