@@ -254,11 +254,11 @@
   }
 
   .pagination-btn_light {
-    @apply !bg-light-300 !text-dark-300 hover:!bg-light-300/70;
+    @apply !bg-primary !text-dark-100 hover:!bg-primary/90;
   }
 
   .pagination-btn_dark {
-    @apply !bg-dark-300 hover:!bg-dark-100;
+    @apply !bg-dark-300 !text-light-100 hover:!bg-dark-100;
   }
 
   #pagination p {
@@ -267,7 +267,7 @@
 
   /* Sort */
   .select-trigger {
-    @apply !w-40 !h-10 !px-4 !bg-dark-300 !text-light-100 !border-dark-100;
+    @apply !w-45 !h-10 !px-4 !bg-dark-300 !text-light-100 !border-dark-100;
   }
 
   .select-content {

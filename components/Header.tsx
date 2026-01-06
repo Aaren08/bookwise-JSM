@@ -5,6 +5,7 @@ import { cn, getInitials } from "@/lib/utils";
 import Link from "next/link";
 import Image from "next/image";
 import { Session } from "next-auth";
+import { handleSignOut } from "@/lib/actions/auth";
 
 const Header = ({ session }: { session?: Session | null }) => {
   const pathname = usePathname();
@@ -20,13 +21,25 @@ const Header = ({ session }: { session?: Session | null }) => {
       <ul className="flex flex-row items-center gap-8">
         <li>
           <Link
-            href="/library"
+            href="/"
             className={cn(
               "text-base cursor-pointer capitalize",
-              pathname === "/library" ? "text-light-200" : "text-light-100"
+              pathname === "/" ? "text-light-200" : "text-light-100"
             )}
           >
-            Library
+            Home
+          </Link>
+        </li>
+
+        <li>
+          <Link
+            href="/search"
+            className={cn(
+              "text-base cursor-pointer capitalize",
+              pathname === "/search" ? "text-light-200" : "text-light-100"
+            )}
+          >
+            Search
           </Link>
         </li>
 
@@ -44,6 +57,19 @@ const Header = ({ session }: { session?: Session | null }) => {
             </Link>
           </li>
         )}
+
+        <li>
+          <form action={handleSignOut} className="mt-1">
+            <button type="submit" className="cursor-pointer">
+              <Image
+                src="/icons/logout.svg"
+                alt="Logout"
+                width={20}
+                height={20}
+              />
+            </button>
+          </form>
+        </li>
       </ul>
     </header>
   );
