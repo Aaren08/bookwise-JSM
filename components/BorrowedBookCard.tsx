@@ -8,6 +8,9 @@ import {
   getBorrowStatusText,
 } from "@/lib/returnPolicy";
 
+const OVERDUE_ICON_FILTER =
+  "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
+
 interface BorrowedBookCardProps extends Book {
   borrowDate: Date | string;
   dueDate: Date | string;
@@ -66,12 +69,7 @@ const BorrowedBookCard = ({
               height={18}
               className="object-contain"
               style={
-                status.isOverdue
-                  ? {
-                      filter:
-                        "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)",
-                    }
-                  : undefined
+                status.isOverdue ? { filter: OVERDUE_ICON_FILTER } : undefined
               }
             />
             <p className="text-sm font-medium" style={{ color: statusColor }}>
@@ -87,12 +85,7 @@ const BorrowedBookCard = ({
             height={16}
             className="object-contain"
             style={
-              status.isOverdue
-                ? {
-                    filter:
-                      "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)",
-                  }
-                : undefined
+              status.isOverdue ? { filter: OVERDUE_ICON_FILTER } : undefined
             }
           />
         </div>
