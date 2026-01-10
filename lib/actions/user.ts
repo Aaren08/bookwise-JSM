@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { users, borrowRecords, books } from "@/database/schema";
 import { auth } from "@/auth";
+import { and, count } from "drizzle-orm";
 
 export const getUserBorrowedBooks = async (
   userId: string,
