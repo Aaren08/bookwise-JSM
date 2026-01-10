@@ -50,14 +50,15 @@ export const getUserBorrowedBooks = async (
     const borrowedRecords = records;
 
     // Get total count for pagination
-    const allRecords = await db
-      .select()
+    const [{ value: total }] = await db
+      .select({ value: count() })
       .from(borrowRecords)
-      .where(eq(borrowRecords.userId, userId));
-
-    const total = allRecords.filter(
-      (r) => r.borrowStatus === "BORROWED"
-    ).length;
+      .where(
+        and(
+          eq(borrowRecords.userId, userId),
+          eq(borrowRecords.borrowStatus, "BORROWED")
+        )
+      );
     const totalPages = Math.ceil(total / limit);
 
     const borrowedBooks = borrowedRecords.map((record) => ({
