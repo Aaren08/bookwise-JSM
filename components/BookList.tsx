@@ -1,4 +1,5 @@
 import BookCard from "./BookCard";
+import BorrowedBookCard from "./BorrowedBookCard";
 
 interface Props {
   title: string;
@@ -17,9 +18,20 @@ const BookList = ({ title, books, containerClassName }: Props) => {
       </h2>
 
       <ul className="book-list">
-        {books.map((book) => (
-          <BookCard key={book.id} {...book} />
-        ))}
+        {books.map((book) => {
+          if (book.isLoanedBook && book.borrowDate && book.dueDate) {
+            return (
+              <BorrowedBookCard
+                key={book.id}
+                {...book}
+                borrowDate={book.borrowDate}
+                dueDate={book.dueDate}
+              />
+            );
+          }
+
+          return <BookCard key={book.id} {...book} />;
+        })}
       </ul>
     </section>
   );

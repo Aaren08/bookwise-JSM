@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "./ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -12,11 +12,12 @@ interface NavigatePageProps {
 const NavigatePage = ({ currentPage, totalPages }: NavigatePageProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   const handlePageChange = (page: number) => {
     const params = new URLSearchParams(searchParams);
     params.set("page", page.toString());
-    router.push(`/search?${params.toString()}`);
+    router.push(`${pathname}?${params.toString()}`);
     router.refresh();
 
     // Scroll to top smoothly
