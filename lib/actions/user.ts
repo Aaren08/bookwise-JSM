@@ -38,14 +38,16 @@ export const getUserBorrowedBooks = async (
       })
       .from(borrowRecords)
       .innerJoin(books, eq(borrowRecords.bookId, books.id))
-      .where(eq(borrowRecords.userId, userId))
+      .where(
+        and(
+          eq(borrowRecords.userId, userId),
+          eq(borrowRecords.borrowStatus, "BORROWED")
+        )
+      )
       .limit(limit)
       .offset(offset);
 
-    // Filter only borrowed books (not returned)
-    const borrowedRecords = records.filter(
-      (record) => record.borrowStatus === "BORROWED"
-    );
+    const borrowedRecords = records;
 
     // Get total count for pagination
     const allRecords = await db
