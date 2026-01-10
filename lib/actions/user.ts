@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { users, borrowRecords, books } from "@/database/schema";
+import { auth } from "@/auth";
 
 export const getUserBorrowedBooks = async (
   userId: string,
@@ -10,6 +11,17 @@ export const getUserBorrowedBooks = async (
   limit: number = 6
 ) => {
   try {
+    const session = await auth();
+    if (
+      !session?.user?.id ||
+      (session.user.id !== userId && session.user.role !== "ADMIN")
+    ) {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
     const offset = (page - 1) * limit;
 
     // Get borrowed books with book details - only BORROWED status
@@ -75,6 +87,17 @@ export const getUserBorrowedBooks = async (
 
 export const getUserProfile = async (userId: string) => {
   try {
+    const session = await auth();
+    if (
+      !session?.user?.id ||
+      (session.user.id !== userId && session.user.role !== "ADMIN")
+    ) {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
     const { id, fullName, email, universityId, universityCard, status, role } =
       users;
     const user = await db
