@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Session } from "next-auth";
+import { handleSignOut } from "@/lib/actions/auth";
 
 const Sidebar = ({ session }: { session: Session }) => {
   const pathname = usePathname();
@@ -68,9 +69,21 @@ const Sidebar = ({ session }: { session: Session }) => {
           </Avatar>
           <div className="size-3 rounded-full bg-green-500 absolute bottom-0 right-0" />
         </div>
-        <div className="flex flex-col max-md:hidden">
-          <p className="text-dark-200 font-semibold">{session?.user?.name}</p>
-          <p className="text-xs text-light-500">{session?.user?.email}</p>
+        <div className="flex flex-row">
+          <div className="flex flex-col max-md:hidden">
+            <p className="text-dark-200 font-semibold">{session?.user?.name}</p>
+            <p className="text-xs text-light-500">{session?.user?.email}</p>
+          </div>
+          <form action={handleSignOut} className="mt-2.5 ml-2.5">
+            <button type="submit" className="cursor-pointer">
+              <Image
+                src="/icons/logout.svg"
+                alt="Logout"
+                width={20}
+                height={20}
+              />
+            </button>
+          </form>
         </div>
       </div>
     </div>
