@@ -52,7 +52,10 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <button className="cursor-pointer text-red-500 hover:text-red-600 transition-colors">
+        <button
+          aria-label="Delete user"
+          className="cursor-pointer text-red-500 hover:text-red-600 transition-colors"
+        >
           <Trash2 className="size-5" />
         </button>
       </AlertDialogTrigger>
