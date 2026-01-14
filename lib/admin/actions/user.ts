@@ -69,6 +69,19 @@ export const getAllUsers = async ({
 
 export const deleteUser = async (userId: string) => {
   try {
+    const userBorrowRecords = await db
+      .select()
+      .from(borrowRecords)
+      .where(eq(borrowRecords.userId, userId))
+      .limit(1);
+
+    if (userBorrowRecords.length > 0) {
+      return {
+        success: false,
+        error: "Cannot delete user with existing borrow records",
+      };
+    }
+
     await db.delete(users).where(eq(users.id, userId));
 
     revalidatePath("/admin/users");
@@ -78,7 +91,7 @@ export const deleteUser = async (userId: string) => {
       message: "User deleted successfully",
     };
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return {
       success: false,
       error: "Failed to delete user",

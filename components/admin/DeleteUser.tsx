@@ -12,6 +12,7 @@ import {
 import { deleteUser } from "@/lib/admin/actions/user";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 
 interface Props {
   userId: string;
@@ -19,9 +20,12 @@ interface Props {
 }
 
 const DeleteUser = ({ userId, onDelete }: Props) => {
+  const [open, setOpen] = useState(false);
+
   const handleDelete = async (userId: string) => {
     const res = await deleteUser(userId);
     if (res.success) {
+      setOpen(false);
       toast.success("User deleted successfully", {
         position: "top-right",
         style: {
@@ -46,7 +50,7 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
   };
 
   return (
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
         <button className="cursor-pointer text-red-500 hover:text-red-600 transition-colors">
           <Trash2 className="size-5" />
@@ -65,7 +69,10 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => handleDelete(userId)}
+            onClick={(e) => {
+              e.preventDefault();
+              handleDelete(userId);
+            }}
             className="cursor-pointer bg-red-500 hover:bg-red-600 text-white"
           >
             Confirm
