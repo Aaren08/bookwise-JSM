@@ -14,7 +14,9 @@ const Header = ({ session }: { session?: Session | null }) => {
       <Link href="/">
         <div className="flex flex-row gap-3">
           <Image src="/icons/logo.svg" alt="Logo" width={40} height={40} />
-          <h1 className="text-2xl font-semibold text-light-100">BookWise</h1>
+          <h1 className="text-2xl font-semibold text-light-100 max-sm:hidden">
+            BookWise
+          </h1>
         </div>
       </Link>
 
