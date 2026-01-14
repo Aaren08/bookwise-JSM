@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 import { getInitials } from "@/lib/utils";
@@ -29,7 +29,6 @@ const UserTable = ({ users }: Props) => {
     setSortedUsers(users);
   }, [users]);
 
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isCardOpen, setIsCardOpen] = useState(false);
 
