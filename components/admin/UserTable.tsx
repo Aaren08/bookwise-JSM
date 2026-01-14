@@ -24,6 +24,12 @@ interface Props {
 
 const UserTable = ({ users }: Props) => {
   const [sortedUsers, setSortedUsers] = useState<User[]>(users);
+
+  useEffect(() => {
+    setSortedUsers(users);
+  }, [users]);
+
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isCardOpen, setIsCardOpen] = useState(false);
 
