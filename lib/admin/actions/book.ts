@@ -47,7 +47,16 @@ export const updateBook = async (
         );
 
       const borrowedCount = Number(borrowedCountResult.value);
-      updateData.availableCopies = params.totalCopies - borrowedCount;
+      const newAvailableCopies = params.totalCopies - borrowedCount;
+      
+      if (newAvailableCopies < 0) {
+        return {
+          success: false,
+          message: `Cannot reduce total copies below ${borrowedCount} (currently borrowed)`,
+        };
+      }
+      
+      updateData.availableCopies = newAvailableCopies;
     }
 
     const updatedBook = await db
