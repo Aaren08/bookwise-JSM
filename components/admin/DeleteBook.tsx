@@ -18,9 +18,10 @@ import { useState } from "react";
 
 interface Props {
   id: string;
+  onDelete?: () => void;
 }
 
-const DeleteBook = ({ id }: Props) => {
+const DeleteBook = ({ id, onDelete }: Props) => {
   const [open, setOpen] = useState(false);
 
   const handleDelete = async (id: string) => {
@@ -36,8 +37,7 @@ const DeleteBook = ({ id }: Props) => {
         },
         className: "!bg-green-200 !text-black",
       });
-      // Refresh the page or update the list via parent
-      window.location.reload();
+      onDelete?.();
     } else {
       toast.error(res.message || "Failed to delete book", {
         position: "top-right",
