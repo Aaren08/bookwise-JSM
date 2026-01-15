@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,24 +11,24 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { deleteUser } from "@/lib/admin/actions/user";
+import { deleteBook } from "@/lib/admin/actions/book";
+import Image from "next/image";
 import { toast } from "sonner";
 import { useState } from "react";
-import Image from "next/image";
 
 interface Props {
-  userId: string;
-  onDelete: () => void;
+  id: string;
+  onDelete?: () => void;
 }
 
-const DeleteUser = ({ userId, onDelete }: Props) => {
+const DeleteBook = ({ id, onDelete }: Props) => {
   const [open, setOpen] = useState(false);
 
-  const handleDelete = async (userId: string) => {
-    const res = await deleteUser(userId);
+  const handleDelete = async (id: string) => {
+    const res = await deleteBook(id);
     if (res.success) {
       setOpen(false);
-      toast.success("User deleted successfully", {
+      toast.success("Book deleted successfully", {
         position: "top-right",
         style: {
           background: "#dcfce7",
@@ -35,9 +37,9 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
         },
         className: "!bg-green-200 !text-black",
       });
-      onDelete();
+      onDelete?.();
     } else {
-      toast.error(res.error || "Failed to delete user", {
+      toast.error(res.message || "Failed to delete book", {
         position: "top-right",
         style: {
           background: "#fee2e2",
@@ -52,24 +54,21 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <button
-          aria-label="Delete user"
-          className="cursor-pointer text-red-500 hover:text-red-600 transition-colors"
-        >
+        <div className="cursor-pointer">
           <Image
             src="/icons/admin/trash.svg"
-            alt="trash"
-            width={20}
-            height={20}
+            alt="delete"
+            width={24}
+            height={24}
           />
-        </button>
+        </div>
       </AlertDialogTrigger>
       <AlertDialogContent className="bg-white">
         <AlertDialogHeader>
           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the user
-            account and remove their data from our servers.
+            This action cannot be undone. This will permanently delete the book
+            and remove its data from our servers.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -79,9 +78,9 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
-              handleDelete(userId);
+              handleDelete(id);
             }}
-            className="cursor-pointer bg-red-500 hover:bg-red-600 text-white"
+            className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white"
           >
             Confirm
           </AlertDialogAction>
@@ -91,4 +90,4 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
   );
 };
 
-export default DeleteUser;
+export default DeleteBook;

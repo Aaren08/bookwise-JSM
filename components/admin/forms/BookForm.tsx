@@ -191,7 +191,11 @@ const BookForm = ({ type, ...book }: Props) => {
                   required
                   placeholder="Book rating"
                   {...field}
-                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                  value={field.value ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    field.onChange(val === "" ? "" : parseFloat(val));
+                  }}
                   className="book-form_input"
                   step="0.1"
                 />
@@ -217,7 +221,11 @@ const BookForm = ({ type, ...book }: Props) => {
                   required
                   placeholder="Total copies"
                   {...field}
-                  onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                  value={field.value ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    field.onChange(val === "" ? "" : parseInt(val, 10));
+                  }}
                   className="book-form_input"
                 />
               </FormControl>

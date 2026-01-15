@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, ExternalLink } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import dayjs from "dayjs";
@@ -15,8 +15,9 @@ import { getInitials } from "@/lib/utils";
 import { updateUserRole } from "@/lib/admin/actions/user";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import ViewUserCard from "./ViewUserCard";
-import UserFilter from "./UserFilter";
+import FilterData from "./FilterData";
 import DeleteUser from "./DeleteUser";
+import Image from "next/image";
 
 interface Props {
   users: User[];
@@ -85,7 +86,7 @@ const UserTable = ({ users }: Props) => {
     <section className="w-full rounded-2xl bg-white p-7 shadow-lg">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-semibold text-dark-400">All Users</h2>
-        <UserFilter onSort={handleSort} />
+        <FilterData onSort={handleSort} />
       </div>
 
       <div className="mt-7 w-full overflow-x-auto">
@@ -173,7 +174,12 @@ const UserTable = ({ users }: Props) => {
                     className=" cursor-pointer flex items-center gap-1 text-sm font-semibold text-blue-500 hover:text-blue-600"
                   >
                     View ID Card
-                    <ExternalLink className="size-4" />
+                    <Image
+                      src="/icons/admin/link.svg"
+                      alt="link"
+                      width={18}
+                      height={18}
+                    />
                   </button>
                 </td>
                 <td className="py-4 pr-4 pl-3">

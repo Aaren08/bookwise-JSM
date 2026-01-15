@@ -1,19 +1,29 @@
-import { Button } from "@/components/ui/button";
-import { CirclePlus } from "lucide-react";
-import Link from "next/link";
+import BookTable from "@/components/admin/BookTable";
+import { getAllBooks } from "@/lib/admin/actions/book";
+import NavigatePage from "@/components/NavigatePage";
 
-const Page = () => {
+const Page = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) => {
+  const { page: pageParam } = await searchParams;
+  const page = Number(pageParam) || 1;
+
+  const booksResult = await getAllBooks({ page });
+
+  const booksData = booksResult.success ? booksResult.data?.books : [];
+  const totalPages = booksResult.success
+    ? booksResult.data?.totalPages || 0
+    : 0;
+
   return (
-    <section className="w-full rounded-2xl bg-white p-7">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">All Books</h2>
-        <Button className="bg-primary-admin" asChild>
-          <Link href={"/admin/books/new"} className="text-white">
-            <CirclePlus className="mr-2" /> Create a New Book
-          </Link>
-        </Button>
+    <>
+      <BookTable books={booksData} />
+      <div className="mt-8 w-full flex justify-end">
+        <NavigatePage currentPage={page} totalPages={totalPages} />
       </div>
-    </section>
+    </>
   );
 };
 
