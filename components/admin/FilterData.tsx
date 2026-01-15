@@ -7,7 +7,7 @@ interface Props {
   onSort: (value: "asc" | "desc") => void;
 }
 
-const UserFilter = ({ onSort }: Props) => {
+const FilterData = ({ onSort }: Props) => {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const toggleSort = () => {
@@ -33,4 +33,4 @@ const UserFilter = ({ onSort }: Props) => {
   );
 };
 
-export default UserFilter;
+export default FilterData;
