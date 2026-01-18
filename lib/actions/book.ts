@@ -3,6 +3,7 @@
 import { eq, and } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
+import { auth } from "@/auth";
 import dayjs from "dayjs";
 
 export const borrowBook = async (params: BorrowBookParams) => {
@@ -64,6 +65,55 @@ export const borrowBook = async (params: BorrowBookParams) => {
     return {
       success: false,
       error: "Failed to borrow book",
+    };
+  }
+};
+
+export const dismissBorrowRecord = async (borrowRecordId: string) => {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
+    // Verify the record belongs to the user
+    const record = await db
+      .select()
+      .from(borrowRecords)
+      .where(eq(borrowRecords.id, borrowRecordId))
+      .limit(1);
+
+    if (!record.length) {
+      return {
+        success: false,
+        error: "Record not found",
+      };
+    }
+
+    if (record[0].userId !== session.user.id && session.user.role !== "ADMIN") {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
+    // Update the record to dismissed
+    await db
+      .update(borrowRecords)
+      .set({ dismissed: 1 })
+      .where(eq(borrowRecords.id, borrowRecordId));
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.log(error);
+    return {
+      success: false,
+      error: "Failed to dismiss record",
     };
   }
 };

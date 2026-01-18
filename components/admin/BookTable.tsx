@@ -103,7 +103,14 @@ const BookTable = ({ books }: Props) => {
                         height={24}
                       />
                     </Link>
-                    <DeleteBook id={book.id} />
+                    <DeleteBook
+                      id={book.id}
+                      onDelete={() =>
+                        setSortedBooks((prev) =>
+                          prev.filter((b) => b.id !== book.id)
+                        )
+                      }
+                    />
                   </div>
                 </td>
               </tr>

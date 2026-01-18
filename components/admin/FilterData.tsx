@@ -5,9 +5,10 @@ import { useState } from "react";
 
 interface Props {
   onSort: (value: "asc" | "desc") => void;
+  label?: string;
 }
 
-const FilterData = ({ onSort }: Props) => {
+const FilterData = ({ onSort, label = "A-Z" }: Props) => {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const toggleSort = () => {
@@ -22,7 +23,7 @@ const FilterData = ({ onSort }: Props) => {
         onClick={toggleSort}
         className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-admin/50"
       >
-        A-Z
+        {label}
         {sortOrder === "asc" ? (
           <ArrowDownAZ className="size-4" />
         ) : (

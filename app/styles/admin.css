@@ -10,6 +10,10 @@
     @apply !mb-10 !w-fit !border !border-light-300 !bg-white !text-xs !font-medium !text-dark-200 hover:!bg-light-300;
   }
 
+  .generate-btn {
+    @apply flex items-center gap-2 rounded-md border border-gray-200 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-primary-admin/50 cursor-pointer;
+  }
+
   /* Confirmation Dialog */
   .confirm-trigger {
     @apply !font-semibold !text-sm !shadow-none hover:!opacity-70 !w-full;
@@ -200,5 +204,49 @@
 
   .user-card .email {
     @apply text-light-500 text-sm line-clamp-1 break-words w-full;
+  }
+
+  /* Modal Display */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all;
+  }
+
+  .modal-container {
+    @apply relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all;
+  }
+
+  .modal-close-btn {
+    @apply absolute right-4 top-4 rounded-full cursor-pointer bg-gray-100 p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-700;
+  }
+
+  .modal-content {
+    @apply flex flex-col items-center gap-4;
+  }
+  .modal-title {
+    @apply text-xl font-bold text-dark-400;
+  }
+
+  .card-image-wrapper {
+    @apply relative aspect-[1.586] w-full overflow-hidden rounded-xl border-2 border-dashed border-gray-200 bg-gray-50;
+  }
+
+  .card-image-loader {
+    @apply absolute inset-0 flex items-center justify-center;
+  }
+
+  .card-info-section {
+    @apply w-full space-y-2 rounded-lg bg-light-300 p-4;
+  }
+
+  .card-info-row {
+    @apply flex justify-between;
+  }
+
+  .card-info-label {
+    @apply text-sm font-medium text-light-500;
+  }
+
+  .card-info-value {
+    @apply text-sm font-bold text-dark-400;
   }
 }

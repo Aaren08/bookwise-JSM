@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { bookSchema } from "@/lib/validations";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { BookPlus } from "lucide-react";
+import { BookPlus, BookCheck } from "lucide-react";
 import ColorPicker from "../ColorPicker";
 import FileUpload from "@/components/FileUpload";
 import { createBook, updateBook } from "@/lib/admin/actions/book";
@@ -344,10 +344,23 @@ const BookForm = ({ type, ...book }: Props) => {
 
         <Button
           type="submit"
+          disabled={form.formState.isSubmitting}
           className="book-form_btn cursor-pointer text-white"
         >
-          <BookPlus className="-ml-2 h-4 w-4" />
-          {type === "create" ? "Add Book to Library" : "Update Book"}
+          {form.formState.isSubmitting ? (
+            <div className="loader-sm" />
+          ) : (
+            <>
+              {type === "create" ? (
+                <BookPlus className="-ml-2 h-4 w-4" />
+              ) : (
+                <BookCheck className="-ml-2 h-4 w-4" />
+              )}
+              <p className="ml-2">
+                {type === "create" ? "Add Book to Library" : "Update Book"}
+              </p>
+            </>
+          )}
         </Button>
       </form>
     </Form>

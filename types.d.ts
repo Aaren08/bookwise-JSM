@@ -15,6 +15,9 @@ interface Book {
   isLoanedBook?: boolean;
   borrowDate?: Date | string;
   dueDate?: Date | string;
+  borrowRecordId?: string;
+  borrowStatus?: "BORROWED" | "RETURNED" | "LATE_RETURN";
+  returnDate?: Date | string | null;
 }
 
 interface AuthCredentials {
@@ -50,6 +53,21 @@ interface BookParams {
 interface BorrowBookParams {
   bookId: string;
   userId: string;
+}
+
+interface BorrowRecord {
+  id: string;
+  borrowDate: string;
+  dueDate: string;
+  returnDate: string | null;
+  status: "BORROWED" | "RETURNED" | "LATE_RETURN";
+  bookTitle: string;
+  bookCover: string;
+  bookGenre: string;
+  userFullName: string;
+  userEmail: string;
+  userAvatar: string;
+  createdAt?: string;
 }
 
 interface User {

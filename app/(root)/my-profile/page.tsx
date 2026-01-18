@@ -27,7 +27,14 @@ const Page = async ({ searchParams }: PageProps) => {
   ]);
 
   if (!profileResult.success || !booksResult.success || !booksResult.data) {
-    return <p className="text-white text-center">Failed to load profile</p>;
+    return (
+      <h1
+        className="text-5xl font-bold text-light-100 text-center"
+        style={{ fontFamily: "var(--bebas-neue)" }}
+      >
+        Failed to load profile
+      </h1>
+    );
   }
 
   const user = profileResult.data;

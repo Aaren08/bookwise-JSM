@@ -25,7 +25,7 @@ export const getUserBorrowedBooks = async (
 
     const offset = (page - 1) * limit;
 
-    // Get borrowed books with book details - only BORROWED status
+    // Get borrowed books with book details - all statuses except dismissed
     const { id, borrowDate, dueDate, returnDate, borrowStatus } = borrowRecords;
 
     const records = await db
@@ -40,10 +40,7 @@ export const getUserBorrowedBooks = async (
       .from(borrowRecords)
       .innerJoin(books, eq(borrowRecords.bookId, books.id))
       .where(
-        and(
-          eq(borrowRecords.userId, userId),
-          eq(borrowRecords.borrowStatus, "BORROWED")
-        )
+        and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0))
       )
       .limit(limit)
       .offset(offset);
@@ -55,17 +52,17 @@ export const getUserBorrowedBooks = async (
       .select({ value: count() })
       .from(borrowRecords)
       .where(
-        and(
-          eq(borrowRecords.userId, userId),
-          eq(borrowRecords.borrowStatus, "BORROWED")
-        )
+        and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0))
       );
     const totalPages = Math.ceil(total / limit);
 
     const borrowedBooks = borrowedRecords.map((record) => ({
       ...record.book,
+      borrowRecordId: record.id,
       borrowDate: record.borrowDate!,
       dueDate: new Date(record.dueDate),
+      returnDate: record.returnDate ? new Date(record.returnDate) : null,
+      borrowStatus: record.borrowStatus,
     }));
 
     return {

@@ -26,6 +26,9 @@ const BookList = ({ title, books, containerClassName }: Props) => {
                 {...book}
                 borrowDate={book.borrowDate}
                 dueDate={book.dueDate}
+                borrowRecordId={book.borrowRecordId}
+                borrowStatus={book.borrowStatus}
+                returnDate={book.returnDate}
               />
             );
           }
