@@ -32,8 +32,8 @@ export const getAllBorrowRecords = async ({
         userAvatar: users.universityCard, // Assuming we might want to show something else or fetch avatar if available, but schema doesn't have avatarUrl explicitly, using universityCard as placeholder or just initials
       })
       .from(borrowRecords)
-      .leftJoin(books, eq(borrowRecords.bookId, books.id))
-      .leftJoin(users, eq(borrowRecords.userId, users.id))
+      .innerJoin(books, eq(borrowRecords.bookId, books.id))
+      .innerJoin(users, eq(borrowRecords.userId, users.id))
       .orderBy(
         sortOrder === "asc"
           ? asc(borrowRecords.borrowDate)
@@ -88,6 +88,13 @@ export const updateBorrowStatus = async ({
       .set(updateData)
       .where(eq(borrowRecords.id, bookId))
       .returning();
+
+    if (!updatedRecord.length) {
+      return {
+        success: false,
+        message: "Borrow record not found",
+      };
+    }
 
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
