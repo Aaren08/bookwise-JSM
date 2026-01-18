@@ -51,7 +51,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
     newStatus: "BORROWED" | "RETURNED" | "LATE_RETURN"
   ) => {
     const res = await updateBorrowStatus({
-      bookId: recordId,
+      borrowRecordId: recordId,
       status: newStatus,
     });
     if (res.success) {
