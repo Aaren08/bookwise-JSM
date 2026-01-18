@@ -75,12 +75,14 @@ export const updateBorrowStatus = async ({
   try {
     const updateData: {
       borrowStatus: "BORROWED" | "RETURNED" | "LATE_RETURN";
-      returnDate?: string;
+      returnDate?: string | null;
     } = { borrowStatus: status };
 
     // Set returnDate when marking as returned or late return
     if (status === "RETURNED" || status === "LATE_RETURN") {
-      updateData.returnDate = new Date().toISOString();
+      updateData.returnDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    } else {
+      updateData.returnDate = null;
     }
 
     const updatedRecord = await db
