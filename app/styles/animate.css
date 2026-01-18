@@ -1,33 +1,97 @@
 .loader {
-  width: 28px;
-  aspect-ratio: 1;
-  position: relative;
-  margin: 0 auto;
+  width: 35px;
+  height: calc(35px * 0.866);
+  background: #fd135a;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  --c: at 50% 66%, #000 60deg, #0000 0;
+  -webkit-mask:
+    conic-gradient(from 30deg var(--c)) right,
+    conic-gradient(from 150deg var(--c)) bottom,
+    conic-gradient(from -90deg var(--c)) left,
+    linear-gradient(#000 0 0);
+  mask:
+    conic-gradient(from 30deg var(--c)) right,
+    conic-gradient(from 150deg var(--c)) bottom,
+    conic-gradient(from -90deg var(--c)) left,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: l9 1.5s infinite;
 }
-.loader:before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  --c: #0000, #e7c9a5 1deg 120deg, #0000 121deg;
-  background: conic-gradient(from 0deg, var(--c)) top right,
-    conic-gradient(from 120deg, var(--c)) bottom,
-    conic-gradient(from 240deg, var(--c)) top left;
-  background-size: 28px 28px;
-  background-repeat: no-repeat;
-  animation: l25 2s infinite cubic-bezier(0.3, 1, 0, 1);
+
+.loader-sm {
+  width: 24px;
+  height: calc(24px * 0.866);
+  background: #fd135a;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  --c: at 50% 66%, #000 60deg, #0000 0;
+  -webkit-mask:
+    conic-gradient(from 30deg var(--c)) right,
+    conic-gradient(from 150deg var(--c)) bottom,
+    conic-gradient(from -90deg var(--c)) left,
+    linear-gradient(#000 0 0);
+  mask:
+    conic-gradient(from 30deg var(--c)) right,
+    conic-gradient(from 150deg var(--c)) bottom,
+    conic-gradient(from -90deg var(--c)) left,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: l9 1.5s infinite;
 }
-@keyframes l25 {
-  33% {
-    inset: -8px;
-    transform: rotate(0deg);
+@keyframes l9 {
+  0% {
+    -webkit-mask-size:
+      0 0,
+      0 0,
+      0 0,
+      auto;
   }
-  66% {
-    inset: -8px;
-    transform: rotate(180deg);
+  13.33% {
+    -webkit-mask-size:
+      100% 100%,
+      0 0,
+      0 0,
+      auto;
+  }
+  26.67% {
+    -webkit-mask-size:
+      100% 100%,
+      100% 100%,
+      0 0,
+      auto;
+  }
+  40%,
+  60% {
+    -webkit-mask-size:
+      100% 100%,
+      100% 100%,
+      100% 100%,
+      auto;
+  }
+  73.33% {
+    -webkit-mask-size:
+      0 0,
+      100% 100%,
+      100% 100%,
+      auto;
+  }
+  86.67% {
+    -webkit-mask-size:
+      0 0,
+      0 0,
+      100% 100%,
+      auto;
   }
   100% {
-    inset: 0;
-    transform: rotate(180deg);
+    -webkit-mask-size:
+      0 0,
+      0 0,
+      0 0,
+      auto;
   }
 }

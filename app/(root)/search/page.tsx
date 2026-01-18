@@ -146,7 +146,7 @@ async function SearchContent({ searchParams }: SearchPageProps) {
       {/* Search Results Section with Suspense for BookResults */}
       <Suspense
         fallback={
-          <div className="mt-16">
+          <div className="mt-16 flex justify-center">
             <div className="loader"></div>
           </div>
         }

@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 
 export interface BorrowStatus {
   daysLeft: number;
+  hoursLeft: number;
   isOverdue: boolean;
   borrowDate: string;
   dueDate: string;
@@ -12,14 +13,16 @@ export const calculateBorrowStatus = (
   dueDate: Date | string
 ): BorrowStatus => {
   const today = dayjs();
-  const due = dayjs(dueDate);
+  const due = dayjs(dueDate).endOf("day");
   const borrowed = dayjs(borrowDate);
 
   const daysLeft = due.diff(today, "day");
-  const isOverdue = daysLeft < 0;
+  const hoursLeft = due.diff(today, "hour");
+  const isOverdue = due.diff(today) < 0;
 
   return {
     daysLeft: Math.abs(daysLeft),
+    hoursLeft: Math.abs(hoursLeft),
     isOverdue,
     borrowDate: borrowed.format("MMM DD"),
     dueDate: due.format("MMM DD"),
@@ -33,6 +36,9 @@ export const getBorrowStatusColor = (isOverdue: boolean): string => {
 export const getBorrowStatusText = (status: BorrowStatus): string => {
   if (status.isOverdue) {
     return "Overdue Return";
+  }
+  if (status.daysLeft === 0) {
+    return `${status.hoursLeft} hrs left to due`;
   }
   return `${status.daysLeft} days left to due`;
 };

@@ -197,7 +197,12 @@ const AuthForm = <T extends FieldValues>({
             />
           ))}
 
-          <Button type="submit" className="form-btn">
+          <Button
+            type="submit"
+            className="form-btn"
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting && <div className="loader mr-2" />}
             {isSignIn ? "Login" : "Sign Up"}
           </Button>
         </form>

@@ -21,6 +21,7 @@ export const ROLE_ENUM = pgEnum("role", ["USER", "ADMIN"]);
 export const BORROW_STATUS_ENUM = pgEnum("borrow_status", [
   "BORROWED",
   "RETURNED",
+  "LATE_RETURN",
 ]);
 
 export const users = pgTable("users", {
@@ -68,5 +69,6 @@ export const borrowRecords = pgTable("borrow_records", {
   borrowStatus: BORROW_STATUS_ENUM("borrow_status")
     .default("BORROWED")
     .notNull(),
+  dismissed: integer("dismissed").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });

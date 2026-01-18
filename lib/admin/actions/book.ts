@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { eq, desc, count, ilike, or, and } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
@@ -48,14 +49,14 @@ export const updateBook = async (
 
       const borrowedCount = Number(borrowedCountResult.value);
       const newAvailableCopies = params.totalCopies - borrowedCount;
-      
+
       if (newAvailableCopies < 0) {
         return {
           success: false,
           message: `Cannot reduce total copies below ${borrowedCount} (currently borrowed)`,
         };
       }
-      
+
       updateData.availableCopies = newAvailableCopies;
     }
 
@@ -146,6 +147,8 @@ export const deleteBook = async (id: string) => {
       .delete(books)
       .where(eq(books.id, id))
       .returning();
+
+    revalidatePath("/admin/books");
 
     return {
       success: true,
