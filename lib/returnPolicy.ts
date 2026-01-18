@@ -10,14 +10,14 @@ export interface BorrowStatus {
 
 export const calculateBorrowStatus = (
   borrowDate: Date | string,
-  dueDate: Date | string
+  dueDate: Date | string,
 ): BorrowStatus => {
   const today = dayjs();
   const due = dayjs(dueDate).endOf("day");
   const borrowed = dayjs(borrowDate);
 
   const daysLeft = due.diff(today, "day");
-  const hoursLeft = due.diff(today, "hour");
+  const hoursLeft = Math.ceil(due.diff(today, "hour", true));
   const isOverdue = due.diff(today) < 0;
 
   return {
@@ -38,7 +38,7 @@ export const getBorrowStatusText = (status: BorrowStatus): string => {
     return "Overdue Return";
   }
   if (status.daysLeft === 0) {
-    return `${status.hoursLeft} hrs left to due`;
+    return `${status.hoursLeft} ${status.hoursLeft === 1 ? "hr" : "hrs"} left to due`;
   }
   return `${status.daysLeft} days left to due`;
 };
