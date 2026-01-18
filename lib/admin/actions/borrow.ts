@@ -66,10 +66,10 @@ export const getAllBorrowRecords = async ({
 };
 
 export const updateBorrowStatus = async ({
-  borrowRecordId,
+  bookId,
   status,
 }: {
-  borrowRecordId: string;
+  bookId: string;
   status: "BORROWED" | "RETURNED" | "LATE_RETURN";
 }) => {
   try {
@@ -86,7 +86,7 @@ export const updateBorrowStatus = async ({
     const updatedRecord = await db
       .update(borrowRecords)
       .set(updateData)
-      .where(eq(borrowRecords.id, borrowRecordId))
+      .where(eq(borrowRecords.id, bookId))
       .returning();
 
     revalidatePath("/admin/borrow-records");

@@ -26,6 +26,7 @@ interface Props {
 const BorrowTable = ({ borrowRecords }: Props) => {
   const [sortedRecords, setSortedRecords] =
     useState<BorrowRecord[]>(borrowRecords);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     setSortedRecords(borrowRecords);
@@ -50,35 +51,40 @@ const BorrowTable = ({ borrowRecords }: Props) => {
     recordId: string,
     newStatus: "BORROWED" | "RETURNED" | "LATE_RETURN",
   ) => {
-    const res = await updateBorrowStatus({
-      borrowRecordId: recordId,
-      status: newStatus,
-    });
-    if (res.success) {
-      toast.success("Borrow status updated successfully", {
-        position: "top-right",
-        style: {
-          background: "#dcfce7",
-          color: "#000000",
-          border: "1px solid #86efac",
-        },
-        className: "!bg-green-200 !text-black",
+    setIsUpdating(true);
+    try {
+      const res = await updateBorrowStatus({
+        bookId: recordId,
+        status: newStatus,
       });
-      setSortedRecords(
-        sortedRecords.map((record) =>
-          record.id === recordId ? { ...record, status: newStatus } : record,
-        ),
-      );
-    } else {
-      toast.error(res.message || "Failed to update borrow status", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      if (res.success) {
+        toast.success("Borrow status updated successfully", {
+          position: "top-right",
+          style: {
+            background: "#dcfce7",
+            color: "#000000",
+            border: "1px solid #86efac",
+          },
+          className: "!bg-green-200 !text-black",
+        });
+        setSortedRecords(
+          sortedRecords.map((record) =>
+            record.id === recordId ? { ...record, status: newStatus } : record,
+          ),
+        );
+      } else {
+        toast.error(res.message || "Failed to update borrow status", {
+          position: "top-right",
+          style: {
+            background: "#fee2e2",
+            color: "#000000",
+            border: "1px solid #fca5a5",
+          },
+          className: "!bg-red-200 !text-black",
+        });
+      }
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -151,6 +157,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                     onValueChange={(
                       value: "BORROWED" | "RETURNED" | "LATE_RETURN",
                     ) => handleStatusChange(record.id, value)}
+                    disabled={isUpdating}
                   >
                     <SelectTrigger
                       className={cn(

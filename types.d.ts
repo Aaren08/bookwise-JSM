@@ -67,7 +67,7 @@ interface BorrowRecord {
   userFullName: string;
   userEmail: string;
   userAvatar: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 interface User {
