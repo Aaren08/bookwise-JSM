@@ -48,10 +48,10 @@ const BorrowTable = ({ borrowRecords }: Props) => {
 
   const handleStatusChange = async (
     recordId: string,
-    newStatus: "BORROWED" | "RETURNED" | "LATE_RETURN"
+    newStatus: "BORROWED" | "RETURNED" | "LATE_RETURN",
   ) => {
     const res = await updateBorrowStatus({
-      bookId: recordId,
+      borrowRecordId: recordId,
       status: newStatus,
     });
     if (res.success) {
@@ -66,8 +66,8 @@ const BorrowTable = ({ borrowRecords }: Props) => {
       });
       setSortedRecords(
         sortedRecords.map((record) =>
-          record.id === recordId ? { ...record, status: newStatus } : record
-        )
+          record.id === recordId ? { ...record, status: newStatus } : record,
+        ),
       );
     } else {
       toast.error(res.message || "Failed to update borrow status", {
@@ -149,7 +149,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                   <Select
                     value={record.status}
                     onValueChange={(
-                      value: "BORROWED" | "RETURNED" | "LATE_RETURN"
+                      value: "BORROWED" | "RETURNED" | "LATE_RETURN",
                     ) => handleStatusChange(record.id, value)}
                   >
                     <SelectTrigger
@@ -160,7 +160,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                         record.status === "RETURNED" &&
                           "bg-green-100 text-green-600",
                         record.status === "LATE_RETURN" &&
-                          "bg-red-100 text-red-600"
+                          "bg-red-100 text-red-600",
                       )}
                     >
                       <SelectValue />

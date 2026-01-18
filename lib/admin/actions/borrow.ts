@@ -37,7 +37,7 @@ export const getAllBorrowRecords = async ({
       .orderBy(
         sortOrder === "asc"
           ? asc(borrowRecords.borrowDate)
-          : desc(borrowRecords.borrowDate)
+          : desc(borrowRecords.borrowDate),
       )
       .limit(limit)
       .offset(offset);
@@ -66,10 +66,10 @@ export const getAllBorrowRecords = async ({
 };
 
 export const updateBorrowStatus = async ({
-  bookId,
+  borrowRecordId,
   status,
 }: {
-  bookId: string;
+  borrowRecordId: string;
   status: "BORROWED" | "RETURNED" | "LATE_RETURN";
 }) => {
   try {
@@ -86,7 +86,7 @@ export const updateBorrowStatus = async ({
     const updatedRecord = await db
       .update(borrowRecords)
       .set(updateData)
-      .where(eq(borrowRecords.id, bookId))
+      .where(eq(borrowRecords.id, borrowRecordId))
       .returning();
 
     revalidatePath("/admin/borrow-records");
