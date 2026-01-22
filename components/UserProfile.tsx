@@ -3,7 +3,7 @@ import Image from "next/image";
 interface UserProfileProps {
   fullName: string;
   email: string;
-  universityId: number;
+  universityId: string;
   universityCard: string;
 }
 
