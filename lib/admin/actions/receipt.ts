@@ -5,9 +5,18 @@ import { borrowRecords, books, users } from "@/database/schema";
 import { eq } from "drizzle-orm";
 import dayjs from "dayjs";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/auth";
 
 export const generateReceipt = async (borrowRecordId: string) => {
   try {
+    const session = await auth();
+    if (!session?.user?.id || session.user.role !== "ADMIN") {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
     // Fetch the borrow record with book and user details
     const record = await db
       .select({
