@@ -28,6 +28,7 @@ export const generateReceipt = async (borrowRecordId: string) => {
         bookGenre: books.genre,
         userFullName: users.fullName,
         userEmail: users.email,
+        borrowStatus: borrowRecords.borrowStatus,
       })
       .from(borrowRecords)
       .innerJoin(books, eq(borrowRecords.bookId, books.id))
@@ -43,6 +44,16 @@ export const generateReceipt = async (borrowRecordId: string) => {
     }
 
     const data = record[0];
+
+    if (
+      data.borrowStatus === "RETURNED" ||
+      data.borrowStatus === "LATE_RETURN"
+    ) {
+      return {
+        success: false,
+        error: `Cannot generate receipt for a record that is already ${data.borrowStatus.toLowerCase().replace("_", " ")}`,
+      };
+    }
 
     // Update the record to BORROWED and set current dates
     const now = new Date();
