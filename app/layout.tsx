@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "next-auth/react";
 import "./styles/globals.css";
 import "./styles/animate.css";
+import "./styles/receipt.css";
+import "./styles/admin.css";
 import { auth } from "@/auth";
 
 const ibmPlexSans = localFont({

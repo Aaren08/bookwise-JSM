@@ -3,7 +3,10 @@
 import Image from "next/image";
 import { X } from "lucide-react";
 import { useState } from "react";
-import BookCard from "./BookCard";
+import Link from "next/link";
+import BookCover from "./BookCover";
+import { cn } from "@/lib/utils";
+import ReceiptButton from "./ReceiptButton";
 import {
   calculateBorrowStatus,
   getBorrowStatusColor,
@@ -16,14 +19,11 @@ import { toast } from "sonner";
 const OVERDUE_ICON_FILTER =
   "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
 
-const RETURNED_ICON_FILTER =
-  "brightness(0) saturate(100%) invert(64%) sepia(98%) saturate(2565%) hue-rotate(89deg) brightness(97%) contrast(78%)";
-
 interface BorrowedBookCardProps extends Book {
   borrowDate: Date | string;
   dueDate: Date | string;
   borrowRecordId?: string;
-  borrowStatus?: "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
   returnDate?: Date | string | null;
 }
 
@@ -97,10 +97,19 @@ const BorrowedBookCard = ({
   const showOverdueWarning = borrowStatus === "BORROWED" && status.isOverdue;
 
   return (
-    <BookCard
-      {...book}
-      className="xs:w-60 w-full relative bg-dark-800 rounded-2xl p-4"
-    >
+    <li className={cn("xs:w-60 w-full relative bg-dark-800 rounded-2xl p-4")}>
+      <Link
+        href={`/books/${book.id}`}
+        className={cn("w-full flex flex-col items-center")}
+      >
+        <BookCover coverColor={book.coverColor} coverImage={book.coverUrl} />
+
+        <div className={cn("mt-4 justify-start w-full")}>
+          <p className="book-title">{book.title}</p>
+          <p className="book-genre">{book.genre}</p>
+        </div>
+      </Link>
+
       {/* Overdue Warning Icon - Top Left (only for BORROWED status) */}
       {showOverdueWarning && (
         <div className="absolute -top-2 -left-2 z-10">
@@ -136,7 +145,9 @@ const BorrowedBookCard = ({
             className="object-contain"
           />
           <p className="text-light-100 text-sm">
-            Borrowed on {status.borrowDate}
+            {borrowStatus === "PENDING"
+              ? "Requesting admin"
+              : `Borrowed on ${status.borrowDate}`}
           </p>
         </div>
 
@@ -199,26 +210,32 @@ const BorrowedBookCard = ({
                 </p>
               </>
             )}
+
+            {borrowStatus === "PENDING" && (
+              <>
+                <Image
+                  src="/icons/calendar.svg"
+                  alt="status"
+                  width={18}
+                  height={18}
+                  className="object-contain"
+                />
+                <p className="text-sm font-medium text-light-100">
+                  Not borrowed yet
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Receipt Icon - Right Side */}
-          <Image
-            src="/icons/receipt.svg"
-            alt="receipt"
-            width={16}
-            height={16}
-            className="object-contain"
-            style={
-              borrowStatus === "RETURNED"
-                ? { filter: RETURNED_ICON_FILTER }
-                : showOverdueWarning || borrowStatus === "LATE_RETURN"
-                  ? { filter: OVERDUE_ICON_FILTER }
-                  : undefined
-            }
+          {/* Receipt Button */}
+          <ReceiptButton
+            borrowRecordId={borrowRecordId}
+            borrowStatus={borrowStatus}
+            showOverdueWarning={showOverdueWarning}
           />
         </div>
       </div>
-    </BookCard>
+    </li>
   );
 };
 

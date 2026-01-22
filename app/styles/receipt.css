@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+.receipt-container {
+  @apply max-w-md bg-[#111624] text-white rounded-lg overflow-visible shadow-2xl border-none p-6 !text-left;
+}
+
+.receipt-inner {
+  @apply bg-[#232839] rounded-lg overflow-visible;
+}
+/* Header */
+.receipt-header {
+  @apply flex flex-col gap-2 px-6 pt-6 pb-6;
+}
+
+.receipt-logo {
+  @apply flex gap-2 text-xl font-bold tracking-tight text-white mb-3 !justify-start;
+}
+
+.download-receipt-btn {
+  @apply absolute top-12 right-16 bg-transparent border-none cursor-pointer text-white hover:opacity-70 transition-opacity duration-200;
+}
+
+.modal-title {
+  @apply text-2xl font-bold text-white mb-4;
+}
+
+/* Meta section */
+.receipt-meta {
+  @apply flex flex-col gap-1.5 text-sm;
+}
+
+.receipt-meta .card-info-row {
+  @apply flex gap-2 !justify-start;
+}
+
+.receipt-meta .card-info-label {
+  @apply text-gray-400 font-normal;
+}
+
+.receipt-meta .card-info-value {
+  @apply text-amber-100 font-semibold;
+}
+
+/* Sections */
+.receipt-section {
+  @apply px-6 py-5 border-t border-gray-700/50;
+}
+
+.receipt-section-title {
+  @apply mb-4 text-lg font-bold text-white;
+}
+
+.receipt-section .card-info-section {
+  @apply space-y-3 bg-transparent p-0;
+}
+
+.receipt-section .card-info-row {
+  @apply flex items-start gap-2 !justify-start;
+}
+
+.receipt-section .card-info-label {
+  @apply text-gray-400 font-normal text-sm;
+}
+
+.receipt-section .card-info-label::before {
+  content: "•";
+  @apply mr-2 text-gray-500;
+}
+
+.receipt-section .card-info-value {
+  @apply text-white font-semibold text-sm;
+}
+
+/* Terms */
+.receipt-terms {
+  @apply px-6 py-5 border-t border-gray-700/50;
+}
+
+.receipt-terms .receipt-section-title {
+  @apply mb-3 text-lg;
+}
+
+.receipt-terms ul {
+  @apply list-none space-y-2.5 pl-0;
+}
+
+.receipt-terms li {
+  @apply flex !items-start gap-2 text-sm text-gray-400 !justify-start;
+}
+
+.receipt-terms li::before {
+  content: "•";
+  @apply text-gray-500;
+}
+
+/* Footer */
+.receipt-footer {
+  @apply px-6 py-6 border-t border-gray-700/50 text-sm text-gray-400 relative;
+  background-color: #232839; /* receipt body color */
+}
+
+/* Scalloped bottom */
+.receipt-footer::after {
+  content: "";
+  position: absolute;
+  left: 0px;
+  right: -92px; /* overshoot */
+  top: 90px;
+  height: 36px; /* must match background-size Y */
+
+  background: radial-gradient(
+    circle at 18px 100%,
+    transparent 18px,
+    #232839 19px
+  );
+
+  background-size: 36px 36px; /* diameter × 2 */
+  background-repeat: repeat-x;
+}

@@ -42,7 +42,7 @@ const BorrowBook = ({
     try {
       const result = await borrowBook({ userId, bookId });
       if (result.success) {
-        toast.success("Book borrowed successfully", {
+        toast.success("Book request is forwarded", {
           position: "top-right",
           style: {
             background: "#dcfce7",
@@ -65,7 +65,7 @@ const BorrowBook = ({
       }
     } catch (error) {
       console.log(error);
-      toast.error("Failed to borrow book", {
+      toast.error("Failed to initiate book request", {
         position: "top-right",
         style: {
           background: "#fee2e2",
@@ -90,7 +90,7 @@ const BorrowBook = ({
         className="text-xl text-dark-100"
         style={{ fontFamily: "var(--bebas-neue)" }}
       >
-        {isBorrowing ? "Borrowing..." : "Borrow Book"}
+        {isBorrowing ? "Initiating Book Request..." : "Borrow Book Request"}
       </p>
     </Button>
   );

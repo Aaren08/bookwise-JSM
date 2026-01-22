@@ -19,16 +19,17 @@ export const STATUS_ENUM = pgEnum("status", [
 export const ROLE_ENUM = pgEnum("role", ["USER", "ADMIN"]);
 
 export const BORROW_STATUS_ENUM = pgEnum("borrow_status", [
+  "PENDING",
   "BORROWED",
   "RETURNED",
   "LATE_RETURN",
 ]);
 
 export const users = pgTable("users", {
-  id: uuid("id").notNull().primaryKey().defaultRandom().unique(),
+  id: uuid("id").notNull().primaryKey().defaultRandom(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
-  universityId: integer("university_id").notNull().unique(),
+  universityId: varchar("university_id", { length: 30 }).notNull().unique(),
   password: text("password").notNull(),
   universityCard: text("university_card").notNull(),
   status: STATUS_ENUM("status").default("PENDING"),
@@ -38,7 +39,7 @@ export const users = pgTable("users", {
 });
 
 export const books = pgTable("books", {
-  id: uuid("id").notNull().primaryKey().defaultRandom().unique(),
+  id: uuid("id").notNull().primaryKey().defaultRandom(),
   title: varchar("title", { length: 255 }).notNull(),
   author: varchar("author", { length: 255 }).notNull(),
   genre: varchar("genre", { length: 255 }).notNull(),
@@ -54,7 +55,7 @@ export const books = pgTable("books", {
 });
 
 export const borrowRecords = pgTable("borrow_records", {
-  id: uuid("id").notNull().primaryKey().defaultRandom().unique(),
+  id: uuid("id").notNull().primaryKey().defaultRandom(),
   userId: uuid("user_id")
     .references(() => users.id)
     .notNull(),
@@ -67,7 +68,7 @@ export const borrowRecords = pgTable("borrow_records", {
   dueDate: date("due_date").notNull(),
   returnDate: date("return_date"),
   borrowStatus: BORROW_STATUS_ENUM("borrow_status")
-    .default("BORROWED")
+    .default("PENDING")
     .notNull(),
   dismissed: integer("dismissed").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

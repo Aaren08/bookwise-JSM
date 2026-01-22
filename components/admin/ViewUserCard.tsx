@@ -9,7 +9,7 @@ interface Props {
   onClose: () => void;
   universityCard: string;
   fullName: string;
-  universityId: number;
+  universityId: string;
 }
 
 const ViewUserCard = ({
