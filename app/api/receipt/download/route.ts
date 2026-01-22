@@ -9,9 +9,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { receiptId } = await req.json();
+  let receiptId: string;
+  try {
+    const body = await req.json();
+    receiptId = body.receiptId;
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
-  if (!receiptId) {
+  if (!receiptId || typeof receiptId !== "string") {
     return NextResponse.json({ error: "Missing receiptId" }, { status: 400 });
   }
 
