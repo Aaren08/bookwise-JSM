@@ -16,7 +16,7 @@ interface Book {
   borrowDate?: Date | string;
   dueDate?: Date | string;
   borrowRecordId?: string;
-  borrowStatus?: "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
   returnDate?: Date | string | null;
 }
 
@@ -24,7 +24,7 @@ interface AuthCredentials {
   fullName: string;
   email: string;
   password: string;
-  universityId: number;
+  universityId: string;
   universityCard: string;
 }
 
@@ -60,7 +60,7 @@ interface BorrowRecord {
   borrowDate: string;
   dueDate: string;
   returnDate: string | null;
-  status: "BORROWED" | "RETURNED" | "LATE_RETURN";
+  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
   bookTitle: string;
   bookCover: string;
   bookGenre: string;
@@ -77,6 +77,6 @@ interface User {
   createdAt: string;
   role: "USER" | "ADMIN";
   booksBorrowed: number;
-  universityId: number;
+  universityId: string;
   universityCard: string;
 }

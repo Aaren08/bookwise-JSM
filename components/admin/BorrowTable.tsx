@@ -49,7 +49,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
 
   const handleStatusChange = async (
     recordId: string,
-    newStatus: "BORROWED" | "RETURNED" | "LATE_RETURN",
+    newStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN",
   ) => {
     setIsUpdating(true);
     try {
@@ -153,15 +153,22 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                 </td>
                 <td className="py-4 pr-4">
                   <Select
+                    defaultValue="PENDING"
                     value={record.status}
                     onValueChange={(
-                      value: "BORROWED" | "RETURNED" | "LATE_RETURN",
+                      value:
+                        | "PENDING"
+                        | "BORROWED"
+                        | "RETURNED"
+                        | "LATE_RETURN",
                     ) => handleStatusChange(record.id, value)}
                     disabled={isUpdating}
                   >
                     <SelectTrigger
                       className={cn(
                         "h-8 w-[140px] rounded-full border-none px-3 text-xs font-semibold shadow-sm focus:ring-0",
+                        record.status === "PENDING" &&
+                          "bg-orange-100 text-orange-600",
                         record.status === "BORROWED" &&
                           "bg-violet-200 text-violet-600",
                         record.status === "RETURNED" &&
@@ -173,6 +180,17 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent align="end" className="bg-white">
+                      <SelectItem
+                        value="PENDING"
+                        className="cursor-pointer text-sm font-medium focus:bg-light-300"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>Pending</span>
+                          {record.status === "PENDING" && (
+                            <Check className="size-3 text-green-500" />
+                          )}
+                        </div>
+                      </SelectItem>
                       <SelectItem
                         value="BORROWED"
                         className="cursor-pointer text-sm font-medium focus:bg-light-300"
@@ -210,7 +228,9 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                   </Select>
                 </td>
                 <td className="py-4 pr-4 text-sm text-dark-400">
-                  {dayjs(record.borrowDate).format("MMM DD YYYY")}
+                  {record.status === "PENDING"
+                    ? "-"
+                    : dayjs(record.borrowDate).format("MMM DD YYYY")}
                 </td>
                 <td className="py-4 pr-4 text-sm text-dark-400">
                   {record.returnDate
@@ -218,10 +238,15 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                     : "-"}
                 </td>
                 <td className="py-4 pr-4 text-sm text-dark-400">
-                  {dayjs(record.dueDate).format("MMM DD YYYY")}
+                  {record.status === "PENDING"
+                    ? "-"
+                    : dayjs(record.dueDate).format("MMM DD YYYY")}
                 </td>
                 <td className="py-4 pr-4">
-                  <GenerateReceipt />
+                  <GenerateReceipt
+                    borrowRecordId={record.id}
+                    status={record.status}
+                  />
                 </td>
               </tr>
             ))}

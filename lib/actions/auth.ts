@@ -6,13 +6,13 @@ import { users } from "@/database/schema";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
-import ratelimit from "../rateLimit";
+import { ratelimit } from "../rateLimit";
 import { redirect } from "next/navigation";
 import config from "../config";
 import { workflowClient } from "../workflow";
 
 export const signInWithCredentials = async (
-  credentials: Pick<AuthCredentials, "email" | "password">
+  credentials: Pick<AuthCredentials, "email" | "password">,
 ) => {
   const { email, password } = credentials;
 

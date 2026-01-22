@@ -19,10 +19,7 @@ const FilterData = ({ onSort, label = "A-Z" }: Props) => {
 
   return (
     <div className="flex items-center gap-2">
-      <button
-        onClick={toggleSort}
-        className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-admin/50"
-      >
+      <button onClick={toggleSort} className="sort-btn">
         {label}
         {sortOrder === "asc" ? (
           <ArrowDownAZ className="size-4" />

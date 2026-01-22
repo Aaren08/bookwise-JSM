@@ -19,7 +19,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
     if (!book.length || book[0].availableCopies <= 0) {
       return {
         success: false,
-        error: "Book is not available for borrowing",
+        error: "Book is not available for requesting",
       };
     }
 
@@ -30,16 +30,24 @@ export const borrowBook = async (params: BorrowBookParams) => {
         and(
           eq(borrowRecords.userId, userId),
           eq(borrowRecords.bookId, bookId),
-          eq(borrowRecords.borrowStatus, "BORROWED")
-        )
+          eq(borrowRecords.bookId, bookId),
+        ),
       )
       .limit(1);
 
     if (existingBorrow.length > 0) {
-      return {
-        success: false,
-        error: "You have already borrowed this book",
-      };
+      const activeBorrow = existingBorrow.find(
+        (record) =>
+          record.borrowStatus === "BORROWED" ||
+          record.borrowStatus === "PENDING",
+      );
+
+      if (activeBorrow) {
+        return {
+          success: false,
+          error: "You have already forwarded a request",
+        };
+      }
     }
 
     const dueDate = dayjs().add(14, "days").toDate().toISOString();
@@ -48,7 +56,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
       userId,
       bookId,
       dueDate,
-      borrowStatus: "BORROWED",
+      borrowStatus: "PENDING",
     });
 
     await db
@@ -64,7 +72,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
     console.log(error);
     return {
       success: false,
-      error: "Failed to borrow book",
+      error: "Failed to initiate book request",
     };
   }
 };

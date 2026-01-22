@@ -349,18 +349,14 @@ const BookForm = ({ type, ...book }: Props) => {
         >
           {form.formState.isSubmitting ? (
             <div className="loader-sm" />
+          ) : type === "create" ? (
+            <BookPlus className="-ml-2 h-4 w-4" />
           ) : (
-            <>
-              {type === "create" ? (
-                <BookPlus className="-ml-2 h-4 w-4" />
-              ) : (
-                <BookCheck className="-ml-2 h-4 w-4" />
-              )}
-              <p className="ml-2">
-                {type === "create" ? "Add Book to Library" : "Update Book"}
-              </p>
-            </>
+            <BookCheck className="-ml-2 h-4 w-4" />
           )}
+          <p className="ml-2">
+            {type === "create" ? "Add Book to Library" : "Update Book"}
+          </p>
         </Button>
       </form>
     </Form>

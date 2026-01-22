@@ -2,7 +2,7 @@
 
 import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
-import { eq, desc, asc, count } from "drizzle-orm";
+import { eq, desc, asc, count, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export const getAllBorrowRecords = async ({
@@ -70,46 +70,73 @@ export const updateBorrowStatus = async ({
   status,
 }: {
   bookId: string;
-  status: "BORROWED" | "RETURNED" | "LATE_RETURN";
+  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
 }) => {
   try {
+    const currentRecord = await db
+      .select()
+      .from(borrowRecords)
+      .where(eq(borrowRecords.id, bookId))
+      .limit(1);
+
+    if (!currentRecord.length) {
+      return { success: false, message: "Borrow record not found" };
+    }
+
+    const record = currentRecord[0];
+    const oldStatus = record.borrowStatus;
+
+    let availableCopiesChange = 0;
+
+    if (
+      (oldStatus === "BORROWED" || oldStatus === "PENDING") &&
+      (status === "RETURNED" || status === "LATE_RETURN")
+    ) {
+      availableCopiesChange = 1;
+    } else if (
+      (oldStatus === "RETURNED" || oldStatus === "LATE_RETURN") &&
+      (status === "BORROWED" || status === "PENDING")
+    ) {
+      availableCopiesChange = -1;
+    }
+
     const updateData: {
-      borrowStatus: "BORROWED" | "RETURNED" | "LATE_RETURN";
+      borrowStatus: typeof status;
       returnDate?: string | null;
     } = { borrowStatus: status };
 
-    // Set returnDate when marking as returned or late return
-    if (status === "RETURNED" || status === "LATE_RETURN") {
-      updateData.returnDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    } else {
-      updateData.returnDate = null;
-    }
+    updateData.returnDate =
+      status === "RETURNED" || status === "LATE_RETURN"
+        ? new Date().toISOString().slice(0, 10)
+        : null;
 
+    // 1️⃣ Update borrow record
     const updatedRecord = await db
       .update(borrowRecords)
       .set(updateData)
       .where(eq(borrowRecords.id, bookId))
       .returning();
 
-    if (!updatedRecord.length) {
-      return {
-        success: false,
-        message: "Borrow record not found",
-      };
+    // 2️⃣ Update book copies (atomic SQL update)
+    if (availableCopiesChange !== 0) {
+      await db
+        .update(books)
+        .set({
+          availableCopies: sql`${books.availableCopies} + ${availableCopiesChange}`,
+        })
+        .where(eq(books.id, record.bookId));
     }
 
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
+    revalidatePath(`/admin/books/${record.bookId}`);
 
     return {
       success: true,
-      data: JSON.parse(JSON.stringify(updatedRecord[0])),
+      data: updatedRecord[0],
     };
   } catch (error) {
-    console.log(error);
-    return {
-      success: false,
-      message: "Failed to update borrow status",
-    };
+    console.error(error);
+    return { success: false, message: "Failed to update borrow status" };
   }
 };
