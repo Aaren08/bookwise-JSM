@@ -45,21 +45,23 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
         </div>
 
         {/* Similar Books */}
-        <section className="flex flex-col gap-7">
-          <h3>Similar Books</h3>
-          <div className="grid grid-cols-3 max-sm:grid-cols-2 gap-5">
-            {similarBooks.map((book: Book) => (
-              <Link key={book.id} href={`/books/${book.id}`}>
-                <BookCover
-                  variant="regular"
-                  className="transition-transform hover:scale-105"
-                  coverColor={book.coverColor}
-                  coverImage={book.coverUrl}
-                />
-              </Link>
-            ))}
-          </div>
-        </section>
+        {similarBooks.length > 0 && (
+          <section className="flex flex-col gap-7">
+            <h3>Similar Books</h3>
+            <div className="grid grid-cols-3 max-sm:grid-cols-2 gap-5">
+              {similarBooks.map((book: Book) => (
+                <Link key={book.id} href={`/books/${book.id}`}>
+                  <BookCover
+                    variant="regular"
+                    className="transition-transform hover:scale-105"
+                    coverColor={book.coverColor}
+                    coverImage={book.coverUrl}
+                  />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </>
   );
