@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { Button } from "./ui/button";
-import { useRouter } from "next/navigation";
 import { borrowBook } from "@/lib/actions/book";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -21,7 +20,6 @@ const BorrowBook = ({
   userId,
   borrowingEligibility: { isEligible, message },
 }: Props) => {
-  const router = useRouter();
   const [isBorrowing, setIsBorrowing] = useState(false);
 
   const handleBorrowBook = async () => {
@@ -51,7 +49,6 @@ const BorrowBook = ({
           },
           className: "!bg-green-200 !text-black",
         });
-        router.push("/");
       } else {
         toast.error(result.error, {
           position: "top-right",

@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
 import { auth } from "@/auth";
@@ -122,6 +122,38 @@ export const dismissBorrowRecord = async (borrowRecordId: string) => {
     return {
       success: false,
       error: "Failed to dismiss record",
+    };
+  }
+};
+
+export const getSimilarBooks = async (bookId: string) => {
+  try {
+    const similarBooks = await db
+      .select()
+      .from(books)
+      .where(
+        and(
+          eq(
+            books.genre,
+            db
+              .select({ genre: books.genre })
+              .from(books)
+              .where(eq(books.id, bookId)),
+          ),
+          ne(books.id, bookId),
+        ),
+      )
+      .limit(6);
+
+    return {
+      success: true,
+      data: JSON.parse(JSON.stringify(similarBooks)),
+    };
+  } catch (error) {
+    console.log(error);
+    return {
+      success: false,
+      error: "Failed to fetch similar books",
     };
   }
 };
