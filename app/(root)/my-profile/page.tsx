@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Image from "next/image";
 import UserProfile from "@/components/UserProfile";
 import BookList from "@/components/BookList";
@@ -27,14 +27,7 @@ const Page = async ({ searchParams }: PageProps) => {
   ]);
 
   if (!profileResult.success || !booksResult.success || !booksResult.data) {
-    return (
-      <h1
-        className="text-5xl font-bold text-light-100 text-center"
-        style={{ fontFamily: "var(--bebas-neue)" }}
-      >
-        Failed to load profile
-      </h1>
-    );
+    return notFound();
   }
 
   const user = profileResult.data;

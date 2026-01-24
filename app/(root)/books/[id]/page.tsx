@@ -8,16 +8,19 @@ import { eq } from "drizzle-orm";
 import { getSimilarBooks } from "@/lib/actions/book";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { z } from "zod";
 
 const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
   const id = (await params).id;
+
+  const validId = z.uuid().safeParse(id);
+  if (!validId.success) return notFound();
+
   const [session, [bookDetails], similarBooksResult] = await Promise.all([
     auth(),
     db.select().from(books).where(eq(books.id, id)).limit(1),
     getSimilarBooks(id),
   ]);
-
-  if (!bookDetails) return notFound();
 
   const similarBooks = similarBooksResult.success
     ? similarBooksResult.data
