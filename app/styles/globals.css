@@ -92,7 +92,7 @@
   }
 
   .book-loaned {
-    @apply flex flex-row items-center gap-1 max-xs:justify-center;
+    @apply flex flex-row items-center gap-1;
   }
 
   .book-btn {

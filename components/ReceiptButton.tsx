@@ -24,7 +24,6 @@ const ReceiptButton = ({
   borrowRecordId,
   borrowStatus,
   showOverdueWarning,
-  userRole,
 }: ReceiptButtonProps) => {
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -100,7 +99,6 @@ const ReceiptButton = ({
         onClose={() => setIsModalOpen(false)}
         receipt={receipt}
         borrowStatus={borrowStatus}
-        role={userRole}
       />
     </>
   );

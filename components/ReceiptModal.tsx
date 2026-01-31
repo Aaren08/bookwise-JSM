@@ -22,7 +22,6 @@ type ReceiptModalProps = {
   onClose: () => void;
   receipt: Receipt | null;
   borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
-  role?: "USER" | "ADMIN";
 };
 
 const ReceiptModal: React.FC<ReceiptModalProps> = ({
@@ -30,7 +29,6 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onClose,
   receipt,
   borrowStatus,
-  role,
 }) => {
   if (!isOpen || !receipt) return null;
 
@@ -65,15 +63,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 BookWise
               </div>
 
-              <button
-                className="download-receipt-btn"
-                onClick={handleDownloadPDF}
-                title="Download as PDF"
-                disabled={borrowStatus === "PENDING"}
-                hidden={borrowStatus === "PENDING" && role === "ADMIN"}
-              >
-                <Download className="w-5 h-5" />
-              </button>
+              {!(borrowStatus === "PENDING") && (
+                <button
+                  className="download-receipt-btn"
+                  onClick={handleDownloadPDF}
+                  title="Download as PDF"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+              )}
 
               <h2 className="modal-title">Borrow Receipt</h2>
 

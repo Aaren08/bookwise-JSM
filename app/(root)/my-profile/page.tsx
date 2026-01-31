@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import Image from "next/image";
 import UserProfile from "@/components/UserProfile";
 import BookList from "@/components/BookList";
@@ -27,7 +27,25 @@ const Page = async ({ searchParams }: PageProps) => {
   ]);
 
   if (!profileResult.success || !booksResult.success || !booksResult.data) {
-    return notFound();
+    return (
+      <main className="flex min-h-[75vh] flex-col items-center justify-center">
+        {/* eslint-disable @next/next/no-img-element */}
+        <img
+          src="/icons/404.svg"
+          alt="404 illustration"
+          width={500}
+          height={500}
+          loading="lazy"
+        />
+
+        <h1
+          className="text-5xl text-light-100 font-bold "
+          style={{ fontFamily: "var(--bebas-neue)" }}
+        >
+          Page not found
+        </h1>
+      </main>
+    );
   }
 
   const user = profileResult.data;
@@ -41,7 +59,7 @@ const Page = async ({ searchParams }: PageProps) => {
   }));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-12 mt-10 mb-20">
+    <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-12 mt-10 mb-20">
       {/* Left Side - User Profile */}
       <div className="w-full">
         <UserProfile
@@ -49,6 +67,7 @@ const Page = async ({ searchParams }: PageProps) => {
           email={user.email}
           universityId={user.universityId}
           universityCard={user.universityCard}
+          status={user.status}
         />
       </div>
 
@@ -75,7 +94,7 @@ const Page = async ({ searchParams }: PageProps) => {
               height={180}
               className="object-contain"
             />
-            <p className="text-light-100 text-xl font-semibold">
+            <p className="text-light-100 text-xl font-semibold text-center">
               No books are borrowed yet. Borrow <br /> some books to display
               them here.
             </p>

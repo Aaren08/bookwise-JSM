@@ -74,7 +74,7 @@ const GenerateReceipt = ({ borrowRecordId, status }: Props) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         receipt={receipt}
-        role="ADMIN"
+        borrowStatus={status}
       />
     </>
   );
