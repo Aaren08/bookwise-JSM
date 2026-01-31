@@ -97,7 +97,7 @@ const BorrowedBookCard = ({
   const showOverdueWarning = borrowStatus === "BORROWED" && status.isOverdue;
 
   return (
-    <li className={cn("xs:w-60 w-full relative bg-dark-800 rounded-2xl p-4")}>
+    <li className={cn("w-48 sm:w-60 relative bg-dark-800 rounded-2xl p-4")}>
       <Link
         href={`/books/${book.id}`}
         className={cn("w-full flex flex-col items-center")}
@@ -178,7 +178,7 @@ const BorrowedBookCard = ({
                   height={18}
                   className="object-contain"
                 />
-                <p className="text-sm font-medium text-red-500">
+                <p className="text-sm max-sm:text-xs font-medium text-red-500">
                   Returned on {returnDate && formatReturnDate(returnDate)}
                 </p>
               </>
@@ -203,7 +203,7 @@ const BorrowedBookCard = ({
                   }
                 />
                 <p
-                  className="text-sm font-medium"
+                  className="text-sm max-sm:text-xs font-medium"
                   style={{ color: statusColor }}
                 >
                   {statusText}
@@ -214,13 +214,13 @@ const BorrowedBookCard = ({
             {borrowStatus === "PENDING" && (
               <>
                 <Image
-                  src="/icons/calendar.svg"
+                  src="/icons/clock.svg"
                   alt="status"
                   width={18}
                   height={18}
                   className="object-contain"
                 />
-                <p className="text-sm font-medium text-light-100">
+                <p className="text-sm max-sm:text-xs font-medium text-light-100">
                   Not borrowed yet
                 </p>
               </>

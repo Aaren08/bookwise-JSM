@@ -18,6 +18,10 @@
     @apply flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-admin/50 cursor-pointer;
   }
 
+  .approve-account-btn {
+    @apply rounded-md bg-green-100 px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-200 cursor-pointer transition-colors;
+  }
+
   /* Confirmation Dialog */
   .confirm-trigger {
     @apply !font-semibold !text-sm !shadow-none hover:!opacity-70 !w-full;

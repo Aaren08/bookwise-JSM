@@ -9,7 +9,7 @@ import { and, count } from "drizzle-orm";
 export const getUserBorrowedBooks = async (
   userId: string,
   page: number = 1,
-  limit: number = 6
+  limit: number = 6,
 ) => {
   try {
     const session = await auth();
@@ -28,32 +28,33 @@ export const getUserBorrowedBooks = async (
     // Get borrowed books with book details - all statuses except dismissed
     const { id, borrowDate, dueDate, returnDate, borrowStatus } = borrowRecords;
 
-    const records = await db
-      .select({
-        id,
-        borrowDate,
-        dueDate,
-        returnDate,
-        borrowStatus,
-        book: books,
-      })
-      .from(borrowRecords)
-      .innerJoin(books, eq(borrowRecords.bookId, books.id))
-      .where(
-        and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0))
-      )
-      .limit(limit)
-      .offset(offset);
+    // Fetch borrowed records and total count in parallel
+    const [records, [{ value: total }]] = await Promise.all([
+      db
+        .select({
+          id,
+          borrowDate,
+          dueDate,
+          returnDate,
+          borrowStatus,
+          book: books,
+        })
+        .from(borrowRecords)
+        .innerJoin(books, eq(borrowRecords.bookId, books.id))
+        .where(
+          and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0)),
+        )
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ value: count() })
+        .from(borrowRecords)
+        .where(
+          and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0)),
+        ),
+    ]);
 
     const borrowedRecords = records;
-
-    // Get total count for pagination
-    const [{ value: total }] = await db
-      .select({ value: count() })
-      .from(borrowRecords)
-      .where(
-        and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0))
-      );
     const totalPages = Math.ceil(total / limit);
 
     const borrowedBooks = borrowedRecords.map((record) => ({

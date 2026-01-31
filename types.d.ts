@@ -79,4 +79,15 @@ interface User {
   booksBorrowed: number;
   universityId: string;
   universityCard: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+}
+
+interface PendingUser {
+  id: string;
+  fullName: string;
+  email: string;
+  createdAt: Date;
+  universityId: string;
+  universityCard: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
 }

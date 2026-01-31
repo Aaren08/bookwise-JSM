@@ -5,6 +5,7 @@ interface UserProfileProps {
   email: string;
   universityId: string;
   universityCard: string;
+  status?: "PENDING" | "APPROVED" | "REJECTED";
 }
 
 const UserProfile = ({
@@ -12,7 +13,31 @@ const UserProfile = ({
   email,
   universityId,
   universityCard,
+  status = "PENDING",
 }: UserProfileProps) => {
+  const getStatusConfig = () => {
+    switch (status) {
+      case "APPROVED":
+        return {
+          icon: "/icons/verified.svg",
+          text: "Verified Student",
+        };
+      case "REJECTED":
+        return {
+          icon: "/icons/unapproved.svg",
+          text: "Account Rejected",
+        };
+      case "PENDING":
+      default:
+        return {
+          icon: "/icons/unverified.svg",
+          text: "Unverified Student",
+        };
+    }
+  };
+
+  const statusConfig = getStatusConfig();
+
   return (
     <div className="relative">
       {/* Profile Background Shape */}
@@ -27,7 +52,7 @@ const UserProfile = ({
       </div>
 
       {/* User Profile Card */}
-      <div className="gradient-vertical rounded-2xl p-8 pt-16 flex flex-col items-center">
+      <div className="gradient-vertical rounded-2xl p-8 pt-16 flex flex-col items-center w-full max-w-sm sm:max-w-full">
         <div className="flex items-start justify-start w-full gap-5 mt-14">
           <div className="relative shrink-0">
             <div className="w-22 h-22 rounded-full bg-dark-600 flex items-center justify-center border-4 border-dark-300">
@@ -42,16 +67,16 @@ const UserProfile = ({
           </div>
 
           <div className="flex flex-col">
-            {/* Verified Badge */}
+            {/* Status Badge */}
             <div className="flex items-center gap-2">
               <Image
-                src="/icons/verified.svg"
-                alt="verified"
+                src={statusConfig.icon}
+                alt={statusConfig.text}
                 width={18}
                 height={18}
               />
               <p className="text-light-100 text-sm font-medium">
-                Verified Student
+                {statusConfig.text}
               </p>
             </div>
 
