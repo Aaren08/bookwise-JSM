@@ -59,28 +59,34 @@ const AccountTable = ({ users }: Props) => {
   const handleModalConfirm = async () => {
     if (!selectedUser) return;
 
-    if (modalType === "approve") {
-      const res = await approveAccount(selectedUser.id);
-      if (res.success) {
-        showSuccessToast("Account approved successfully");
-        setSortedUsers(
-          sortedUsers.filter((user) => user.id !== selectedUser.id),
-        );
+    try {
+      if (modalType === "approve") {
+        const res = await approveAccount(selectedUser.id);
+        if (res.success) {
+          showSuccessToast("Account approved successfully");
+          setSortedUsers((prev) =>
+            prev.filter((user) => user.id !== selectedUser.id),
+          );
+        } else {
+          showErrorToast(res.error || "Failed to approve account");
+        }
       } else {
-        showErrorToast(res.error || "Failed to approve account");
+        const res = await rejectAccount(selectedUser.id);
+        if (res.success) {
+          showSuccessToast("Account rejected successfully");
+          setSortedUsers((prev) =>
+            prev.filter((user) => user.id !== selectedUser.id),
+          );
+        } else {
+          showErrorToast(res.error || "Failed to reject account");
+        }
       }
-    } else {
-      const res = await rejectAccount(selectedUser.id);
-      if (res.success) {
-        showSuccessToast("Account rejected successfully");
-        setSortedUsers(
-          sortedUsers.filter((user) => user.id !== selectedUser.id),
-        );
-      } else {
-        showErrorToast(res.error || "Failed to reject account");
-      }
+    } catch (error) {
+      console.error("Account approval/rejection failed:", error);
+      showErrorToast("Failed to process account request");
+    } finally {
+      setIsModalOpen(false);
     }
-    setIsModalOpen(false);
   };
 
   return (
