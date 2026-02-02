@@ -1,5 +1,5 @@
 import Image from "next/image";
-import BookCover from "../BookCover";
+import BookCover from "../book/BookCover";
 
 const BookOverview = async ({
   title,
