@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import UserProfile from "@/components/UserProfile";
-import BookList from "@/components/BookList";
+import BookList from "@/components/book/BookList";
 import NavigatePage from "@/components/NavigatePage";
 import { getUserProfile, getUserBorrowedBooks } from "@/lib/actions/user";
 

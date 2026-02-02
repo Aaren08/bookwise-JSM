@@ -1,6 +1,6 @@
 import Image from "next/image";
 import BookCover from "./BookCover";
-import BorrowBook from "./BorrowBook";
+import BorrowBook from "../BorrowBook";
 import { db } from "@/database/drizzle";
 import { users, borrowRecords } from "@/database/schema";
 import { eq, and } from "drizzle-orm";
@@ -33,8 +33,8 @@ const BookOverview = async ({
       and(
         eq(borrowRecords.userId, userId),
         eq(borrowRecords.bookId, id),
-        eq(borrowRecords.borrowStatus, "BORROWED")
-      )
+        eq(borrowRecords.borrowStatus, "BORROWED"),
+      ),
     )
     .limit(1);
 
@@ -44,8 +44,8 @@ const BookOverview = async ({
       availableCopies <= 0
         ? "Book is not available at the moment. Please check back later."
         : !borrowing
-        ? "You are not eligible to borrow this book. Please contact the library for more information."
-        : "You have already borrowed this book.",
+          ? "You are not eligible to borrow this book. Please contact the library for more information."
+          : "You have already borrowed this book.",
   };
 
   return (

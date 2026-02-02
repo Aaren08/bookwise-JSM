@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
-import BookOverview from "@/components/BookOverview";
-import BookVideo from "@/components/BookVideo";
-import BookCover from "@/components/BookCover";
+import BookOverview from "@/components/book/BookOverview";
+import BookVideo from "@/components/book/BookVideo";
+import BookCover from "@/components/book/BookCover";
 import { db } from "@/database/drizzle";
 import { books } from "@/database/schema";
 import { eq } from "drizzle-orm";

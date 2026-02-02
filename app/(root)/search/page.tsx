@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Image from "next/image";
 import SearchForm from "@/components/SearchForm";
 import SearchFilter from "@/components/SearchFilter";
-import BookList from "@/components/BookList";
+import BookList from "@/components/book/BookList";
 import NavigatePage from "@/components/NavigatePage";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";

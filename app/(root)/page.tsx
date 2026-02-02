@@ -1,5 +1,5 @@
-import BookList from "../../components/BookList";
-import BookOverview from "../../components/BookOverview";
+import BookList from "../../components/book/BookList";
+import BookOverview from "../../components/book/BookOverview";
 import { db } from "@/database/drizzle";
 import { books } from "@/database/schema";
 import { auth } from "@/auth";

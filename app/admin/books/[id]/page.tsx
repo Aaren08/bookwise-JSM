@@ -1,5 +1,5 @@
 import BookOverview from "@/components/admin/BookOverview";
-import BookVideo from "@/components/BookVideo";
+import BookVideo from "@/components/book/BookVideo";
 import { db } from "@/database/drizzle";
 import { books } from "@/database/schema";
 import { eq } from "drizzle-orm";

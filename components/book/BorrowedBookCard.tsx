@@ -6,7 +6,7 @@ import { useState } from "react";
 import Link from "next/link";
 import BookCover from "./BookCover";
 import { cn } from "@/lib/utils";
-import ReceiptButton from "./ReceiptButton";
+import ReceiptButton from "../ReceiptButton";
 import {
   calculateBorrowStatus,
   getBorrowStatusColor,
