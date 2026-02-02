@@ -22,6 +22,33 @@
     @apply rounded-md bg-green-100 px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-200 cursor-pointer transition-colors;
   }
 
+  .reject-account-btn {
+    @apply rounded-full p-2 text-red-500 hover:bg-red-50 transition-colors cursor-pointer;
+  }
+
+  .view-card-btn {
+    @apply cursor-pointer flex items-center gap-1 text-sm font-semibold text-blue-500 hover:text-blue-600;
+  }
+
+  /* Tables */
+  .table-row {
+    @apply border-b border-light-400 last:border-0 hover:bg-light-300/50 transition-colors;
+  }
+
+  .header-cell {
+    @apply text-left text-sm font-semibold tracking-wider text-dark-200 py-4 pr-10 whitespace-nowrap;
+  }
+
+  .header-cell:first-child {
+    @apply pl-10;
+  }
+
+  @media (max-width: 640px) {
+    .header-cell {
+      @apply max-w-[100px] text-xs truncate pr-16;
+    }
+  }
+
   /* Confirmation Dialog */
   .confirm-trigger {
     @apply !font-semibold !text-sm !shadow-none hover:!opacity-70 !w-full;

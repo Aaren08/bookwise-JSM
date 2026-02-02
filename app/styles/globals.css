@@ -285,6 +285,113 @@
   .select-item {
     @apply focus:!bg-dark-600 focus:!text-light-100;
   }
+
+  /* Cropper Component */
+  .cropper-modal {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4;
+  }
+
+  .cropper-content {
+    @apply relative w-full max-w-lg bg-dark-200 rounded-lg overflow-hidden flex flex-col h-[500px];
+  }
+
+  .cropper-image_container {
+    @apply relative flex-1 bg-black;
+  }
+
+  .cropper-controls {
+    @apply p-4 flex flex-col gap-4 bg-dark-300;
+  }
+
+  .cropper-zoom_slider {
+    @apply flex items-center gap-2;
+  }
+
+  .cropper-zoom_input {
+    @apply w-full h-1 bg-dark-500 rounded-lg appearance-none cursor-pointer;
+  }
+
+  .cropper-btn_container {
+    @apply flex justify-end gap-2 text-sm text-light-100;
+  }
+
+  .cropper-cancel_btn {
+    @apply px-4 py-2 rounded-md hover:bg-dark-500 transition-colors cursor-pointer;
+  }
+
+  .cropper-save_btn {
+    @apply px-4 py-2 text-white rounded-md hover:bg-dark-500/90 transition-colors cursor-pointer;
+  }
+
+  .cropper-avatar_trigger {
+    @apply relative shrink-0 cursor-pointer;
+  }
+
+  .cropper-avatar_circle {
+    @apply w-22 h-22 rounded-full bg-dark-600 flex items-center justify-center border-4 border-dark-300 overflow-hidden relative;
+  }
+
+  .cropper-hover_overlay {
+    @apply absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 transition-opacity duration-300;
+  }
+
+  .cropper-avatar_trigger:hover .cropper-hover_overlay {
+    @apply opacity-100;
+  }
+
+  /* Profile Component */
+  .profile-card {
+    @apply rounded-2xl p-8 pt-16 flex flex-col items-center w-full sm:max-w-full;
+    background: linear-gradient(180deg, #12141d 0%, #12151f 100%);
+  }
+
+  .profile-header {
+    @apply flex items-start justify-start w-full gap-5 mt-14;
+  }
+
+  .profile-status_badge {
+    @apply flex items-center gap-2;
+  }
+
+  .profile-info_container {
+    @apply w-full mt-6 space-y-4;
+  }
+
+  .profile-info_label {
+    @apply text-light-200 text-xs tracking-wider;
+  }
+
+  .profile-info_value {
+    @apply text-white text-base font-semibold mt-1;
+  }
+
+  .profile-university_card {
+    @apply relative w-full h-48 rounded-lg overflow-hidden border border-dark-600;
+  }
+
+  .profile-bg_container {
+    @apply absolute top-0 left-0 w-full flex justify-center;
+  }
+
+  .profile-details {
+    @apply flex flex-col;
+  }
+
+  .profile-status_text {
+    @apply text-light-100 text-sm font-medium;
+  }
+
+  .profile-name {
+    @apply text-white text-xl font-semibold mt-2;
+  }
+
+  .profile-email {
+    @apply text-light-100 text-sm mt-1;
+  }
+
+  .profile-info_item {
+    @apply w-full mt-6;
+  }
 }
 
 @layer utilities {

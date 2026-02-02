@@ -11,7 +11,7 @@ import {
   calculateBorrowStatus,
   getBorrowStatusColor,
   getBorrowStatusText,
-} from "@/lib/returnPolicy";
+} from "@/lib/essentials/returnPolicy";
 import { dismissBorrowRecord } from "@/lib/actions/book";
 import { formatReturnDate } from "@/lib/utils";
 import { toast } from "sonner";

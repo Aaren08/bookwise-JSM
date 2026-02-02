@@ -1,4 +1,4 @@
-import BookTable from "@/components/admin/BookTable";
+import BookTable from "@/components/admin/tables/BookTable";
 import { getAllBooks } from "@/lib/admin/actions/book";
 import NavigatePage from "@/components/NavigatePage";
 

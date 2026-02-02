@@ -21,3 +21,17 @@ export const receiptDailyRateLimit = new Ratelimit({
   analytics: true,
   prefix: "ratelimit:receipt:daily",
 });
+
+export const uploadAvatarRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(10, "1 d"),
+  analytics: true,
+  prefix: "ratelimit:uploadAvatar:daily",
+});
+
+export const updateAvatarRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(5, "1 d"),
+  analytics: true,
+  prefix: "ratelimit:updateAvatar:daily",
+});

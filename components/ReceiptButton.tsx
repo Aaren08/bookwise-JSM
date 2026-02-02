@@ -3,9 +3,9 @@
 import Image from "next/image";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { getReceipt } from "@/lib/admin/actions/receipt";
 import ReceiptModal, { Receipt } from "./ReceiptModal";
+import { showErrorToast } from "@/lib/essentials/toast-utils";
 
 const OVERDUE_ICON_FILTER =
   "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
@@ -42,27 +42,11 @@ const ReceiptButton = ({
         setReceipt(res.data as Receipt);
         setIsModalOpen(true);
       } else {
-        toast.error(res.error || "Failed to fetch receipt", {
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showErrorToast(res.error || "Failed to fetch receipt");
       }
     } catch (error) {
       console.log(error);
-      toast.error("An error occurred while fetching receipt", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast("An error occurred while fetching receipt");
     } finally {
       setIsReceiptLoading(false);
     }

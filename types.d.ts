@@ -66,7 +66,7 @@ interface BorrowRecord {
   bookGenre: string;
   userFullName: string;
   userEmail: string;
-  userAvatar: string;
+  userAvatar?: string;
   createdAt?: string;
 }
 
@@ -74,6 +74,7 @@ interface User {
   id: string;
   fullName: string;
   email: string;
+  userAvatar?: string;
   createdAt: string;
   role: "USER" | "ADMIN";
   booksBorrowed: number;
@@ -86,6 +87,7 @@ interface PendingUser {
   id: string;
   fullName: string;
   email: string;
+  userAvatar?: string;
   createdAt: Date;
   universityId: string;
   universityCard: string;

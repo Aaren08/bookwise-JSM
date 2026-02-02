@@ -1,4 +1,4 @@
-import AccountTable from "@/components/admin/AccountTable";
+import AccountTable from "@/components/admin/tables/AccountTable";
 import NavigatePage from "@/components/NavigatePage";
 import { getPendingUsers } from "@/lib/admin/actions/user";
 

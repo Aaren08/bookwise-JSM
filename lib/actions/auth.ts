@@ -6,7 +6,7 @@ import { users } from "@/database/schema";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
-import { ratelimit } from "../rateLimit";
+import { ratelimit } from "../essentials/rateLimit";
 import { redirect } from "next/navigation";
 import config from "../config";
 import { workflowClient } from "../workflow";

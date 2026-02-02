@@ -28,7 +28,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           const isPasswordValid = await compare(
             credentials.password.toString(),
-            user[0].password
+            user[0].password,
           );
           if (!isPasswordValid) {
             return null;
@@ -37,6 +37,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             id: user[0].id.toString(),
             email: user[0].email,
             name: user[0].fullName,
+            image: user[0].userAvatar,
             role: user[0].role,
           } as User;
         } catch (error) {
@@ -50,11 +51,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: "/sign-in",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.name = user.name;
+        token.picture = user.image;
         token.role = user.role;
+      }
+      if (trigger === "update" && session?.user?.image) {
+        token.picture = session.user.image;
       }
       return token;
     },
@@ -62,6 +67,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.id = token.id as string;
         session.user.name = token.name as string;
+        session.user.image = token.picture as string;
         session.user.role = token.role as string;
       }
       return session;

@@ -29,7 +29,7 @@ export const getAllBorrowRecords = async ({
         bookGenre: books.genre,
         userFullName: users.fullName,
         userEmail: users.email,
-        userAvatar: users.universityCard, // Assuming we might want to show something else or fetch avatar if available, but schema doesn't have avatarUrl explicitly, using universityCard as placeholder or just initials
+        userAvatar: users.userAvatar,
       })
       .from(borrowRecords)
       .innerJoin(books, eq(borrowRecords.bookId, books.id))

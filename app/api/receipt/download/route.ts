@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { receiptMinuteRateLimit, receiptDailyRateLimit } from "@/lib/rateLimit";
+import {
+  receiptMinuteRateLimit,
+  receiptDailyRateLimit,
+} from "@/lib/essentials/rateLimit";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -14,7 +17,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     receiptId = body.receiptId;
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 },
+    );
   }
 
   if (!receiptId || typeof receiptId !== "string") {

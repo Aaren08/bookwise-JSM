@@ -1,5 +1,5 @@
 import NavigatePage from "@/components/NavigatePage";
-import UserTable from "@/components/admin/UserTable";
+import UserTable from "@/components/admin/tables/UserTable";
 import { getAllUsers } from "@/lib/admin/actions/user";
 
 const Page = async ({

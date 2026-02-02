@@ -10,9 +10,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { deleteUser } from "@/lib/admin/actions/user";
-import { toast } from "sonner";
 import { useState } from "react";
 import Image from "next/image";
+import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props {
   userId: string;
@@ -26,26 +26,10 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
     const res = await deleteUser(userId);
     if (res.success) {
       setOpen(false);
-      toast.success("User deleted successfully", {
-        position: "top-right",
-        style: {
-          background: "#dcfce7",
-          color: "#000000",
-          border: "1px solid #86efac",
-        },
-        className: "!bg-green-200 !text-black",
-      });
+      showSuccessToast("User deleted successfully");
       onDelete();
     } else {
-      toast.error(res.error || "Failed to delete user", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast(res.error || "Failed to delete user");
     }
   };
 

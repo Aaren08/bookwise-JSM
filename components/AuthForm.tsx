@@ -23,9 +23,9 @@ import Link from "next/link";
 import { FIELD_NAMES, FIELD_TYPES } from "@/constants";
 import FileUpload from "./FileUpload";
 import { useState } from "react";
-import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
+import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props<T extends FieldValues> {
   schema: ZodType<T>;
@@ -71,41 +71,17 @@ const AuthForm = <T extends FieldValues>({
       const result = await onSubmit(data);
 
       if (result.success) {
-        toast.success(isSignIn ? "Login successful" : "Sign up successful", {
-          position: "top-right",
-          style: {
-            background: "#dcfce7",
-            color: "#000000",
-            border: "1px solid #86efac",
-          },
-          className: "!bg-green-200 !text-black",
-        });
+        showSuccessToast(isSignIn ? "Login successful" : "Sign up successful");
         router.push("/");
       } else {
         // Handle the case when result.success is false
         const errorMessage = result.error || "An error occurred";
-        toast.error(errorMessage, {
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showErrorToast(errorMessage);
       }
     } catch (error) {
       console.log(error);
       const errorMessage = normalizeError(error);
-      toast.error(errorMessage, {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast(errorMessage);
     }
   };
 
@@ -142,7 +118,7 @@ const AuthForm = <T extends FieldValues>({
                         type="image"
                         accept="image/*"
                         placeholder="Upload your ID"
-                        folder="ids"
+                        folder="users/ids"
                         variant="dark"
                         onUploadComplete={(url) => {
                           field.onChange(url);

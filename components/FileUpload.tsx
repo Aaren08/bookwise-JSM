@@ -11,9 +11,14 @@ import {
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import Image from "next/image";
-import { toast } from "sonner";
 import config from "@/lib/config";
 import { cn } from "@/lib/utils";
+import {
+  showFileErrorToast,
+  showFileInfoToast,
+  showFileSuccessToast,
+  showFileWarningToast,
+} from "@/lib/essentials/toast-utils";
 
 interface FileUploadProps {
   onUploadComplete?: (url: string) => void;
@@ -54,7 +59,7 @@ const FileUpload = ({
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `Request failed with status ${response.status}: ${errorText}`
+          `Request failed with status ${response.status}: ${errorText}`,
         );
       }
 
@@ -107,18 +112,10 @@ const FileUpload = ({
       setIsUploading(false);
 
       // Show success toast
-      toast.success("Upload successful", {
-        description: `${
-          type === "image" ? "Image" : "Video"
-        } uploaded successfully`,
-        position: "top-right",
-        style: {
-          background: "#dcfce7",
-          color: "#000000",
-          border: "1px solid #86efac",
-        },
-        className: "!bg-green-200 !text-black",
-      });
+      showFileSuccessToast(
+        "Upload successful",
+        `${type === "image" ? "Image" : "Video"} uploaded successfully`,
+      );
     } catch (error) {
       // Handle errors
       let errorMessage = "Upload failed";
@@ -154,16 +151,10 @@ const FileUpload = ({
       // Show error toast only if it's not a cancellation
       // (handleCancel already shows the "Upload cancelled" toast)
       if (!isAbortError) {
-        toast.error("Upload failed", {
-          description: `Your ${type} upload failed. Please try again later.`,
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showFileErrorToast(
+          "Upload failed",
+          `Your ${type} upload failed. Please try again later.`,
+        );
       }
     }
   };
@@ -178,32 +169,14 @@ const FileUpload = ({
       if (type === "image" && !file.type.startsWith("image/")) {
         const errorMsg = "Please select an image file";
         onUploadError?.(errorMsg);
-        toast.error("Invalid file type", {
-          description: errorMsg,
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showFileErrorToast("Invalid file type", errorMsg);
         return;
       }
 
       if (type === "video" && !file.type.startsWith("video/")) {
         const errorMsg = "Please select a video file";
         onUploadError?.(errorMsg);
-        toast.error("Invalid file type", {
-          description: errorMsg,
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showFileErrorToast("Invalid file type", errorMsg);
         return;
       }
 
@@ -214,16 +187,7 @@ const FileUpload = ({
           type === "image" ? "10MB" : "50MB"
         }`;
         onUploadError?.(errorMsg);
-        toast.error("File too large", {
-          description: errorMsg,
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showFileErrorToast("File too large", errorMsg);
         return;
       }
 
@@ -251,16 +215,7 @@ const FileUpload = ({
     onChange?.("");
 
     // Show info toast
-    toast.info("File removed", {
-      description: "You can upload a new file",
-      position: "top-right",
-      style: {
-        background: "#fee2e2",
-        color: "#000000",
-        border: "1px solid #fca5a5",
-      },
-      className: "!bg-orange-100 !text-black",
-    });
+    showFileInfoToast("File removed", "You can upload a new file");
   };
 
   /**
@@ -273,16 +228,10 @@ const FileUpload = ({
     setFileName("");
 
     // Show warning toast
-    toast.warning("Upload cancelled", {
-      description: "The upload process was cancelled",
-      position: "top-right",
-      style: {
-        background: "#fee2e2",
-        color: "#000000",
-        border: "1px solid #fca5a5",
-      },
-      className: "!bg-orange-100 !text-black",
-    });
+    showFileWarningToast(
+      "Upload cancelled",
+      "The upload process was cancelled",
+    );
   };
 
   return (
@@ -304,7 +253,7 @@ const FileUpload = ({
             "upload-file",
             variant === "dark"
               ? "bg-dark-300 text-light-100"
-              : "bg-light-600 text-dark-100 border border-gray-300"
+              : "bg-light-600 text-dark-100 border border-gray-300",
           )}
         >
           <Image
@@ -316,7 +265,7 @@ const FileUpload = ({
           <span
             className={cn(
               "font-normal",
-              variant === "dark" ? "text-light-100" : "text-dark-500"
+              variant === "dark" ? "text-light-100" : "text-dark-500",
             )}
           >
             {placeholder}
@@ -330,7 +279,7 @@ const FileUpload = ({
             <span
               className={cn(
                 "text-sm truncate flex-1",
-                variant === "dark" ? "text-light-100" : "text-dark-500"
+                variant === "dark" ? "text-light-100" : "text-dark-500",
               )}
             >
               {fileName}
@@ -359,7 +308,7 @@ const FileUpload = ({
             variant === "dark"
               ? "bg-dark-300 border-green-600"
               : "bg-light-600 border-gray-300",
-            type === "image" ? "min-h-14 border-2" : "aspect-video border-none"
+            type === "image" ? "min-h-14 border-2" : "aspect-video border-none",
           )}
         >
           {type === "image" ? (

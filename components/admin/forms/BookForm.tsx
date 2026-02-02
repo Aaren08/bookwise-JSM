@@ -19,7 +19,7 @@ import { BookPlus, BookCheck } from "lucide-react";
 import ColorPicker from "../ColorPicker";
 import FileUpload from "@/components/FileUpload";
 import { createBook, updateBook } from "@/lib/admin/actions/book";
-import { toast } from "sonner";
+import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props extends Partial<Book> {
   type: "create" | "update";
@@ -86,26 +86,10 @@ const BookForm = ({ type, ...book }: Props) => {
         : await updateBook({ ...values, id: book.id as string });
 
     if (result.success) {
-      toast.success(result.message, {
-        position: "top-right",
-        style: {
-          background: "#dcfce7",
-          color: "#000000",
-          border: "1px solid #86efac",
-        },
-        className: "!bg-green-200 !text-black",
-      });
+      showSuccessToast(result.message);
       router.push(`/admin/books/${result.data.id}`);
     } else {
-      toast.error(result.message, {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast(result.message);
     }
   };
 

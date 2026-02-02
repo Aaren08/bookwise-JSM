@@ -5,7 +5,7 @@ import { cn, getInitials } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Session } from "next-auth";
 import { handleSignOut } from "@/lib/actions/auth";
 
@@ -37,7 +37,7 @@ const Sidebar = ({ session }: { session: Session }) => {
                 <div
                   className={cn(
                     "link",
-                    isSelected && "bg-primary-admin shadow-sm"
+                    isSelected && "bg-primary-admin shadow-sm",
                   )}
                 >
                   <div className="relative size-5">
@@ -63,6 +63,10 @@ const Sidebar = ({ session }: { session: Session }) => {
       <div className="user relative">
         <div className="relative">
           <Avatar className="size-10">
+            <AvatarImage
+              src={session.user?.image || ""}
+              alt={session.user?.name || ""}
+            />
             <AvatarFallback className="bg-light-100 font-bold">
               {getInitials(session?.user?.name || "")}
             </AvatarFallback>

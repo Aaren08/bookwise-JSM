@@ -4,8 +4,8 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { generateReceipt } from "@/lib/admin/actions/receipt";
-import { toast } from "sonner";
 import ReceiptModal, { Receipt } from "@/components/ReceiptModal";
+import { showErrorToast } from "@/lib/essentials/toast-utils";
 
 interface Props {
   borrowRecordId: string;
@@ -27,27 +27,11 @@ const GenerateReceipt = ({ borrowRecordId, status }: Props) => {
         setIsModalOpen(true);
         setHasGenerated(true);
       } else {
-        toast.error(res.error || "Failed to generate receipt", {
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showErrorToast(res.error || "Failed to generate receipt");
       }
     } catch (error) {
       console.log(error);
-      toast.error("An error occurred while generating receipt", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast("An error occurred while generating receipt");
     } finally {
       setIsLoading(false);
     }

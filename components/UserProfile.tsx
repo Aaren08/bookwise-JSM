@@ -1,10 +1,16 @@
+"use client";
+
 import Image from "next/image";
+import ImageCropper from "./ImageCropper";
+import { useState } from "react";
+import { useSession } from "next-auth/react";
 
 interface UserProfileProps {
   fullName: string;
   email: string;
   universityId: string;
   universityCard: string;
+  userAvatar: string;
   status?: "PENDING" | "APPROVED" | "REJECTED";
 }
 
@@ -13,8 +19,17 @@ const UserProfile = ({
   email,
   universityId,
   universityCard,
+  userAvatar,
   status = "PENDING",
 }: UserProfileProps) => {
+  const { data: session } = useSession();
+
+  // Track locally uploaded avatar (before it's saved to session)
+  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
+
+  // Derive the current avatar: prioritize uploaded > session > prop
+  const currentAvatar = uploadedAvatar || session?.user?.image || userAvatar;
+
   const getStatusConfig = () => {
     switch (status) {
       case "APPROVED":
@@ -41,73 +56,59 @@ const UserProfile = ({
   return (
     <div className="relative">
       {/* Profile Background Shape */}
-      <div className="absolute top-0 left-0 w-full flex justify-center">
+      <div className="profile-bg_container">
         <Image
           src="/icons/profile.svg"
           alt="profile background"
           width={59}
           height={88}
           className="object-contain"
+          priority
         />
       </div>
 
       {/* User Profile Card */}
-      <div className="gradient-vertical rounded-2xl p-8 pt-16 flex flex-col items-center w-full max-w-sm sm:max-w-full">
-        <div className="flex items-start justify-start w-full gap-5 mt-14">
-          <div className="relative shrink-0">
-            <div className="w-22 h-22 rounded-full bg-dark-600 flex items-center justify-center border-4 border-dark-300">
-              <Image
-                src="/icons/user-fill.svg"
-                alt="user avatar"
-                width={40}
-                height={40}
-                className="object-contain"
-              />
-            </div>
-          </div>
+      <div className="profile-card">
+        <div className="profile-header">
+          <ImageCropper
+            userAvatar={currentAvatar}
+            onAvatarUpdated={setUploadedAvatar}
+          />
 
-          <div className="flex flex-col">
+          <div className="profile-details">
             {/* Status Badge */}
-            <div className="flex items-center gap-2">
+            <div className="profile-status_badge">
               <Image
                 src={statusConfig.icon}
                 alt={statusConfig.text}
                 width={18}
                 height={18}
               />
-              <p className="text-light-100 text-sm font-medium">
-                {statusConfig.text}
-              </p>
+              <p className="profile-status_text">{statusConfig.text}</p>
             </div>
 
             {/* User Info */}
-            <h2 className="text-white text-xl font-semibold mt-2">
-              {fullName}
-            </h2>
-            <p className="text-light-100 text-sm mt-1">{email}</p>
+            <h2 className="profile-name">{fullName}</h2>
+            <p className="profile-email">{email}</p>
           </div>
         </div>
 
         {/* University Info */}
-        <div className="w-full mt-6 space-y-4">
+        <div className="profile-info_container">
           <div>
-            <p className="text-light-200 text-xs tracking-wider">University</p>
-            <p className="text-white text-base font-semibold mt-1">
-              JS Mastery Pro
-            </p>
+            <p className="profile-info_label">University</p>
+            <p className="profile-info_value">JS Mastery Pro</p>
           </div>
 
           <div>
-            <p className="text-light-200 text-xs tracking-wider">Student ID</p>
-            <p className="text-white text-base font-semibold mt-1">
-              {universityId}
-            </p>
+            <p className="profile-info_label">Student ID</p>
+            <p className="profile-info_value">{universityId}</p>
           </div>
         </div>
 
         {/* University Card */}
-        <div className="w-full mt-6">
-          <div className="relative w-full h-48 rounded-lg overflow-hidden border border-dark-600">
+        <div className="profile-info_item">
+          <div className="profile-university_card">
             <Image
               src={universityCard}
               alt="university card"
