@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 import { borrowBook } from "@/lib/actions/book";
 import { useState } from "react";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";

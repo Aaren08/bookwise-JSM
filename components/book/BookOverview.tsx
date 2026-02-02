@@ -1,6 +1,6 @@
 import Image from "next/image";
 import BookCover from "./BookCover";
-import BorrowBook from "../BorrowBook";
+import BorrowBook from "./BorrowBook";
 import { db } from "@/database/drizzle";
 import { users, borrowRecords } from "@/database/schema";
 import { eq, and } from "drizzle-orm";
