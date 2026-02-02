@@ -6,7 +6,7 @@ import BookList from "@/components/BookList";
 import NavigatePage from "@/components/NavigatePage";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { searchBooks } from "@/lib/searchQuery";
+import { searchBooks } from "@/lib/essentials/searchQuery";
 
 interface SearchPageProps {
   searchParams: Promise<{

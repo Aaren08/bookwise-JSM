@@ -1,6 +1,6 @@
 import { getAllBorrowRecords } from "@/lib/admin/actions/borrow";
 import NavigatePage from "@/components/NavigatePage";
-import BorrowTable from "@/components/admin/BorrowTable";
+import BorrowTable from "@/components/admin/tables/BorrowTable";
 
 const Page = async ({
   searchParams,

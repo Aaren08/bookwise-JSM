@@ -28,6 +28,8 @@ export const BORROW_STATUS_ENUM = pgEnum("borrow_status", [
 export const users = pgTable("users", {
   id: uuid("id").notNull().primaryKey().defaultRandom(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
+  userAvatar: text("user_avatar"),
+  userAvatarFileId: text("user_avatar_file_id"),
   email: varchar("email", { length: 255 }).notNull().unique(),
   universityId: varchar("university_id", { length: 30 }).notNull().unique(),
   password: text("password").notNull(),

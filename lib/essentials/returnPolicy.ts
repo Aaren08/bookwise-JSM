@@ -40,5 +40,8 @@ export const getBorrowStatusText = (status: BorrowStatus): string => {
   if (status.daysLeft === 0) {
     return `${status.hoursLeft} ${status.hoursLeft === 1 ? "hr" : "hrs"} left to due`;
   }
+  if (status.daysLeft === 1) {
+    return `${status.daysLeft} day left to due`;
+  }
   return `${status.daysLeft} days left to due`;
 };

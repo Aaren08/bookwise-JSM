@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { Button } from "./ui/button";
 import { borrowBook } from "@/lib/actions/book";
-import { toast } from "sonner";
 import { useState } from "react";
+import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props {
   bookId: string;
@@ -24,15 +24,7 @@ const BorrowBook = ({
 
   const handleBorrowBook = async () => {
     if (!isEligible) {
-      toast.error(message, {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast(message);
       return;
     }
     setIsBorrowing(true);
@@ -40,37 +32,13 @@ const BorrowBook = ({
     try {
       const result = await borrowBook({ userId, bookId });
       if (result.success) {
-        toast.success("Book request is forwarded", {
-          position: "top-right",
-          style: {
-            background: "#dcfce7",
-            color: "#000000",
-            border: "1px solid #86efac",
-          },
-          className: "!bg-green-200 !text-black",
-        });
+        showSuccessToast("Book request is forwarded");
       } else {
-        toast.error(result.error, {
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showErrorToast(result.error || "Failed to initiate book request");
       }
     } catch (error) {
       console.log(error);
-      toast.error("Failed to initiate book request", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast("Failed to initiate book request");
     } finally {
       setIsBorrowing(false);
     }

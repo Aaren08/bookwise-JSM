@@ -1,7 +1,7 @@
 import Image from "next/image";
 import React from "react";
 import { X, Download } from "lucide-react";
-import { downloadReceiptAsPDF } from "../lib/downloadReceipt";
+import { downloadReceiptAsPDF } from "../lib/essentials/downloadReceipt";
 import { toast } from "sonner";
 
 export type Receipt = {

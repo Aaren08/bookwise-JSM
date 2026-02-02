@@ -27,6 +27,7 @@ export const getAllUsers = async ({
       id,
       fullName,
       email,
+      userAvatar,
       createdAt,
       role,
       universityId,
@@ -37,6 +38,7 @@ export const getAllUsers = async ({
         id,
         fullName,
         email,
+        userAvatar,
         createdAt,
         role,
         universityId,
@@ -84,14 +86,22 @@ export const getPendingUsers = async ({
 
     const totalPages = Math.ceil(totalPendingUsers / limit);
 
-    const { id, fullName, email, createdAt, universityId, universityCard } =
-      users;
+    const {
+      id,
+      fullName,
+      email,
+      userAvatar,
+      createdAt,
+      universityId,
+      universityCard,
+    } = users;
 
     const pendingUsers = await db
       .select({
         id,
         fullName,
         email,
+        userAvatar,
         createdAt,
         universityId,
         universityCard,

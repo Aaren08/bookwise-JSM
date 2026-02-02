@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { deleteBook } from "@/lib/admin/actions/book";
 import Image from "next/image";
-import { toast } from "sonner";
 import { useState } from "react";
+import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props {
   id: string;
@@ -28,26 +28,10 @@ const DeleteBook = ({ id, onDelete }: Props) => {
     const res = await deleteBook(id);
     if (res.success) {
       setOpen(false);
-      toast.success("Book deleted successfully", {
-        position: "top-right",
-        style: {
-          background: "#dcfce7",
-          color: "#000000",
-          border: "1px solid #86efac",
-        },
-        className: "!bg-green-200 !text-black",
-      });
+      showSuccessToast("Book deleted successfully");
       onDelete?.();
     } else {
-      toast.error(res.message || "Failed to delete book", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast(res.message || "Failed to delete book");
     }
   };
 

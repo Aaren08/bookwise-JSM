@@ -100,8 +100,16 @@ export const getUserProfile = async (userId: string) => {
       };
     }
 
-    const { id, fullName, email, universityId, universityCard, status, role } =
-      users;
+    const {
+      id,
+      fullName,
+      email,
+      universityId,
+      universityCard,
+      userAvatar,
+      status,
+      role,
+    } = users;
     const user = await db
       .select({
         id,
@@ -109,6 +117,7 @@ export const getUserProfile = async (userId: string) => {
         email,
         universityId,
         universityCard,
+        userAvatar,
         status,
         role,
       })
@@ -132,6 +141,36 @@ export const getUserProfile = async (userId: string) => {
     return {
       success: false,
       error: "Failed to fetch user profile",
+    };
+  }
+};
+
+export const updateUserImage = async (userId: string, imageUrl: string) => {
+  try {
+    const session = await auth();
+    if (
+      !session?.user?.id ||
+      (session.user.id !== userId && session.user.role !== "ADMIN")
+    ) {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
+    await db
+      .update(users)
+      .set({ userAvatar: imageUrl })
+      .where(eq(users.id, userId));
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.log(error);
+    return {
+      success: false,
+      error: "Failed to update user image",
     };
   }
 };

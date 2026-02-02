@@ -63,10 +63,12 @@ const Page = async ({ searchParams }: PageProps) => {
       {/* Left Side - User Profile */}
       <div className="w-full">
         <UserProfile
+          id={user.id}
           fullName={user.fullName}
           email={user.email}
           universityId={user.universityId}
           universityCard={user.universityCard}
+          userAvatar={user.userAvatar}
           status={user.status}
         />
       </div>

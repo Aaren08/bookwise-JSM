@@ -10,7 +10,7 @@ export const ratelimit = new Ratelimit({
 
 export const receiptMinuteRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(2, "1 m"),
+  limiter: Ratelimit.slidingWindow(5, "1 m"),
   analytics: true,
   prefix: "ratelimit:receipt:minute",
 });
@@ -20,4 +20,18 @@ export const receiptDailyRateLimit = new Ratelimit({
   limiter: Ratelimit.fixedWindow(10, "1 d"),
   analytics: true,
   prefix: "ratelimit:receipt:daily",
+});
+
+export const uploadAvatarRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(10, "1 d"),
+  analytics: true,
+  prefix: "ratelimit:uploadAvatar:daily",
+});
+
+export const updateAvatarRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(5, "1 d"),
+  analytics: true,
+  prefix: "ratelimit:updateAvatar:daily",
 });

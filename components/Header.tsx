@@ -1,6 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, getInitials } from "@/lib/utils";
 import Link from "next/link";
 import Image from "next/image";
@@ -26,7 +26,7 @@ const Header = ({ session }: { session?: Session | null }) => {
             href="/"
             className={cn(
               "text-base cursor-pointer capitalize",
-              pathname === "/" ? "text-light-200" : "text-light-100"
+              pathname === "/" ? "text-light-200" : "text-light-100",
             )}
           >
             Home
@@ -38,7 +38,7 @@ const Header = ({ session }: { session?: Session | null }) => {
             href="/search"
             className={cn(
               "text-base cursor-pointer capitalize",
-              pathname === "/search" ? "text-light-200" : "text-light-100"
+              pathname === "/search" ? "text-light-200" : "text-light-100",
             )}
           >
             Search
@@ -49,6 +49,10 @@ const Header = ({ session }: { session?: Session | null }) => {
           <li>
             <Link href="/my-profile" className="flex items-center gap-2">
               <Avatar>
+                <AvatarImage
+                  src={session.user?.image || ""}
+                  alt={session.user?.name || ""}
+                />
                 <AvatarFallback className="bg-light-100 font-bold">
                   {getInitials(session.user?.name || "")}
                 </AvatarFallback>
