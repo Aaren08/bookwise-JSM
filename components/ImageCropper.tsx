@@ -201,9 +201,12 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
       )}
 
       {/* Trigger Button / Avatar Display */}
-      <div
+      <button
+        type="button"
         className="cropper-avatar_trigger"
         onClick={() => !isUploading && fileInputRef.current?.click()}
+        disabled={isUploading}
+        aria-label="Change avatar"
       >
         <div className="cropper-avatar_circle">
           {isUploading ? (
@@ -238,7 +241,7 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
             </>
           )}
         </div>
-      </div>
+      </button>
     </>
   );
 };

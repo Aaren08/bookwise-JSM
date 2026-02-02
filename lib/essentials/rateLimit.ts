@@ -10,7 +10,7 @@ export const ratelimit = new Ratelimit({
 
 export const receiptMinuteRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(2, "1 m"),
+  limiter: Ratelimit.slidingWindow(5, "1 m"),
   analytics: true,
   prefix: "ratelimit:receipt:minute",
 });

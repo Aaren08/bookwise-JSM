@@ -45,8 +45,8 @@ const UserTable = ({ users }: Props) => {
     const res = await updateUserRole(userId, newRole);
     if (res.success) {
       showSuccessToast("User role updated successfully");
-      setSortedUsers(
-        sortedUsers.map((user) =>
+      setSortedUsers((prev) =>
+        prev.map((user) =>
           user.id === userId ? { ...user, role: newRole } : user,
         ),
       );
@@ -136,7 +136,9 @@ const UserTable = ({ users }: Props) => {
                 <DeleteUser
                   userId={user.id}
                   onDelete={() =>
-                    setSortedUsers(sortedUsers.filter((u) => u.id !== user.id))
+                    setSortedUsers((prev) =>
+                      prev.filter((u) => u.id !== user.id),
+                    )
                   }
                 />
               </td>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 
 interface UserProfileProps {
+  id: string;
   fullName: string;
   email: string;
   universityId: string;
