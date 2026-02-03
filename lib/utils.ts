@@ -38,3 +38,12 @@ export const formatReturnDate = (date: Date | string): string => {
 
   return `${day}${suffix(day)} ${month}`;
 };
+
+/* admin search -> case-insensitive helper */
+export const includes = (
+  haystack: string | number | null | undefined,
+  needle: string,
+) =>
+  String(haystack ?? "")
+    .toLowerCase()
+    .includes(needle.toLowerCase());

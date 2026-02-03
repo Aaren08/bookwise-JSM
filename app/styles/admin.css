@@ -284,4 +284,25 @@
   .card-info-value {
     @apply text-sm font-bold text-dark-400;
   }
+
+  /* Empty / No-Results Search State  */
+  .search-empty-state {
+    @apply py-14 text-center;
+  }
+
+  .search-empty-icon {
+    @apply mx-auto mb-4;
+  }
+
+  .search-empty-title {
+    @apply text-base font-semibold text-dark-400 mb-1.5;
+  }
+
+  .search-empty-subtitle {
+    @apply text-sm text-slate-500 max-w-xs mx-auto leading-relaxed;
+  }
+
+  .search-empty-query {
+    @apply font-semibold text-primary-admin;
+  }
 }

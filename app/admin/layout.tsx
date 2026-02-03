@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 import "@/app/styles/admin.css";
 import Sidebar from "@/components/admin/Sidebar";
 import Header from "@/components/admin/Header";
+import { SearchProvider } from "@/components/admin/context/SearchContext";
 import { db } from "@/database/drizzle";
 import { users } from "@/database/schema";
 import { eq } from "drizzle-orm";
@@ -26,8 +27,11 @@ const Layout = async ({ children }: { children: ReactNode }) => {
       <Sidebar session={session} />
 
       <div className="admin-container">
-        <Header session={session} />
-        {children}
+        {/* SearchProvider wraps Header + page children so both share `query` */}
+        <SearchProvider>
+          <Header session={session} />
+          {children}
+        </SearchProvider>
       </div>
     </main>
   );
