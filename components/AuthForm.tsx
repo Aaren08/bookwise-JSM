@@ -24,7 +24,7 @@ import { FIELD_NAMES, FIELD_TYPES } from "@/constants";
 import FileUpload from "./FileUpload";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Mail, CheckCircle } from "lucide-react";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props<T extends FieldValues> {
@@ -43,6 +43,7 @@ const AuthForm = <T extends FieldValues>({
   const isSignIn = type === "SIGN_IN";
   const [uploadError, setUploadError] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [signUpSuccess, setSignUpSuccess] = useState<boolean>(false);
   const router = useRouter();
 
   const form = useForm({
@@ -52,7 +53,6 @@ const AuthForm = <T extends FieldValues>({
   });
 
   const handleSubmit: SubmitHandler<T> = async (data) => {
-    // Helper function to normalize error values into user-friendly strings
     const normalizeError = (error: unknown): string => {
       if (error instanceof Error) {
         return error.message;
@@ -71,10 +71,14 @@ const AuthForm = <T extends FieldValues>({
       const result = await onSubmit(data);
 
       if (result.success) {
-        showSuccessToast(isSignIn ? "Login successful" : "Sign up successful");
-        router.push("/");
+        if (isSignIn) {
+          showSuccessToast("Login successful");
+          router.push("/");
+        } else {
+          showSuccessToast("Account created successfully");
+          setSignUpSuccess(true);
+        }
       } else {
-        // Handle the case when result.success is false
         const errorMessage = result.error || "An error occurred";
         showErrorToast(errorMessage);
       }
@@ -85,6 +89,52 @@ const AuthForm = <T extends FieldValues>({
     }
   };
 
+  // ── Confirmation screen shown after successful sign-up ──
+  if (signUpSuccess) {
+    return (
+      <div className="confirmation-wrapper">
+        {/* Animated envelope icon */}
+        <div className="confirmation-icon-ring">
+          <div className="confirmation-icon-bg">
+            <Mail className="confirmation-icon" />
+          </div>
+        </div>
+
+        {/* Check badge */}
+        <div className="confirmation-badge">
+          <CheckCircle className="confirmation-badge-icon" />
+        </div>
+
+        {/* Copy */}
+        <h1 className="confirmation-title">Check your inbox</h1>
+
+        <p className="confirmation-subtitle">Account created successfully</p>
+
+        <div className="confirmation-divider" />
+
+        <p className="confirmation-body">
+          We&apos;ve sent a confirmation email to your registered Gmail address.
+          Please open your inbox and click the verification link to activate
+          your library account.
+        </p>
+
+        <div className="confirmation-hint-box">
+          <p className="confirmation-hint">
+            Didn&apos;t receive the email? Check your{" "}
+            <span className="confirmation-hint-accent">Spam</span> or{" "}
+            <span className="confirmation-hint-accent">Promotions</span> folder.
+          </p>
+        </div>
+
+        {/* Back to login */}
+        <Link href="/sign-in" className="confirmation-link-btn">
+          Back to Login
+        </Link>
+      </div>
+    );
+  }
+
+  // ── Standard auth form ──
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold text-white">

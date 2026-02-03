@@ -2,7 +2,7 @@
 
 import { db } from "@/database/drizzle";
 import { users, borrowRecords } from "@/database/schema";
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc, count, and, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export const getAllUsers = async ({
@@ -46,7 +46,13 @@ export const getAllUsers = async ({
         booksBorrowed: count(borrowRecords.id),
       })
       .from(users)
-      .leftJoin(borrowRecords, eq(borrowRecords.userId, users.id))
+      .leftJoin(
+        borrowRecords,
+        and(
+          eq(borrowRecords.userId, users.id),
+          eq(borrowRecords.borrowStatus, "BORROWED"),
+        ),
+      )
       .groupBy(users.id)
       .orderBy(desc(users.createdAt))
       .limit(limit)
@@ -175,19 +181,33 @@ export const rejectAccount = async (userId: string) => {
 
 export const deleteUser = async (userId: string) => {
   try {
-    const userBorrowRecords = await db
+    // Check if user has any active loans (BORROWED or LATE_RETURN)
+    const activeBorrowRecords = await db
       .select()
       .from(borrowRecords)
-      .where(eq(borrowRecords.userId, userId))
+      .where(
+        and(
+          eq(borrowRecords.userId, userId),
+          or(
+            eq(borrowRecords.borrowStatus, "BORROWED"),
+            eq(borrowRecords.borrowStatus, "LATE_RETURN"),
+          ),
+        ),
+      )
       .limit(1);
 
-    if (userBorrowRecords.length > 0) {
+    if (activeBorrowRecords.length > 0) {
       return {
         success: false,
-        error: "Cannot delete user with existing borrow records",
+        error:
+          "Cannot delete user with active borrow records (Borrowed or Late Return)",
       };
     }
 
+    // Delete all borrow records for this user (history cleanup)
+    await db.delete(borrowRecords).where(eq(borrowRecords.userId, userId));
+
+    // Delete the user
     await db.delete(users).where(eq(users.id, userId));
 
     revalidatePath("/admin/users");

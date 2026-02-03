@@ -130,6 +130,7 @@ export const updateBorrowStatus = async ({
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
     revalidatePath(`/admin/books/${record.bookId}`);
+    revalidatePath("/admin/users");
 
     return {
       success: true,

@@ -392,6 +392,70 @@
   .profile-info_item {
     @apply w-full mt-6;
   }
+
+  /* ─── Sign-Up Email Confirmation Screen ─── */
+
+  .confirmation-wrapper {
+    @apply relative flex flex-col items-center text-center;
+  }
+
+  .confirmation-icon-ring {
+    @apply w-28 h-28 rounded-full flex items-center justify-center;
+    background: radial-gradient(
+      circle,
+      rgba(231, 201, 165, 0.15) 0%,
+      transparent 70%
+    );
+  }
+
+  .confirmation-icon-bg {
+    @apply w-20 h-20 rounded-full bg-dark-300 flex items-center justify-center border-2 border-dark-600;
+  }
+
+  .confirmation-icon {
+    @apply w-9 h-9 text-primary;
+  }
+
+  .confirmation-badge {
+    @apply -mt-4 -mb-1 ml-12 w-7 h-7 rounded-full bg-green-800 flex items-center justify-center border-2 border-dark-100;
+  }
+
+  .confirmation-badge-icon {
+    @apply w-4 h-4 text-white;
+  }
+
+  .confirmation-title {
+    @apply mt-4 text-2xl font-semibold text-white;
+  }
+
+  .confirmation-subtitle {
+    @apply mt-1 text-sm font-medium text-green-500;
+  }
+
+  .confirmation-divider {
+    @apply my-5 w-12 h-px bg-dark-600;
+  }
+
+  .confirmation-body {
+    @apply text-base text-light-100 leading-relaxed max-w-sm;
+  }
+
+  .confirmation-hint-box {
+    @apply mt-5 w-full rounded-lg border border-dark-600 px-4 py-3;
+    background: rgba(35, 40, 57, 0.6);
+  }
+
+  .confirmation-hint {
+    @apply text-sm text-light-500;
+  }
+
+  .confirmation-hint-accent {
+    @apply font-semibold text-primary;
+  }
+
+  .confirmation-link-btn {
+    @apply mt-6 inline-flex w-full min-h-12 items-center justify-center rounded-md bg-primary px-6 py-2 text-base font-bold text-dark-100 transition-colors hover:bg-primary/90;
+  }
 }
 
 @layer utilities {
