@@ -19,6 +19,10 @@ import {
   showFileSuccessToast,
   showFileWarningToast,
 } from "@/lib/essentials/toast-utils";
+import {
+  generateSafeFilename,
+  isAllowedMimeType,
+} from "@/lib/essentials/sanitizeFileExt";
 
 interface FileUploadProps {
   onUploadComplete?: (url: string) => void;
@@ -88,6 +92,12 @@ const FileUpload = ({
       const authParams = await authenticator();
       const { signature, expire, token, publicKey } = authParams;
 
+      // Generate safe filename with sanitized extension
+      const safeFileName = generateSafeFilename(
+        `upload-${Date.now()}`,
+        file.type,
+      );
+
       // Upload the file
       const uploadResponse = await upload({
         expire,
@@ -95,7 +105,7 @@ const FileUpload = ({
         signature,
         publicKey,
         file,
-        fileName: file.name,
+        fileName: safeFileName,
         folder: folder,
         onProgress: (event) => {
           const progressPercentage = (event.loaded / event.total) * 100;
@@ -165,7 +175,15 @@ const FileUpload = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
+      // Check MIME type whitelist first (most important check)
+      if (!isAllowedMimeType(file.type)) {
+        const errorMsg = `File type ${file.type} is not allowed`;
+        onUploadError?.(errorMsg);
+        showFileErrorToast("Invalid file type", errorMsg);
+        return;
+      }
+
+      // Validate file type category matches component type
       if (type === "image" && !file.type.startsWith("image/")) {
         const errorMsg = "Please select an image file";
         onUploadError?.(errorMsg);
@@ -191,6 +209,7 @@ const FileUpload = ({
         return;
       }
 
+      // ✅ All validations passed, proceed with upload
       handleUpload(file);
     }
   };

@@ -7,7 +7,15 @@ import { cn } from "@/lib/utils";
 import "@/app/styles/animate.css";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
+import {
+  showErrorToast,
+  showSuccessToast,
+  showFileErrorToast,
+} from "@/lib/essentials/toast-utils";
+import {
+  generateSafeFilename,
+  isAllowedMimeType,
+} from "@/lib/essentials/sanitizeFileExt";
 
 interface ImageCropperProps {
   userAvatar: string;
@@ -30,6 +38,19 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+
+      // Validate file MIME type
+      if (!isAllowedMimeType(file.type)) {
+        showFileErrorToast(
+          "Invalid file type",
+          `File type ${file.type} is not allowed. Please upload a valid image file.`,
+        );
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+
       const reader = new FileReader();
       reader.addEventListener("load", () => {
         setImageSrc(reader.result?.toString() || null);
@@ -74,13 +95,27 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
 
       const response = await fetch(croppedImageBlob);
       const blob = await response.blob();
-      const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+
+      // Validate blob MIME type
+      if (!isAllowedMimeType(blob.type)) {
+        showErrorToast("Invalid image type. Please upload a valid image file.");
+        setIsUploading(false);
+        return;
+      }
+
+      // Create file with sanitized filename
+      const safeFileName = generateSafeFilename(
+        `avatar-${Date.now()}`,
+        blob.type,
+      );
+
+      const file = new File([blob], safeFileName, { type: blob.type });
 
       const authParams = await authenticator();
 
       const uploadResponse = await upload({
         file,
-        fileName: `avatar-${Date.now()}.jpg`,
+        fileName: safeFileName,
         folder: "/users/avatars",
         ...authParams,
       });
