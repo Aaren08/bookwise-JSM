@@ -12,7 +12,10 @@ import { useState, useMemo } from "react";
 import dayjs from "dayjs";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { updateBorrowStatus } from "@/lib/admin/actions/borrow";
+import {
+  updateBorrowStatus,
+  clearBorrowRecords,
+} from "@/lib/admin/actions/borrow";
 import { useSortedData } from "@/lib/essentials/useSortedData";
 import { showSuccessToast, showErrorToast } from "@/lib/essentials/toast-utils";
 import { useSearch } from "@/components/admin/context/SearchContext";
@@ -21,6 +24,7 @@ import TableContainer from "../shared/TableContainer";
 import TableRow from "../shared/TableRow";
 import GenerateReceipt from "../GenerateReceipt";
 import EmptySearch from "../shared/EmptySearch";
+import ClearRecordMenu from "../shared/ClearRecordMenu";
 import { includes } from "@/lib/utils";
 
 interface Props {
@@ -61,6 +65,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
   }, [sortedRecords, query]);
 
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const handleStatusChange = async (
     recordId: string,
@@ -87,11 +92,46 @@ const BorrowTable = ({ borrowRecords }: Props) => {
     }
   };
 
+  const handleClearRecords = async (
+    clearReturned: boolean,
+    clearLateReturned: boolean,
+  ) => {
+    setIsClearing(true);
+    try {
+      const res = await clearBorrowRecords({
+        clearReturned,
+        clearLateReturned,
+      });
+
+      if (res.success) {
+        showSuccessToast(res.data?.message || "Records cleared successfully");
+
+        // Remove cleared records from the UI
+        const statusesToRemove: string[] = [];
+        if (clearReturned) statusesToRemove.push("RETURNED");
+        if (clearLateReturned) statusesToRemove.push("LATE_RETURN");
+
+        setSortedRecords(
+          sortedRecords.filter(
+            (record) => !statusesToRemove.includes(record.status),
+          ),
+        );
+      } else {
+        showErrorToast(res.message || "Failed to clear records");
+      }
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   return (
     <TableContainer
       title="Borrow Book Requests"
       onSort={handleSort}
       filterLabel="Oldest to Recent"
+      clearMenu={
+        <ClearRecordMenu onClear={handleClearRecords} isClearing={isClearing} />
+      }
     >
       <thead className="h-14 bg-blue-50">
         <tr>

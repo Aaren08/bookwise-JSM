@@ -12,6 +12,7 @@ interface TableContainerProps {
   showCreateButton?: boolean;
   createButtonHref?: string;
   createButtonText?: string;
+  clearMenu?: ReactNode;
 }
 
 const TableContainer = ({
@@ -22,12 +23,14 @@ const TableContainer = ({
   showCreateButton = false,
   createButtonHref = "/admin/books/new",
   createButtonText = "Create a New Book",
+  clearMenu,
 }: TableContainerProps) => {
   return (
     <section className="w-full rounded-2xl bg-white p-7 shadow-lg">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-dark-400">{title}</h2>
         <div className="flex items-center flex-wrap gap-2">
+          {clearMenu}
           <FilterData onSort={onSort} label={filterLabel} />
           {showCreateButton && (
             <Button

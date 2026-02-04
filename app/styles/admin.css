@@ -18,6 +18,43 @@
     @apply flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-admin/50 cursor-pointer;
   }
 
+  /* Borrow Records -> Clear Menu */
+  .clear-btn {
+    @apply flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-admin/50 cursor-pointer;
+  }
+
+  .clear-menu {
+    @apply absolute left-0 top-full z-50 mt-2 w-[280px] rounded-lg border border-gray-200 bg-white shadow-lg;
+  }
+
+  .clear-menu-content {
+    @apply p-4 space-y-3;
+  }
+
+  .clear-menu-option {
+    @apply flex items-center gap-3 cursor-pointer rounded-md p-2 hover:bg-light-300 transition-colors;
+  }
+
+  .clear-menu-checkbox {
+    @apply h-4 w-4 rounded border-gray-300 text-primary-admin focus:ring-2 focus:ring-primary-admin focus:ring-offset-0;
+  }
+
+  .clear-menu-label {
+    @apply text-sm font-medium text-dark-400 cursor-pointer select-none flex-1;
+  }
+
+  .clear-menu-actions {
+    @apply flex items-center gap-2 pt-3 border-t border-gray-100;
+  }
+
+  .clear-menu-cancel-btn {
+    @apply flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors;
+  }
+
+  .clear-menu-confirm-btn {
+    @apply flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
   .approve-account-btn {
     @apply rounded-md bg-green-100 px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-200 cursor-pointer transition-colors;
   }

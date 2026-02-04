@@ -2,7 +2,7 @@
 
 import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
-import { eq, desc, asc, count, sql } from "drizzle-orm";
+import { eq, desc, asc, count, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export const getAllBorrowRecords = async ({
@@ -139,5 +139,56 @@ export const updateBorrowStatus = async ({
   } catch (error) {
     console.error(error);
     return { success: false, message: "Failed to update borrow status" };
+  }
+};
+
+export const clearBorrowRecords = async ({
+  clearReturned = false,
+  clearLateReturned = false,
+}: {
+  clearReturned?: boolean;
+  clearLateReturned?: boolean;
+}) => {
+  try {
+    const statusesToClear: Array<"RETURNED" | "LATE_RETURN"> = [];
+
+    if (clearReturned) {
+      statusesToClear.push("RETURNED");
+    }
+
+    if (clearLateReturned) {
+      statusesToClear.push("LATE_RETURN");
+    }
+
+    if (statusesToClear.length === 0) {
+      return {
+        success: false,
+        message: "No status selected for clearing",
+      };
+    }
+
+    // Delete records with the specified statuses
+    const deletedRecords = await db
+      .delete(borrowRecords)
+      .where(inArray(borrowRecords.borrowStatus, statusesToClear))
+      .returning();
+
+    revalidatePath("/admin/borrow-records");
+    revalidatePath("/my-profile");
+    revalidatePath("/admin/users");
+
+    return {
+      success: true,
+      data: {
+        deletedCount: deletedRecords.length,
+        message: `Successfully cleared ${deletedRecords.length} record(s)`,
+      },
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      success: false,
+      message: "Failed to clear borrow records",
+    };
   }
 };
