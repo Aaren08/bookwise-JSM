@@ -48,11 +48,11 @@
   }
 
   .clear-menu-cancel-btn {
-    @apply flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors;
+    @apply flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer;
   }
 
   .clear-menu-confirm-btn {
-    @apply flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
   }
 
   .approve-account-btn {
@@ -126,11 +126,11 @@
 
   /* Home Page */
   .view-btn {
-    @apply !bg-light-300 !rounded-md !text-primary-admin !font-semibold hover:!bg-light-300/80 !shadow-none;
+    @apply !bg-light-300 p-2 !rounded-md !text-primary-admin !font-semibold hover:!bg-light-400 !shadow-none;
   }
 
   .add-new-book_btn {
-    @apply mt-7 mb-3 bg-light-300 py-4 px-3 flex flex-row items-center rounded-xl gap-4;
+    @apply mt-7 mb-3 bg-light-300 py-4 px-3 flex flex-row items-center rounded-xl gap-4 cursor-pointer hover:bg-light-400 transition-colors;
   }
 
   .add-new-book_btn div:first-child {
@@ -142,65 +142,20 @@
   }
 
   /* Statistics */
-  .stat {
-    @apply bg-white rounded-xl p-5 space-y-5 flex-1;
+  .stat-card_container {
+    @apply rounded-2xl bg-white p-6 shadow-sm;
   }
 
-  .stat-info {
-    @apply flex justify-between items-center gap-5;
+  .stat-card_title {
+    @apply text-sm font-medium text-gray-600;
   }
 
-  .stat-label {
-    @apply font-medium text-base text-light-500 whitespace-nowrap;
+  .stat-cards {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8;
   }
 
-  .stat-count {
-    @apply font-semibold text-3xl text-dark-400;
-  }
-
-  /* Book Stripe */
-  .book-stripe {
-    @apply flex flex-row gap-4 bg-light-300 p-4 rounded-lg;
-  }
-
-  .book-stripe .title {
-    @apply font-semibold text-base text-dark-400 line-clamp-1;
-  }
-
-  .book-stripe .author {
-    @apply flex flex-wrap flex-row items-center gap-2;
-  }
-
-  .book-stripe .author p:first-child {
-    @apply text-light-500 text-sm line-clamp-1;
-  }
-
-  .book-stripe .author div {
-    @apply size-1 rounded-full bg-light-500;
-  }
-
-  .book-stripe .author p:last-child {
-    @apply text-light-500 text-sm;
-  }
-
-  .book-stripe .user {
-    @apply mt-2.5 flex flex-row flex-wrap gap-5;
-  }
-
-  .book-stripe .user .avatar {
-    @apply flex flex-row items-center gap-1.5;
-  }
-
-  .book-stripe .user .avatar p {
-    @apply text-xs text-dark-200;
-  }
-
-  .book-stripe .borrow-date {
-    @apply flex flex-row items-center gap-1.5;
-  }
-
-  .book-stripe .borrow-date p {
-    @apply text-xs text-dark-200;
+  .stat-value {
+    @apply text-3xl font-bold text-dark-400;
   }
 
   /* Color Picker */
@@ -341,5 +296,216 @@
 
   .search-empty-query {
     @apply font-semibold text-primary-admin;
+  }
+
+  /* Borrow Requests */
+  .borrow-requests-container {
+    @apply flex-1 rounded-xl bg-white p-5 shadow-sm;
+  }
+
+  .borrow-requests-header {
+    @apply mb-6 flex items-center justify-between;
+  }
+
+  .borrow-requests-title {
+    @apply text-xl font-semibold text-dark-400 max-sm:text-lg;
+  }
+
+  .borrow-requests-empty-state {
+    @apply flex flex-col items-center justify-center py-10;
+  }
+
+  .borrow-requests-empty-title {
+    @apply mb-2 text-base font-semibold text-dark-400;
+  }
+
+  .borrow-requests-empty-description {
+    @apply max-w-xs text-center text-sm text-light-500;
+  }
+
+  .borrow-request-list {
+    @apply flex flex-col gap-4;
+  }
+
+  /* Account Requests */
+  .account-requests-container {
+    @apply flex-1 rounded-xl bg-white p-5 shadow-sm;
+  }
+
+  .account-requests-header {
+    @apply mb-6 flex items-center justify-between;
+  }
+
+  .account-requests-title {
+    @apply text-xl font-semibold text-dark-400 max-sm:text-lg;
+  }
+
+  .account-requests-empty-state {
+    @apply flex flex-col items-center justify-center py-10;
+  }
+
+  .account-requests-empty-title {
+    @apply mb-2 text-base font-semibold text-dark-400;
+  }
+
+  .account-requests-empty-description {
+    @apply max-w-xs text-center text-sm text-light-500;
+  }
+
+  /* Recent Books */
+  .recent-books-container {
+    @apply flex-1 rounded-xl bg-white p-5 shadow-sm;
+  }
+
+  .recent-books-header {
+    @apply mb-6 flex items-center justify-between;
+  }
+
+  .recent-books-title {
+    @apply text-xl font-semibold text-dark-400 max-sm:text-lg;
+  }
+
+  /* Borrow Request Cards */
+  .borrow-request-card {
+    @apply flex items-start justify-between gap-4 p-4 bg-light-300 rounded-lg hover:bg-light-300/80 transition-colors;
+  }
+
+  .borrow-request-book-cover {
+    @apply rounded-md object-cover flex-shrink-0;
+  }
+
+  .borrow-request-book-placeholder {
+    @apply h-16 w-12 bg-gray-200 rounded-md flex-shrink-0;
+  }
+
+  .borrow-request-user {
+    @apply flex items-center gap-2;
+  }
+
+  .borrow-request-user-placeholder {
+    @apply size-5 rounded-full bg-primary-admin/10 flex items-center justify-center;
+  }
+
+  .borrow-request-user-initial {
+    @apply text-[10px] font-semibold text-primary-admin;
+  }
+
+  .borrow-request-user-name {
+    @apply text-xs text-dark-200 line-clamp-1;
+  }
+
+  .borrow-request-view-btn {
+    @apply flex-shrink-0 rounded-lg shadow-sm p-2 bg-white hover:bg-light-400 transition-colors;
+  }
+
+  /* Account Request Cards */
+  .account-requests-grid {
+    @apply grid grid-cols-2 lg:grid-cols-3 gap-5;
+  }
+
+  .account-request-card {
+    @apply w-full rounded-xl flex flex-col items-center justify-center p-4 bg-light-300;
+  }
+
+  .account-request-card_upper {
+    @apply flex flex-col items-center gap-4 w-full;
+  }
+
+  .account-request-card-avatar_initials {
+    @apply size-full rounded-full flex items-center justify-center font-bold text-lg;
+  }
+
+  .account-request-card_info {
+    @apply flex flex-col items-center justify-center text-center max-w-full;
+  }
+
+  /* Recent Book Cards */
+  .recent-book-card {
+    @apply flex items-start justify-between gap-4 p-4 rounded-lg transition-colors;
+  }
+
+  .recent-books-scroll-container {
+    @apply relative max-h-[712px] overflow-y-auto pr-1;
+  }
+
+  /* Dashboard Common Styles */
+  .dashboard-book-info {
+    @apply flex items-center gap-3 flex-1 min-w-0;
+  }
+
+  .dashboard-book-details {
+    @apply flex-1 min-w-0;
+  }
+
+  .dashboard-book-title {
+    @apply font-semibold text-sm text-dark-400 line-clamp-1 mb-1;
+  }
+
+  .dashboard-book-metadata {
+    @apply text-xs text-dark-200 mb-2 line-clamp-1;
+  }
+
+  .dashboard-book-date {
+    @apply flex items-center gap-1.5;
+  }
+
+  /* Custom Scrollbar */
+  .box-body-scroll-wrapper {
+    @apply relative;
+  }
+
+  .box-body-scroll-container {
+    @apply relative max-h-[350px] overflow-y-auto pr-1;
+  }
+
+  .box-body-scroll-wrapper::after {
+    content: "";
+    @apply pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-20;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.8) 60%,
+      rgba(255, 255, 255, 1) 100%
+    );
+  }
+
+  .box-body-scroll-container::-webkit-scrollbar,
+  .recent-books-scroll-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .box-body-scroll-container::-webkit-scrollbar-track,
+  .recent-books-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+  }
+
+  .box-body-scroll-container::-webkit-scrollbar-thumb,
+  .recent-books-scroll-container::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+    transition: background 0.2s ease;
+  }
+
+  .box-body-scroll-container:hover::-webkit-scrollbar-thumb,
+  .recent-books-scroll-container:hover::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+  }
+
+  .box-body-scroll-container::-webkit-scrollbar-thumb:hover,
+  .recent-books-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+
+  .box-body-scroll-container,
+  .recent-books-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.2s ease;
+  }
+
+  .box-body-scroll-container:hover,
+  .recent-books-scroll-container:hover {
+    scrollbar-color: #d1d5db #f3f4f6;
   }
 }

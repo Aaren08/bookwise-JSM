@@ -5,7 +5,7 @@ import { users, borrowRecords } from "@/database/schema";
 import { eq, desc, count, and, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-export const getAllUsers = async ({
+export const getApprovedUsers = async ({
   page = 1,
   limit = 20,
 }: {
@@ -15,10 +15,11 @@ export const getAllUsers = async ({
   try {
     const offset = (page - 1) * limit;
 
-    // Get total count of users
+    // Get total count of approved users
     const [{ value: totalUsers }] = await db
       .select({ value: count() })
-      .from(users);
+      .from(users)
+      .where(eq(users.status, "APPROVED"));
 
     const totalPages = Math.ceil(totalUsers / limit);
 
@@ -53,6 +54,7 @@ export const getAllUsers = async ({
           eq(borrowRecords.borrowStatus, "BORROWED"),
         ),
       )
+      .where(eq(users.status, "APPROVED"))
       .groupBy(users.id)
       .orderBy(desc(users.createdAt))
       .limit(limit)
