@@ -1,4 +1,4 @@
-interface DashboardStats {
+export interface DashboardStats {
   totalBooks: number;
   totalUsers: number;
   borrowedBooks: number;
@@ -35,6 +35,8 @@ export const validateDashboardStats = (
 export const loadDashboardStats = (
   fallback: DashboardStats,
 ): DashboardStats => {
+  if (typeof window === "undefined") return fallback;
+
   const stored = localStorage.getItem("dashboardStats");
   if (!stored) return fallback;
 
