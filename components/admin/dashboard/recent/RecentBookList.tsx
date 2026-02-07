@@ -10,7 +10,7 @@ interface RecentBookListProps {
     bookGenre: string;
     bookAuthor: string;
     coverColor: string;
-    borrowDate: string;
+    createdAt: string;
   }>;
 }
 

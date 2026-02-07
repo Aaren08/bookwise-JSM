@@ -5,7 +5,7 @@ import AccountRequestCards from "./AccountRequestCards";
 interface AccountRequestsProps {
   accountRequests: {
     id: string;
-    userAvatar: string;
+    userAvatar: string | null;
     fullName: string;
     email: string;
   }[];

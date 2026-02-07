@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { loadDashboardStats } from "@/lib/admin/dashboardStatUtil";
 
 interface StatCardProps {
   title: string;
@@ -62,23 +63,15 @@ const Statistics = ({
   totalUsers,
   borrowedBooks,
 }: StatisticsProps) => {
-  // Load initial previous stats from local storage to prevent hydration mismatch
-  // Track previous values to calculate changes
+  // Load previous stats from localStorage on mount using lazy initialization
   const [previousStats, setPreviousStats] = useState(() => {
+    // Server-side: use current props to avoid hydration mismatch
     if (typeof window === "undefined") {
       return { totalBooks, totalUsers, borrowedBooks };
     }
 
-    const stored = localStorage.getItem("dashboardStats");
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return { totalBooks, totalUsers, borrowedBooks };
-      }
-    }
-
-    return { totalBooks, totalUsers, borrowedBooks };
+    // Client-side: load from localStorage with validation
+    return loadDashboardStats({ totalBooks, totalUsers, borrowedBooks });
   });
 
   // Calculate changes (derived state - no setState needed)
@@ -86,7 +79,7 @@ const Statistics = ({
   const usersChange = totalUsers - previousStats.totalUsers;
   const borrowedChange = borrowedBooks - previousStats.borrowedBooks;
 
-  // but still show changes if the user refreshes
+  // Update localStorage after displaying changes for 3 seconds
   useEffect(() => {
     if (!booksChange && !usersChange && !borrowedChange) return;
 

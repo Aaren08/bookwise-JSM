@@ -5,7 +5,7 @@ import { getAvatarColor } from "@/lib/admin/avatarColors";
 interface AccountRequestCardsProps {
   requests: {
     id: string;
-    userAvatar: string;
+    userAvatar: string | null;
     fullName: string;
     email: string;
   }[];

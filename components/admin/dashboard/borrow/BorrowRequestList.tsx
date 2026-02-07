@@ -18,7 +18,7 @@ interface BorrowRequestListProps {
 }
 
 const BorrowRequestList = ({ records }: BorrowRequestListProps) => {
-  // Filter only pending requests and take top 3 most recent
+  // Filter only pending requests and take top 5 most recent
   const pendingRequests = records
     .filter((record) => record.status === "PENDING")
     .slice(0, 5);

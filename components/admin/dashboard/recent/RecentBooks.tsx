@@ -10,7 +10,7 @@ interface RecentBooksProps {
     bookGenre: string;
     bookAuthor: string;
     coverColor: string;
-    borrowDate: string;
+    createdAt: string;
   }>;
 }
 
@@ -26,7 +26,7 @@ const RecentBooks = ({ recentBooks }: RecentBooksProps) => {
       </div>
 
       {/* Add New Book Button */}
-      <Link href="admin/books/new" className="add-new-book_btn">
+      <Link href="/admin/books/new" className="add-new-book_btn">
         <div>
           <Image
             src="/icons/admin/plus.svg"

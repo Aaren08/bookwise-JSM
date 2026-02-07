@@ -50,7 +50,7 @@ export const getDashboardData = async () => {
         bookGenre: books.genre,
         bookCover: books.coverUrl,
         coverColor: books.coverColor,
-        borrowDate: books.createdAt,
+        createdAt: books.createdAt,
       })
       .from(books)
       .orderBy(desc(books.createdAt))

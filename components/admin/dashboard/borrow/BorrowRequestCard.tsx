@@ -80,7 +80,7 @@ const BorrowRequestCard = ({ record }: BorrowRequestCardProps) => {
         className="borrow-request-view-btn"
         aria-label="View borrow request details"
       >
-        <Eye className="size-4 text-primary-admin group-hover:text-primary-admin/80" />
+        <Eye className="size-4 text-primary-admin hover:text-primary-admin/80" />
       </Link>
     </div>
   );

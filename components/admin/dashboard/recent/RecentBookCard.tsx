@@ -10,7 +10,7 @@ interface RecentBookCardProps {
     bookGenre: string;
     bookAuthor: string;
     coverColor: string;
-    borrowDate: string;
+    createdAt: string;
   };
 }
 
@@ -43,7 +43,7 @@ const RecentBookCard = ({ recentBooks }: RecentBookCardProps) => {
               height={14}
             />
             <p className="text-xs text-dark-200">
-              {dayjs(recentBooks.borrowDate).format("MM/DD/YY")}
+              {dayjs(recentBooks.createdAt).format("MM/DD/YY")}
             </p>
           </div>
         </div>
