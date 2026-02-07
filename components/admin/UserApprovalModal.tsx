@@ -54,7 +54,7 @@ const UserApprovalModal = ({ open, onOpenChange, type, onConfirm }: Props) => {
 
         <AlertDialogHeader className="flex flex-col items-center gap-2 w-full">
           <AlertDialogTitle className="text-xl font-bold text-dark-400">
-            {isApprove ? "Approve Book Request" : "Deny Book Request"}
+            {isApprove ? "Approve Account Request" : "Deny Account Request"}
           </AlertDialogTitle>
           <AlertDialogDescription className="text-center text-light-500 text-sm leading-relaxed">
             {isApprove

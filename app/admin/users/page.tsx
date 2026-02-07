@@ -1,6 +1,6 @@
 import NavigatePage from "@/components/NavigatePage";
 import UserTable from "@/components/admin/tables/UserTable";
-import { getAllUsers } from "@/lib/admin/actions/user";
+import { getApprovedUsers } from "@/lib/admin/actions/user";
 
 const Page = async ({
   searchParams,
@@ -9,7 +9,7 @@ const Page = async ({
 }) => {
   const { page: pageParam } = await searchParams;
   const page = Number(pageParam) || 1;
-  const users = await getAllUsers({ page });
+  const users = await getApprovedUsers({ page });
 
   const usersData = users.success ? users.data?.users : [];
   const totalPages = users.success ? users.data?.totalPages || 0 : 0;
