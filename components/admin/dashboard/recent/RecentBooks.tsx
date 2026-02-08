@@ -2,18 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import RecentBookList from "./RecentBookList";
 
-interface RecentBooksProps {
-  recentBooks: Array<{
-    id: string;
-    bookTitle: string;
-    bookCover: string | null;
-    bookGenre: string;
-    bookAuthor: string;
-    coverColor: string;
-    createdAt: string;
-  }>;
-}
-
 const RecentBooks = ({ recentBooks }: RecentBooksProps) => {
   return (
     <div className="recent-books-container">

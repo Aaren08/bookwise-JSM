@@ -5,16 +5,6 @@ import ImageCropper from "./ImageCropper";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 
-interface UserProfileProps {
-  id: string;
-  fullName: string;
-  email: string;
-  universityId: string;
-  universityCard: string;
-  userAvatar: string;
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-}
-
 const UserProfile = ({
   fullName,
   email,

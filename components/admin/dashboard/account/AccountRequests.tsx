@@ -2,15 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import AccountRequestCards from "./AccountRequestCards";
 
-interface AccountRequestsProps {
-  accountRequests: {
-    id: string;
-    userAvatar: string | null;
-    fullName: string;
-    email: string;
-  }[];
-}
-
 const AccountRequests = ({ accountRequests = [] }: AccountRequestsProps) => {
   return (
     <div className="account-requests-container">

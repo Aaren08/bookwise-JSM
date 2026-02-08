@@ -1,12 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
 
-interface UserCellProps {
-  fullName: string;
-  email: string;
-  image?: string | null;
-}
-
 const UserCell = ({ fullName, email, image }: UserCellProps) => {
   return (
     <div className="flex items-center gap-3">

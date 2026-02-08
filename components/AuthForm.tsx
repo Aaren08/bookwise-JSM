@@ -68,6 +68,9 @@ const AuthForm = <T extends FieldValues>({
     };
 
     try {
+      // Reset signup success state before submitting
+      setSignUpSuccess(false);
+
       const result = await onSubmit(data);
 
       if (result.success) {

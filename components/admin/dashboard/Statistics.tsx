@@ -4,18 +4,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { loadDashboardStats } from "@/lib/admin/dashboardStatUtil";
 
-interface StatCardProps {
-  title: string;
-  value: number;
-  change: number;
-}
-
-interface StatisticsProps {
-  totalBooks: number;
-  totalUsers: number;
-  borrowedBooks: number;
-}
-
 const StatCard = ({ title, value, change }: StatCardProps) => {
   const isPositive = change > 0;
   const showChange = change !== 0;

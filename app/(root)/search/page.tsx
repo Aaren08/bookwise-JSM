@@ -8,14 +8,6 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { searchBooks } from "@/lib/essentials/searchQuery";
 
-interface SearchPageProps {
-  searchParams: Promise<{
-    query?: string;
-    filter?: string;
-    page?: string;
-  }>;
-}
-
 const BOOKS_PER_PAGE = 12;
 
 async function BookResults({

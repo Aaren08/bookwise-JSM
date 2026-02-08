@@ -2,21 +2,6 @@
 
 import BorrowRequestCard from "./BorrowRequestCard";
 
-interface BorrowRequestListProps {
-  records: Array<{
-    id: string;
-    bookTitle: string;
-    bookCover: string | null;
-    bookGenre: string;
-    bookAuthor: string;
-    coverColor: string;
-    userFullName: string;
-    userAvatar: string | null;
-    borrowDate: string;
-    status: string;
-  }>;
-}
-
 const BorrowRequestList = ({ records }: BorrowRequestListProps) => {
   // Filter only pending requests and take top 5 most recent
   const pendingRequests = records

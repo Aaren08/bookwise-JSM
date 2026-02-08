@@ -4,21 +4,6 @@ import { Eye } from "lucide-react";
 import dayjs from "dayjs";
 import BookCover from "@/components/book/BookCover";
 
-interface BorrowRequestCardProps {
-  record: {
-    id: string;
-    bookTitle: string;
-    bookCover: string | null;
-    bookGenre: string;
-    bookAuthor: string;
-    coverColor: string;
-    userFullName: string;
-    userAvatar: string | null;
-    borrowDate: string;
-    status: string;
-  };
-}
-
 const BorrowRequestCard = ({ record }: BorrowRequestCardProps) => {
   return (
     <div className="borrow-request-card">

@@ -19,14 +19,6 @@ import { toast } from "sonner";
 const OVERDUE_ICON_FILTER =
   "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
 
-interface BorrowedBookCardProps extends Book {
-  borrowDate: Date | string;
-  dueDate: Date | string;
-  borrowRecordId?: string;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
-  returnDate?: Date | string | null;
-}
-
 const BorrowedBookCard = ({
   borrowDate,
   dueDate,

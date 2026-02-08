@@ -13,13 +13,6 @@ const OVERDUE_ICON_FILTER =
 const RETURNED_ICON_FILTER =
   "brightness(0) saturate(100%) invert(64%) sepia(98%) saturate(2565%) hue-rotate(89deg) brightness(97%) contrast(78%)";
 
-interface ReceiptButtonProps {
-  borrowRecordId?: string;
-  borrowStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
-  showOverdueWarning: boolean;
-  userRole?: "USER" | "ADMIN";
-}
-
 const ReceiptButton = ({
   borrowRecordId,
   borrowStatus,

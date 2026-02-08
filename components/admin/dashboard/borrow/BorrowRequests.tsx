@@ -2,21 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import BorrowRequestList from "./BorrowRequestList";
 
-interface BorrowRequestsProps {
-  borrowRecords?: Array<{
-    id: string;
-    bookTitle: string;
-    bookCover: string | null;
-    bookGenre: string;
-    bookAuthor: string;
-    coverColor: string;
-    userFullName: string;
-    userAvatar: string | null;
-    borrowDate: string;
-    status: string;
-  }>;
-}
-
 const BorrowRequests = ({ borrowRecords = [] }: BorrowRequestsProps) => {
   // Count pending requests
   const pendingCount = borrowRecords.filter(

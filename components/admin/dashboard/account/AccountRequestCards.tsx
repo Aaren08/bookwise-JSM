@@ -2,15 +2,6 @@ import Image from "next/image";
 import { getInitials } from "@/lib/utils";
 import { getAvatarColor } from "@/lib/admin/avatarColors";
 
-interface AccountRequestCardsProps {
-  requests: {
-    id: string;
-    userAvatar: string | null;
-    fullName: string;
-    email: string;
-  }[];
-}
-
 const AccountRequestCards = ({ requests }: AccountRequestCardsProps) => {
   return (
     <div className="account-requests-grid">

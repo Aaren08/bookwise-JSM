@@ -24,18 +24,6 @@ import {
   isAllowedMimeType,
 } from "@/lib/essentials/sanitizeFileExt";
 
-interface FileUploadProps {
-  onUploadComplete?: (url: string) => void;
-  onUploadError?: (error: string) => void;
-  onChange?: (url: string) => void;
-  value?: string;
-  type?: "image" | "video";
-  variant?: "dark" | "light";
-  placeholder?: string;
-  folder?: string;
-  accept?: string;
-}
-
 const FileUpload = ({
   onUploadComplete,
   onUploadError,

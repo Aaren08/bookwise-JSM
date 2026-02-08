@@ -2,18 +2,6 @@ import Image from "next/image";
 import dayjs from "dayjs";
 import BookCover from "@/components/book/BookCover";
 
-interface RecentBookCardProps {
-  recentBooks: {
-    id: string;
-    bookTitle: string;
-    bookCover: string | null;
-    bookGenre: string;
-    bookAuthor: string;
-    coverColor: string;
-    createdAt: string;
-  };
-}
-
 const RecentBookCard = ({ recentBooks }: RecentBookCardProps) => {
   return (
     <div className="recent-book-card">
