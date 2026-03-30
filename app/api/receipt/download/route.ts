@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import {
   receiptMinuteRateLimit,
   receiptDailyRateLimit,
+  safeRateLimit,
 } from "@/lib/essentials/rateLimit";
 
 export async function POST(req: Request) {
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   const key = `receipt-download:user:${String(session.user.id)}:receipt:${String(receiptId)}`;
 
   // Minute limit first
-  const minuteLimit = await receiptMinuteRateLimit.limit(key);
+  const minuteLimit = await safeRateLimit(receiptMinuteRateLimit, key);
   if (!minuteLimit.success) {
     return NextResponse.json(
       {
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   }
 
   // Daily limit second
-  const dailyLimit = await receiptDailyRateLimit.limit(key);
+  const dailyLimit = await safeRateLimit(receiptDailyRateLimit, key);
   if (!dailyLimit.success) {
     return NextResponse.json(
       {

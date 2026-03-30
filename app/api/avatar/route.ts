@@ -1,6 +1,7 @@
 import {
   updateAvatarRateLimit,
   uploadAvatarRateLimit,
+  safeRateLimit,
 } from "@/lib/essentials/rateLimit";
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
@@ -22,7 +23,10 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { success } = await uploadAvatarRateLimit.limit(session.user.id);
+    const { success } = await safeRateLimit(
+      uploadAvatarRateLimit,
+      session.user.id,
+    );
 
     if (!success) {
       return NextResponse.json(
@@ -49,7 +53,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { success } = await updateAvatarRateLimit.limit(session.user.id);
+    const { success } = await safeRateLimit(
+      updateAvatarRateLimit,
+      session.user.id,
+    );
 
     if (!success) {
       return NextResponse.json(

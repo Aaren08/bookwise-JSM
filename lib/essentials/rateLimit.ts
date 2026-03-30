@@ -1,6 +1,30 @@
 import redis from "@/database/redis";
 import { Ratelimit } from "@upstash/ratelimit";
 
+const fallbackResponse = {
+  success: true,
+  limit: Number.MAX_SAFE_INTEGER,
+  remaining: Number.MAX_SAFE_INTEGER,
+  reset: Date.now() + 60_000,
+  pending: Promise.resolve(),
+};
+
+export const safeRateLimit = async (
+  rateLimitClient: Ratelimit,
+  key: string,
+  opts?: Parameters<Ratelimit["limit"]>[1],
+) => {
+  try {
+    return await rateLimitClient.limit(key, opts);
+  } catch (error) {
+    console.warn(
+      "Rate limit backend unavailable, skipping limit check:",
+      error,
+    );
+    return fallbackResponse;
+  }
+};
+
 export const ratelimit = new Ratelimit({
   redis: redis,
   limiter: Ratelimit.fixedWindow(5, "1 m"),
