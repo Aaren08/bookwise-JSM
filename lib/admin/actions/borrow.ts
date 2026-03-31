@@ -4,6 +4,7 @@ import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
 import { eq, desc, asc, count, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 
 export const getAllBorrowRecords = async ({
   limit = 20,
@@ -131,6 +132,7 @@ export const updateBorrowStatus = async ({
     revalidatePath("/my-profile");
     revalidatePath(`/admin/books/${record.bookId}`);
     revalidatePath("/admin/users");
+    await broadcastAdminDashboardUpdate();
 
     return {
       success: true,
@@ -176,6 +178,7 @@ export const clearBorrowRecords = async ({
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
     revalidatePath("/admin/users");
+    await broadcastAdminDashboardUpdate();
 
     return {
       success: true,

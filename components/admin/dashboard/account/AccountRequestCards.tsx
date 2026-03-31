@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { getInitials } from "@/lib/utils";
-import { getAvatarColor } from "@/lib/admin/avatarColors";
+import { getAvatarColor } from "@/lib/admin/essentials/avatarColors";
 
 const AccountRequestCards = ({ requests }: AccountRequestCardsProps) => {
   return (

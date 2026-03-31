@@ -4,6 +4,19 @@ export interface DashboardStats {
   borrowedBooks: number;
 }
 
+export const DASHBOARD_REALTIME_DELAY_MS = 3000;
+export const DASHBOARD_WS_PORT =
+  Number(process.env.NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT) || 3001;
+
+export const getAdminDashboardSocketUrl = () => {
+  if (typeof window === "undefined") return "";
+
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const hostname = window.location.hostname;
+
+  return `${protocol}://${hostname}:${DASHBOARD_WS_PORT}`;
+};
+
 export const validateDashboardStats = (
   data: unknown,
   fallback: DashboardStats,

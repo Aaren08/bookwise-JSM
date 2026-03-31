@@ -18,12 +18,14 @@ BookWise is a modern full-stack library management system built with Next.js 16,
 - **NextAuth.js v5** - Authentication
 - **Drizzle ORM** - Type-safe database ORM
 - **Neon Database** - Serverless PostgreSQL
+- **ws** - WebSocket server for realtime admin dashboard signaling
 
 ### Infrastructure
 - **Upstash Redis** - Rate limiting and caching
 - **Upstash QStash** - Workflow orchestration
 - **ImageKit** - Image and video CDN
 - **EmailJS** - Email service
+- **Node.js Instrumentation Hook** - Starts the singleton admin dashboard WebSocket server at boot
 
 ## Project Structure
 
@@ -87,6 +89,17 @@ bookwise/
 └── drizzle.config.ts            # Drizzle configuration
 ```
 
+### Recent Realtime Additions
+
+The architecture now also includes a small realtime dashboard layer built around these files:
+- `instrumentation.ts` - Application startup hook that initializes the WebSocket server
+- `lib/admin/dashboardSocketServer.ts` - Singleton `ws` server and broadcast helper
+- `lib/admin/useAdminDashboardRealtime.ts` - Custom client hook for socket lifecycle and delayed refresh
+- `components/admin/dashboard/AdminDashboardRealtime.tsx` - Client wrapper that hydrates and refreshes dashboard sections
+- `app/api/admin/dashboard/route.ts` - Authenticated snapshot endpoint for admin dashboard data
+- `ws.d.ts` - Local type declarations for the `ws` package
+- `documentation/Admin_Dashboard_Realtime.md` - Detailed implementation guide for the realtime system
+
 ## Design Patterns
 
 ### Server Components
@@ -113,6 +126,16 @@ Each route group has its own layout for:
 - Navigation components
 - Shared UI elements
 
+### Realtime Signal-and-Refresh Pattern
+The admin dashboard now uses a signal-and-refresh realtime pattern:
+- Mutations complete through server actions
+- The server broadcasts a lightweight WebSocket refresh event
+- Connected admin clients wait for a shared 3000ms delay window
+- Clients fetch a fresh authenticated dashboard snapshot over HTTP
+- Dashboard widgets re-render from the updated snapshot
+
+This keeps the WebSocket layer small and uses the API/query layer as the source of truth.
+
 ## Data Flow
 
 ```
@@ -125,6 +148,26 @@ User Action → Server Action → Database → Revalidation → UI Update
 4. **Revalidation**: `revalidatePath()` invalidates cached data
 5. **UI Update**: React re-renders with fresh data
 
+### Realtime Admin Dashboard Flow
+
+```text
+User/Admin Mutation
+  -> Server Action
+  -> Database Update
+  -> WebSocket Broadcast
+  -> Admin Client Receives Refresh Signal
+  -> 3000ms Delay
+  -> GET /api/admin/dashboard
+  -> Fresh Snapshot
+  -> Dashboard Re-render
+```
+
+This realtime flow currently powers:
+- Dashboard statistics
+- Borrow requests
+- Account requests
+- Recently added books
+
 ## Security Architecture
 
 ### Authentication Layer
@@ -136,6 +179,12 @@ User Action → Server Action → Database → Revalidation → UI Update
 - Role-based access control (USER, ADMIN)
 - Server-side route protection in layouts
 - Database-level role verification
+- Admin-only snapshot access for realtime dashboard refreshes via `/api/admin/dashboard`
+
+### WebSocket Security Model
+- WebSocket messages carry refresh signals rather than raw dashboard payloads
+- Sensitive admin dashboard data is fetched through an authenticated API route
+- The database and snapshot API remain the source of truth
 
 ### Rate Limiting
 - Redis-based rate limiting via Upstash
@@ -154,6 +203,7 @@ User Action → Server Action → Database → Revalidation → UI Update
 - Server components cached by default
 - `revalidatePath()` for on-demand invalidation
 - `revalidateTag()` for fine-grained cache control
+- Realtime dashboard clients fetch a fresh authenticated snapshot after WebSocket refresh events
 
 ## Error Handling
 
@@ -173,3 +223,5 @@ User Action → Server Action → Database → Revalidation → UI Update
 - **Connection Pooling**: Neon's serverless driver handles connections
 - **CDN**: ImageKit for media delivery
 - **Edge-Ready**: Compatible with Vercel Edge Functions
+- **Realtime Admin Updates**: One mutation can notify all connected admin dashboard sessions
+- **Dedicated WebSocket Port**: The current realtime implementation uses a separate socket port that must be reachable in deployment
