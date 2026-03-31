@@ -146,7 +146,9 @@ export const approveAccount = async (userId: string) => {
       .where(eq(users.id, userId));
 
     revalidatePath("/admin/accounts");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -169,7 +171,9 @@ export const rejectAccount = async (userId: string) => {
       .where(eq(users.id, userId));
 
     revalidatePath("/admin/accounts");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -216,7 +220,9 @@ export const deleteUser = async (userId: string) => {
     await db.delete(users).where(eq(users.id, userId));
 
     revalidatePath("/admin/users");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -239,7 +245,9 @@ export const updateUserRole = async (
     await db.update(users).set({ role }).where(eq(users.id, userId));
 
     revalidatePath("/admin/users");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,

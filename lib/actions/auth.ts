@@ -101,7 +101,9 @@ export const signUp = async (credentials: AuthCredentials) => {
       universityCard,
     });
 
-    await broadcastAdminDashboardUpdate();
+    void broadcastAdminDashboardUpdate().catch((error) => {
+      console.error("Admin dashboard realtime broadcast failed:", error);
+    });
 
     // Fire-and-forget workflow trigger - don't block user signup
     // User creation/sign-in should succeed regardless of workflow outcome

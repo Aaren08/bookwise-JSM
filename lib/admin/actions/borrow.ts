@@ -132,7 +132,9 @@ export const updateBorrowStatus = async ({
     revalidatePath("/my-profile");
     revalidatePath(`/admin/books/${record.bookId}`);
     revalidatePath("/admin/users");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -178,7 +180,9 @@ export const clearBorrowRecords = async ({
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
     revalidatePath("/admin/users");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,

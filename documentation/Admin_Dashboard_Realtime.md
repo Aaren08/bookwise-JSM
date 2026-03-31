@@ -74,10 +74,10 @@ The client then fetches the latest dashboard snapshot from an authenticated API 
 
 - `instrumentation.ts`
   - Starts the WebSocket server when the Node.js runtime boots
-- `lib/admin/dashboardSocketServer.ts`
+- `lib/admin/realtime/dashboardSocketServer.ts`
   - Creates the singleton `WebSocketServer`
   - Broadcasts refresh events to all connected clients
-- `lib/admin/useAdminDashboardRealtime.ts`
+- `lib/admin/realtime/useAdminDashboardRealtime.ts`
   - Custom client hook that manages the WebSocket connection, reconnect logic, and delayed refetch
 - `app/api/admin/dashboard/route.ts`
   - Returns the latest admin dashboard snapshot
@@ -139,16 +139,28 @@ The socket server listens on a dedicated port rather than attaching to a Next.js
 
 ### 2. WebSocket Server Creation
 
-`lib/admin/dashboardSocketServer.ts` creates a singleton `WebSocketServer` and stores it on `globalThis`.
+`lib/admin/realtime/dashboardSocketServer.ts` creates a singleton `WebSocketServer` and stores it on `globalThis`.
 
 This singleton pattern prevents repeated server creation during development reloads or repeated imports.
 
 The server:
 
-- Listens on `0.0.0.0`
+- Listens on `127.0.0.1` (loopback only, not binding on external interface)
 - Uses the configured dashboard WebSocket port
 - Sends a lightweight `dashboard:connected` message to newly connected clients
 - Broadcasts `dashboard:refresh` events to all connected clients
+
+### 2.1 WebSocket Connection Security and Access Controls
+
+The socket server implements a strict access policy in `lib/admin/realtime/dashboardSocketServer.ts`:
+
+- `ipAllowed` check: only `127.0.0.1`, `::1` or `0:0:0:0:0:0:0:1` are accepted
+- `origin` check: if `ADMIN_DASHBOARD_WS_ORIGINS` is set it validates the request origin before accepting
+- `ADMIN_DASHBOARD_WS_SECRET` optional secret support via `x-admin-dashboard-secret` header
+- Optional `Authorization` header validation: if `ADMIN_DASHBOARD_WS_SECRET` is set, it also accepts `Bearer <secret>`
+- Rejects with WebSocket close code `1008` and logs warnings for rejected attempts
+
+This procedure is intended to keep the dedicated dashboard socket signaling channel constrained to trusted local admin tooling or proxy front-ends and avoid unauthorized third-party connections.
 
 ### 3. Client Subscription
 

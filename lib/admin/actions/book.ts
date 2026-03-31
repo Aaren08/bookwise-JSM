@@ -16,7 +16,9 @@ export const createBook = async (params: BookParams) => {
       })
       .returning();
 
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -69,7 +71,9 @@ export const updateBook = async (
       .where(eq(books.id, params.id))
       .returning();
 
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -154,7 +158,9 @@ export const deleteBook = async (id: string) => {
       .returning();
 
     revalidatePath("/admin/books");
-    await broadcastAdminDashboardUpdate();
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,

@@ -65,7 +65,10 @@ export const borrowBook = async (params: BorrowBookParams) => {
       .set({ availableCopies: book[0].availableCopies - 1 })
       .where(eq(books.id, bookId));
 
-    await broadcastAdminDashboardUpdate();
+    // Fire-and-forget: broadcast failure should not affect user response
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("Failed to broadcast dashboard update:", err),
+    );
 
     return {
       success: true,

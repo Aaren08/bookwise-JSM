@@ -7,6 +7,7 @@ BookWise is a modern full-stack library management system built with Next.js 16,
 ## Tech Stack
 
 ### Frontend
+
 - **Next.js 16** - React framework with App Router
 - **React 19** - UI library with Server Components
 - **Tailwind CSS 4** - Utility-first CSS framework
@@ -14,6 +15,7 @@ BookWise is a modern full-stack library management system built with Next.js 16,
 - **Lucide React** - Icon library
 
 ### Backend
+
 - **Next.js API Routes** - Serverless API endpoints
 - **NextAuth.js v5** - Authentication
 - **Drizzle ORM** - Type-safe database ORM
@@ -21,6 +23,7 @@ BookWise is a modern full-stack library management system built with Next.js 16,
 - **ws** - WebSocket server for realtime admin dashboard signaling
 
 ### Infrastructure
+
 - **Upstash Redis** - Rate limiting and caching
 - **Upstash QStash** - Workflow orchestration
 - **ImageKit** - Image and video CDN
@@ -92,42 +95,52 @@ bookwise/
 ### Recent Realtime Additions
 
 The architecture now also includes a small realtime dashboard layer built around these files:
+
 - `instrumentation.ts` - Application startup hook that initializes the WebSocket server
-- `lib/admin/dashboardSocketServer.ts` - Singleton `ws` server and broadcast helper
-- `lib/admin/useAdminDashboardRealtime.ts` - Custom client hook for socket lifecycle and delayed refresh
+- `lib/admin/realtime/dashboardSocketServer.ts` - Singleton `ws` server and broadcast helper
+- `lib/admin/realtime/useAdminDashboardRealtime.ts` - Custom client hook for socket lifecycle and delayed refresh
 - `components/admin/dashboard/AdminDashboardRealtime.tsx` - Client wrapper that hydrates and refreshes dashboard sections
 - `app/api/admin/dashboard/route.ts` - Authenticated snapshot endpoint for admin dashboard data
-- `ws.d.ts` - Local type declarations for the `ws` package
 - `documentation/Admin_Dashboard_Realtime.md` - Detailed implementation guide for the realtime system
 
 ## Design Patterns
 
 ### Server Components
+
 The application leverages React Server Components by default, with client components explicitly marked using the `"use client"` directive. This approach:
+
 - Reduces client-side JavaScript bundle
 - Enables direct database access in components
 - Improves initial page load performance
 
 ### Server Actions
+
 Business logic is implemented as server actions (`"use server"`) for:
+
 - Type-safe data mutations
 - Automatic revalidation
 - Progressive enhancement
 
 ### Route Groups
+
 Next.js route groups organize the application:
+
 - `(auth)` - Public authentication pages
 - `(root)` - Protected user pages
 - `admin` - Protected admin pages
 
 ### Layout Nesting
+
 Each route group has its own layout for:
+
 - Authentication checks
 - Navigation components
 - Shared UI elements
 
 ### Realtime Signal-and-Refresh Pattern
+
 The admin dashboard now uses a signal-and-refresh realtime pattern:
+
 - Mutations complete through server actions
 - The server broadcasts a lightweight WebSocket refresh event
 - Connected admin clients wait for a shared 3000ms delay window
@@ -163,6 +176,7 @@ User/Admin Mutation
 ```
 
 This realtime flow currently powers:
+
 - Dashboard statistics
 - Borrow requests
 - Account requests
@@ -171,22 +185,26 @@ This realtime flow currently powers:
 ## Security Architecture
 
 ### Authentication Layer
+
 - JWT-based sessions via NextAuth.js
 - Credentials provider with bcrypt password hashing
 - Session data stored in secure HTTP-only cookies
 
 ### Authorization Layer
+
 - Role-based access control (USER, ADMIN)
 - Server-side route protection in layouts
 - Database-level role verification
 - Admin-only snapshot access for realtime dashboard refreshes via `/api/admin/dashboard`
 
 ### WebSocket Security Model
+
 - WebSocket messages carry refresh signals rather than raw dashboard payloads
 - Sensitive admin dashboard data is fetched through an authenticated API route
 - The database and snapshot API remain the source of truth
 
 ### Rate Limiting
+
 - Redis-based rate limiting via Upstash
 - Multiple rate limit tiers:
   - Authentication: 5 requests/minute
@@ -196,10 +214,12 @@ This realtime flow currently powers:
 ## Caching Strategy
 
 ### Static Caching
+
 - Static assets via Next.js public directory
 - Image optimization via ImageKit CDN
 
 ### Dynamic Caching
+
 - Server components cached by default
 - `revalidatePath()` for on-demand invalidation
 - `revalidateTag()` for fine-grained cache control
@@ -208,11 +228,13 @@ This realtime flow currently powers:
 ## Error Handling
 
 ### Client-Side
+
 - Toast notifications via Sonner
 - Form validation via React Hook Form + Zod
 - Error boundaries for component-level errors
 
 ### Server-Side
+
 - Structured error responses
 - Logging for debugging
 - Graceful degradation
