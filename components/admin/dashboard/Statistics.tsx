@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { loadDashboardStats } from "@/lib/admin/dashboardStatUtil";
+import {
+  DASHBOARD_REALTIME_DELAY_MS,
+  loadDashboardStats,
+} from "@/lib/admin/essentials/dashboardStatUtil";
 
 const StatCard = ({ title, value, change }: StatCardProps) => {
   const isPositive = change > 0;
@@ -75,7 +78,7 @@ const Statistics = ({
       const newStats = { totalBooks, totalUsers, borrowedBooks };
       setPreviousStats(newStats);
       localStorage.setItem("dashboardStats", JSON.stringify(newStats));
-    }, 3000);
+    }, DASHBOARD_REALTIME_DELAY_MS);
 
     return () => clearTimeout(timeout);
   }, [

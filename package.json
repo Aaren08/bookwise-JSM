@@ -47,6 +47,7 @@
     "react-hook-form": "^7.67.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "ws": "^8.20.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
@@ -58,6 +59,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "baseline-browser-mapping": "^2.9.19",
     "drizzle-kit": "^0.31.7",
     "eslint": "^9",

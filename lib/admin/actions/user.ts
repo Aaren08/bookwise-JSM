@@ -4,6 +4,7 @@ import { db } from "@/database/drizzle";
 import { users, borrowRecords } from "@/database/schema";
 import { eq, desc, count, and, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 
 export const getApprovedUsers = async ({
   page = 1,
@@ -145,6 +146,9 @@ export const approveAccount = async (userId: string) => {
       .where(eq(users.id, userId));
 
     revalidatePath("/admin/accounts");
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -167,6 +171,9 @@ export const rejectAccount = async (userId: string) => {
       .where(eq(users.id, userId));
 
     revalidatePath("/admin/accounts");
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -213,6 +220,9 @@ export const deleteUser = async (userId: string) => {
     await db.delete(users).where(eq(users.id, userId));
 
     revalidatePath("/admin/users");
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -235,6 +245,9 @@ export const updateUserRole = async (
     await db.update(users).set({ role }).where(eq(users.id, userId));
 
     revalidatePath("/admin/users");
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,

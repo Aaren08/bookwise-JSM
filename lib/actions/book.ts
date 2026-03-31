@@ -5,6 +5,7 @@ import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
 import { auth } from "@/auth";
 import dayjs from "dayjs";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 
 export const borrowBook = async (params: BorrowBookParams) => {
   const { userId, bookId } = params;
@@ -63,6 +64,11 @@ export const borrowBook = async (params: BorrowBookParams) => {
       .update(books)
       .set({ availableCopies: book[0].availableCopies - 1 })
       .where(eq(books.id, bookId));
+
+    // Fire-and-forget: broadcast failure should not affect user response
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("Failed to broadcast dashboard update:", err),
+    );
 
     return {
       success: true,

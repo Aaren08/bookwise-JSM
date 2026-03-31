@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq, desc, count, ilike, or, and } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 
 export const createBook = async (params: BookParams) => {
   try {
@@ -14,6 +15,10 @@ export const createBook = async (params: BookParams) => {
         availableCopies: params.totalCopies,
       })
       .returning();
+
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -31,7 +36,7 @@ export const createBook = async (params: BookParams) => {
 };
 
 export const updateBook = async (
-  params: Partial<BookParams> & { id: string }
+  params: Partial<BookParams> & { id: string },
 ) => {
   try {
     const updateData: Partial<Book> = { ...params };
@@ -43,8 +48,8 @@ export const updateBook = async (
         .where(
           and(
             eq(borrowRecords.bookId, params.id),
-            eq(borrowRecords.borrowStatus, "BORROWED")
-          )
+            eq(borrowRecords.borrowStatus, "BORROWED"),
+          ),
         );
 
       const borrowedCount = Number(borrowedCountResult.value);
@@ -65,6 +70,10 @@ export const updateBook = async (
       .set(updateData)
       .where(eq(books.id, params.id))
       .returning();
+
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,
@@ -149,6 +158,9 @@ export const deleteBook = async (id: string) => {
       .returning();
 
     revalidatePath("/admin/books");
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     return {
       success: true,

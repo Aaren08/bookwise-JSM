@@ -3,6 +3,7 @@
 import { db } from "@/database/drizzle";
 import { books, users, borrowRecords } from "@/database/schema";
 import { count, eq } from "drizzle-orm";
+import { getDashboardData } from "@/lib/admin/dashboard";
 
 export const getDashboardStats = async () => {
   try {
@@ -43,4 +44,21 @@ export const getDashboardStats = async () => {
       },
     };
   }
+};
+
+export const getAdminDashboardSnapshot = async () => {
+  const [statsResult, dashboardResult] = await Promise.all([
+    getDashboardStats(),
+    getDashboardData(),
+  ]);
+
+  return {
+    success: statsResult.success && dashboardResult.success,
+    data: {
+      stats: statsResult.data,
+      latestBorrowRequests: dashboardResult.data.latestBorrowRequests,
+      latestAccountRequests: dashboardResult.data.latestAccountRequests,
+      recentBooks: dashboardResult.data.recentBooks,
+    },
+  };
 };

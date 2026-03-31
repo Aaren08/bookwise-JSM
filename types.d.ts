@@ -151,6 +151,13 @@ interface StatisticsProps {
   borrowedBooks: number;
 }
 
+interface AdminDashboardSnapshot {
+  stats: StatisticsProps;
+  latestBorrowRequests: NonNullable<BorrowRequestsProps["borrowRecords"]>;
+  latestAccountRequests: AccountRequestsProps["accountRequests"];
+  recentBooks: RecentBooksProps["recentBooks"];
+}
+
 interface AccountRequestsProps {
   accountRequests: {
     id: string;

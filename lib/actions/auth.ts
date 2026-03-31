@@ -10,6 +10,7 @@ import { ratelimit, safeRateLimit } from "../essentials/rateLimit";
 import { redirect } from "next/navigation";
 import config from "../config";
 import { workflowClient } from "../workflow";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 
 export const signInWithCredentials = async (
   credentials: Pick<AuthCredentials, "email" | "password">,
@@ -98,6 +99,10 @@ export const signUp = async (credentials: AuthCredentials) => {
       universityId,
       password: hashedPassword,
       universityCard,
+    });
+
+    void broadcastAdminDashboardUpdate().catch((error) => {
+      console.error("Admin dashboard realtime broadcast failed:", error);
     });
 
     // Fire-and-forget workflow trigger - don't block user signup
