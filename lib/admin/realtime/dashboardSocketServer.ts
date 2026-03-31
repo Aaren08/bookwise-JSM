@@ -49,11 +49,17 @@ export const ensureAdminDashboardSocketServer = () => {
       | string
       | undefined;
     const remoteAddr = request.socket?.remoteAddress ?? "";
+    const url = new URL(
+      request.url || "",
+      `http://${request.headers.host || "dummy"}`,
+    );
+    const secretQuery = url.searchParams.get("admin_ws_secret");
 
     const ipAllowed =
       remoteAddr === "127.0.0.1" ||
       remoteAddr === "::1" ||
-      remoteAddr === "0:0:0:0:0:0:0:1";
+      remoteAddr === "0:0:0:0:0:0:0:1" ||
+      remoteAddr === "::ffff:127.0.0.1";
 
     if (!ipAllowed) {
       console.warn(
@@ -73,7 +79,8 @@ export const ensureAdminDashboardSocketServer = () => {
       return;
     }
 
-    if (DASHBOARD_WS_SECRET && secretHeader !== DASHBOARD_WS_SECRET) {
+    const providedSecret = secretHeader || secretQuery;
+    if (DASHBOARD_WS_SECRET && providedSecret !== DASHBOARD_WS_SECRET) {
       console.warn(
         "Admin dashboard WS connection rejected: invalid secret",
         origin,
@@ -90,7 +97,6 @@ export const ensureAdminDashboardSocketServer = () => {
     ) {
       console.warn(
         "Admin dashboard WS connection rejected: invalid auth header",
-        authHeader,
       );
       socket.close(1008, "Forbidden");
       return;
