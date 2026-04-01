@@ -21,6 +21,7 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 ### Admin Features
 
 - **Dashboard Analytics** - Real-time statistics and activity monitoring
+- **Realtime Dashboard Sync** - WebSocket-powered refresh broadcasts keep all admin sessions aligned
 - **User Management** - Approve/reject accounts, manage user roles
 - **Book Catalog** - Add, edit, delete books with cover images and videos
 - **Borrow Oversight** - Manage borrow requests, track returns, generate receipts
@@ -28,6 +29,8 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 
 ### Technical Features
 
+- **WebSocket Realtime Updates** - Dedicated `ws` server broadcasts dashboard refresh events after mutations
+- **Authenticated Dashboard Snapshots** - Admin clients refetch fresh dashboard data from `/api/admin/dashboard`
 - **Rate Limiting** - Redis-based rate limiting for security
 - **Email Notifications** - Automated emails for account status and reminders
 - **File Uploads** - ImageKit integration for avatars and book covers
@@ -52,6 +55,7 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 - **Drizzle ORM** - Type-safe database operations
 - **PostgreSQL (Neon)** - Serverless database
 - **Redis (Upstash)** - Caching and rate limiting
+- **ws** - WebSocket server for admin dashboard realtime sync
 
 ### Infrastructure
 
@@ -133,6 +137,9 @@ bookwise/
    EMAILJS_SERVICE_ID=...
    EMAILJS_PUBLIC_KEY=...
    EMAILJS_PRIVATE_KEY=...
+   NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT=3001
+   ADMIN_DASHBOARD_WS_SECRET=your-websocket-secret
+   ADMIN_DASHBOARD_WS_ORIGINS=http://localhost:3000,https://your-domain.com
    ```
 
 4. **Set up the database**
@@ -158,6 +165,14 @@ bookwise/
    ```
    http://localhost:3000
    ```
+
+### Realtime Admin Dashboard Setup
+
+- The admin dashboard now opens a WebSocket connection and refreshes after a `3000ms` delay to match the existing stats animation flow.
+- The WebSocket server is started from `instrumentation.ts`.
+- `NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT` defaults to `3001` if not set.
+- `ADMIN_DASHBOARD_WS_SECRET` and `ADMIN_DASHBOARD_WS_ORIGINS` help restrict socket access.
+- Because the socket server runs on a dedicated port, your deployment must allow admin clients to reach that port.
 
 ## 📚 Usage
 
@@ -189,6 +204,7 @@ Comprehensive documentation is available in the `documentation/` folder:
 - **[Borrowing System](./documentation/Borrowing_System.md)** - Loan management
 - **[User Profile](./documentation/User_Profile.md)** - Profile management
 - **[Admin Dashboard](./documentation/Admin_Dashboard.md)** - Admin interface
+- **[Admin Dashboard Realtime](./documentation/Admin_Dashboard_Realtime.md)** - WebSocket-based admin dashboard synchronization
 - **[Receipt Generation](./documentation/Receipt_Generation.md)** - PDF receipts
 - **[Email Notifications](./documentation/Email_Notifications.md)** - Notification system
 - **[File Uploads](./documentation/File_Uploads.md)** - Media upload handling
