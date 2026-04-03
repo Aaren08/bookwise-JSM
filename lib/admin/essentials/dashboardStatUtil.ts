@@ -7,9 +7,26 @@ export interface DashboardStats {
 export const DASHBOARD_REALTIME_DELAY_MS = 3000;
 export const DASHBOARD_WS_PORT =
   Number(process.env.NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT) || 3001;
+const DASHBOARD_WS_URLS = (process.env.NEXT_PUBLIC_ADMIN_DASHBOARD_WS_URL || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 export const getAdminDashboardSocketUrl = () => {
   if (typeof window === "undefined") return "";
+
+  if (DASHBOARD_WS_URLS.length > 0) {
+    const matchedUrl =
+      DASHBOARD_WS_URLS.find((value) => {
+        try {
+          return new URL(value).hostname === window.location.hostname;
+        } catch {
+          return false;
+        }
+      }) || DASHBOARD_WS_URLS[0];
+
+    return matchedUrl;
+  }
 
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const hostname = window.location.hostname;

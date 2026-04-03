@@ -14,7 +14,7 @@ const createDashboardMessage = () =>
     timestamp: new Date().toISOString(),
   });
 
-const DASHBOARD_WS_SECRET = process.env.ADMIN_DASHBOARD_WS_SECRET;
+const ADMIN_DASHBOARD_WS_SECRET = process.env.ADMIN_DASHBOARD_WS_SECRET;
 const ALLOWED_DASHBOARD_ORIGINS = (process.env.ADMIN_DASHBOARD_WS_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
@@ -80,7 +80,28 @@ export const ensureAdminDashboardSocketServer = () => {
     }
 
     const providedSecret = secretHeader || secretQuery;
-    if (DASHBOARD_WS_SECRET && providedSecret !== DASHBOARD_WS_SECRET) {
+    const hasBrowserOrigin = Boolean(origin);
+    const shouldRequireSecret =
+      Boolean(ADMIN_DASHBOARD_WS_SECRET) && !hasBrowserOrigin;
+
+    if (
+      shouldRequireSecret &&
+      authHeader !== `Bearer ${ADMIN_DASHBOARD_WS_SECRET}` &&
+      providedSecret !== ADMIN_DASHBOARD_WS_SECRET
+    ) {
+      console.warn(
+        "Admin dashboard WS connection rejected: missing or invalid secret",
+        origin || remoteAddr,
+      );
+      socket.close(1008, "Forbidden");
+      return;
+    }
+
+    if (
+      providedSecret &&
+      ADMIN_DASHBOARD_WS_SECRET &&
+      providedSecret !== ADMIN_DASHBOARD_WS_SECRET
+    ) {
       console.warn(
         "Admin dashboard WS connection rejected: invalid secret",
         origin,
@@ -91,9 +112,10 @@ export const ensureAdminDashboardSocketServer = () => {
 
     // Optional Authorization header can be used for a second layer of control.
     if (
-      DASHBOARD_WS_SECRET &&
       authHeader &&
-      authHeader !== `Bearer ${DASHBOARD_WS_SECRET}`
+      ADMIN_DASHBOARD_WS_SECRET &&
+      !shouldRequireSecret &&
+      authHeader !== `Bearer ${ADMIN_DASHBOARD_WS_SECRET}`
     ) {
       console.warn(
         "Admin dashboard WS connection rejected: invalid auth header",

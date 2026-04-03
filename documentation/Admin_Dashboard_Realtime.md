@@ -156,8 +156,8 @@ The socket server implements a strict access policy in `lib/admin/realtime/dashb
 
 - `ipAllowed` check: only `127.0.0.1`, `::1` or `0:0:0:0:0:0:0:1` are accepted
 - `origin` check: if `ADMIN_DASHBOARD_WS_ORIGINS` is set it validates the request origin before accepting
-- `ADMIN_DASHBOARD_WS_SECRET` optional secret support via `x-admin-dashboard-secret` header
-- Optional `Authorization` header validation: if `ADMIN_DASHBOARD_WS_SECRET` is set, it also accepts `Bearer <secret>`
+- Browser admin pages from an allowed origin can connect without manually sending a secret
+- `ADMIN_DASHBOARD_WS_SECRET` is still supported for non-browser clients via `x-admin-dashboard-secret`, `?admin_ws_secret=...`, or `Authorization: Bearer <secret>`
 - Rejects with WebSocket close code `1008` and logs warnings for rejected attempts
 
 This procedure is intended to keep the dedicated dashboard socket signaling channel constrained to trusted local admin tooling or proxy front-ends and avoid unauthorized third-party connections.
