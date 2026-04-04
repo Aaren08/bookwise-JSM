@@ -1,4 +1,4 @@
-export const DASHBOARD_REALTIME_DELAY_MS = 700;
+export const DASHBOARD_REALTIME_DELAY_MS = 3000;
 export const ADMIN_DASHBOARD_REALTIME_URL = "/api/admin/dashboard/realtime";
 
 export const getAdminDashboardRealtimeUrl = () => {

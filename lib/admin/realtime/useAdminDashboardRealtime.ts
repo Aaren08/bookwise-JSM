@@ -74,7 +74,8 @@ export const useAdminDashboardRealtime = (
           const payload = JSON.parse(event.data) as unknown;
           if (
             isDashboardRealtimeMessage(payload) &&
-            payload.type === "dashboard:refresh"
+            (payload.type === "dashboard:refresh" ||
+              payload.type === "dashboard:connected")
           ) {
             queueRefresh();
           }
