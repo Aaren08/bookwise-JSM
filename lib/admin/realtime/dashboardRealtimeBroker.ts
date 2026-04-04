@@ -66,16 +66,27 @@ const scheduleIdleCleanup = (state: DashboardRealtimeBrokerState) => {
     if (state.listeners.size > 0 || !state.subscription) return;
 
     const subscription = state.subscription;
-    state.subscription = null;
     state.idleTimeout = null;
 
-    void subscription.unsubscribe().catch((error) => {
-      console.error(
-        "Failed to close idle admin dashboard Redis subscription:",
-        error,
-      );
-    });
+    void subscription
+      .unsubscribe()
+      .then(() => {
+        if (state.subscription === subscription) {
+          state.subscription = null;
+
+          if (state.listeners.size > 0) {
+            ensureRedisSubscription(state);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to close idle admin dashboard Redis subscription:",
+          error,
+        );
+      });
   }, ADMIN_DASHBOARD_SUBSCRIPTION_IDLE_MS);
+};
 };
 
 export const addAdminDashboardRealtimeListener = (
