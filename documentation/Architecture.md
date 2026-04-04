@@ -20,7 +20,7 @@ BookWise is a modern full-stack library management system built with Next.js 16,
 - **NextAuth.js v5** - Authentication
 - **Drizzle ORM** - Type-safe database ORM
 - **Neon Database** - Serverless PostgreSQL
-- **ws** - WebSocket server for realtime admin dashboard signaling
+- **Upstash Redis Pub/Sub + SSE** - Realtime admin dashboard signaling
 
 ### Infrastructure
 
@@ -28,7 +28,6 @@ BookWise is a modern full-stack library management system built with Next.js 16,
 - **Upstash QStash** - Workflow orchestration
 - **ImageKit** - Image and video CDN
 - **EmailJS** - Email service
-- **Node.js Instrumentation Hook** - Starts the singleton admin dashboard WebSocket server at boot
 
 ## Project Structure
 
@@ -96,11 +95,14 @@ bookwise/
 
 The architecture now also includes a small realtime dashboard layer built around these files:
 
-- `instrumentation.ts` - Application startup hook that initializes the WebSocket server
-- `lib/admin/realtime/dashboardSocketServer.ts` - Singleton `ws` server and broadcast helper
-- `lib/admin/realtime/useAdminDashboardRealtime.ts` - Custom client hook for socket lifecycle and delayed refresh
+- `lib/admin/realtime/dashboardRealtimeEvents.ts` - Shared channel and event definitions
+- `lib/admin/realtime/dashboardRedisPubSub.ts` - Low-level Redis publish/subscribe helpers
+- `lib/admin/realtime/dashboardRealtimeBroker.ts` - Per-instance fanout broker
+- `lib/admin/realtime/dashboardSocketServer.ts` - Compatibility wrapper for mutation-side broadcasts
+- `lib/admin/realtime/useAdminDashboardRealtime.ts` - Custom client hook for SSE lifecycle and delayed refresh
 - `components/admin/dashboard/AdminDashboardRealtime.tsx` - Client wrapper that hydrates and refreshes dashboard sections
 - `app/api/admin/dashboard/route.ts` - Authenticated snapshot endpoint for admin dashboard data
+- `app/api/admin/dashboard/realtime/route.ts` - Authenticated SSE stream endpoint
 - `documentation/Admin_Dashboard_Realtime.md` - Detailed implementation guide for the realtime system
 
 ## Design Patterns
@@ -142,7 +144,9 @@ Each route group has its own layout for:
 The admin dashboard now uses a signal-and-refresh realtime pattern:
 
 - Mutations complete through server actions
-- The server broadcasts a lightweight WebSocket refresh event
+- The server publishes a lightweight Redis refresh event
+- Each app instance maintains one shared Redis subscription for connected admin clients
+- The instance broker fans the signal out over SSE
 - Connected admin clients wait for a shared 3000ms delay window
 - Clients fetch a fresh authenticated dashboard snapshot over HTTP
 - Dashboard widgets re-render from the updated snapshot
@@ -167,8 +171,9 @@ User Action → Server Action → Database → Revalidation → UI Update
 User/Admin Mutation
   -> Server Action
   -> Database Update
-  -> WebSocket Broadcast
-  -> Admin Client Receives Refresh Signal
+  -> Redis Publish
+  -> Per-Instance Broker Fanout
+  -> Admin Client Receives SSE Refresh Signal
   -> 3000ms Delay
   -> GET /api/admin/dashboard
   -> Fresh Snapshot
@@ -197,9 +202,9 @@ This realtime flow currently powers:
 - Database-level role verification
 - Admin-only snapshot access for realtime dashboard refreshes via `/api/admin/dashboard`
 
-### WebSocket Security Model
+### Realtime Security Model
 
-- WebSocket messages carry refresh signals rather than raw dashboard payloads
+- Redis/SSE messages carry refresh signals rather than raw dashboard payloads
 - Sensitive admin dashboard data is fetched through an authenticated API route
 - The database and snapshot API remain the source of truth
 
@@ -223,7 +228,7 @@ This realtime flow currently powers:
 - Server components cached by default
 - `revalidatePath()` for on-demand invalidation
 - `revalidateTag()` for fine-grained cache control
-- Realtime dashboard clients fetch a fresh authenticated snapshot after WebSocket refresh events
+- Realtime dashboard clients fetch a fresh authenticated snapshot after Redis/SSE refresh events
 
 ## Error Handling
 
@@ -246,4 +251,4 @@ This realtime flow currently powers:
 - **CDN**: ImageKit for media delivery
 - **Edge-Ready**: Compatible with Vercel Edge Functions
 - **Realtime Admin Updates**: One mutation can notify all connected admin dashboard sessions
-- **Dedicated WebSocket Port**: The current realtime implementation uses a separate socket port that must be reachable in deployment
+- **Per-Instance Fanout**: Each app instance uses one Redis subscription for all connected admin clients

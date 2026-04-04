@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   DASHBOARD_REALTIME_DELAY_MS,
-  getAdminDashboardSocketUrl,
+  getAdminDashboardRealtimeUrl,
 } from "@/lib/admin/essentials/dashboardStatUtil";
+import { isDashboardRealtimeMessage } from "@/lib/admin/realtime/dashboardRealtimeEvents";
 
 const DASHBOARD_API_ENDPOINT = "/api/admin/dashboard";
 const RECONNECT_DELAY_MS = 2000;
@@ -24,7 +25,7 @@ export const useAdminDashboardRealtime = (
 
   useEffect(() => {
     let isActive = true;
-    let socket: WebSocket | null = null;
+    let stream: EventSource | null = null;
 
     const clearRefreshTimeout = () => {
       if (refreshTimeoutRef.current) {
@@ -63,32 +64,33 @@ export const useAdminDashboardRealtime = (
     };
 
     const connect = () => {
-      const url = getAdminDashboardSocketUrl();
+      const url = getAdminDashboardRealtimeUrl();
       if (!url || !isActive) return;
 
-      socket = new WebSocket(url);
+      stream = new EventSource(url, { withCredentials: true });
 
-      socket.onmessage = (event) => {
+      stream.onmessage = (event) => {
         try {
-          const payload = JSON.parse(event.data) as { type?: string };
-          if (payload.type === "dashboard:refresh") {
+          const payload = JSON.parse(event.data) as unknown;
+          if (
+            isDashboardRealtimeMessage(payload) &&
+            payload.type === "dashboard:refresh"
+          ) {
             queueRefresh();
           }
         } catch (error) {
-          console.error("Invalid admin dashboard websocket message:", error);
+          console.error("Invalid admin dashboard realtime message:", error);
         }
       };
 
-      socket.onclose = () => {
+      stream.onerror = () => {
+        stream?.close();
+
         if (!isActive) return;
 
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
         }, RECONNECT_DELAY_MS);
-      };
-
-      socket.onerror = () => {
-        socket?.close();
       };
     };
 
@@ -102,7 +104,7 @@ export const useAdminDashboardRealtime = (
         clearTimeout(reconnectTimeoutRef.current);
       }
 
-      socket?.close();
+      stream?.close();
     };
   }, []);
 

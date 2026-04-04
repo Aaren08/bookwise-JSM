@@ -485,9 +485,9 @@ Generate a receipt for a borrow record.
 
 ### Dashboard Data
 
-#### GET /admin/api/dashboard/stats
+#### GET /api/admin/dashboard
 
-Get dashboard statistics.
+Get the full admin dashboard snapshot used by the realtime dashboard.
 
 **Authentication:** Admin required
 **Method:** GET
@@ -498,19 +498,47 @@ Get dashboard statistics.
 {
   "success": true,
   "data": {
-    "totalBooks": 150,
-    "totalUsers": 45,
-    "borrowedBooks": 23
+    "stats": {
+      "totalBooks": 150,
+      "totalUsers": 45,
+      "borrowedBooks": 23
+    },
+    "latestBorrowRequests": [],
+    "latestAccountRequests": [],
+    "recentBooks": []
   }
 }
 ```
 
-#### GET /admin/api/dashboard/activity
+#### GET /api/admin/dashboard/realtime
 
-Get recent system activity.
+Open the admin dashboard realtime stream.
 
 **Authentication:** Admin required
 **Method:** GET
+**Transport:** Server-Sent Events (`text/event-stream`)
+
+**Event Payloads:**
+
+```json
+{
+  "type": "dashboard:connected",
+  "timestamp": "2026-04-04T12:34:56.789Z"
+}
+```
+
+```json
+{
+  "type": "dashboard:refresh",
+  "timestamp": "2026-04-04T12:35:02.123Z"
+}
+```
+
+**Notes:**
+
+- Realtime events are published through Upstash Redis pub/sub
+- Each app instance fans one Redis subscription out to all connected admin clients
+- Clients should treat the stream as a refresh signal and refetch `/api/admin/dashboard`
 
 ## Workflow Endpoints
 

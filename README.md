@@ -21,7 +21,7 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 ### Admin Features
 
 - **Dashboard Analytics** - Real-time statistics and activity monitoring
-- **Realtime Dashboard Sync** - WebSocket-powered refresh broadcasts keep all admin sessions aligned
+- **Realtime Dashboard Sync** - Redis + SSE refresh broadcasts keep all admin sessions aligned across deployed instances
 - **User Management** - Approve/reject accounts, manage user roles
 - **Book Catalog** - Add, edit, delete books with cover images and videos
 - **Borrow Oversight** - Manage borrow requests, track returns, generate receipts
@@ -29,7 +29,8 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 
 ### Technical Features
 
-- **WebSocket Realtime Updates** - Dedicated `ws` server broadcasts dashboard refresh events after mutations
+- **Redis-Backed Realtime Updates** - Upstash Redis pub/sub broadcasts dashboard refresh signals after mutations
+- **SSE Dashboard Streams** - Authenticated Server-Sent Events deliver refresh signals over the main app origin
 - **Authenticated Dashboard Snapshots** - Admin clients refetch fresh dashboard data from `/api/admin/dashboard`
 - **Rate Limiting** - Redis-based rate limiting for security
 - **Email Notifications** - Automated emails for account status and reminders
@@ -54,8 +55,7 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 - **NextAuth.js v5** - Authentication framework
 - **Drizzle ORM** - Type-safe database operations
 - **PostgreSQL (Neon)** - Serverless database
-- **Redis (Upstash)** - Caching and rate limiting
-- **ws** - WebSocket server for admin dashboard realtime sync
+- **Redis (Upstash)** - Rate limiting, caching, and admin dashboard realtime pub/sub
 
 ### Infrastructure
 
@@ -137,9 +137,6 @@ bookwise/
    EMAILJS_SERVICE_ID=...
    EMAILJS_PUBLIC_KEY=...
    EMAILJS_PRIVATE_KEY=...
-   NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT=3001
-   ADMIN_DASHBOARD_WS_SECRET=your-websocket-secret
-   ADMIN_DASHBOARD_WS_ORIGINS=http://localhost:3000,https://your-domain.com
    ```
 
 4. **Set up the database**
@@ -168,11 +165,11 @@ bookwise/
 
 ### Realtime Admin Dashboard Setup
 
-- The admin dashboard now opens a WebSocket connection and refreshes after a `3000ms` delay to match the existing stats animation flow.
-- The WebSocket server is started from `instrumentation.ts`.
-- `NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT` defaults to `3001` if not set.
-- `ADMIN_DASHBOARD_WS_SECRET` and `ADMIN_DASHBOARD_WS_ORIGINS` help restrict socket access.
-- Because the socket server runs on a dedicated port, your deployment must allow admin clients to reach that port.
+- The admin dashboard opens an authenticated SSE stream to `/api/admin/dashboard/realtime`.
+- Realtime events are published through Upstash Redis pub/sub after dashboard-relevant mutations.
+- Each Node.js app instance maintains one shared Redis subscription and fans events out locally to connected admin clients.
+- The dashboard waits `3000ms` after each refresh signal to match the existing statistics animation flow.
+- No separate websocket port is required for deployment.
 
 ## 📚 Usage
 
@@ -204,7 +201,7 @@ Comprehensive documentation is available in the `documentation/` folder:
 - **[Borrowing System](./documentation/Borrowing_System.md)** - Loan management
 - **[User Profile](./documentation/User_Profile.md)** - Profile management
 - **[Admin Dashboard](./documentation/Admin_Dashboard.md)** - Admin interface
-- **[Admin Dashboard Realtime](./documentation/Admin_Dashboard_Realtime.md)** - WebSocket-based admin dashboard synchronization
+- **[Admin Dashboard Realtime](./documentation/Admin_Dashboard_Realtime.md)** - Redis + SSE-based admin dashboard synchronization
 - **[Receipt Generation](./documentation/Receipt_Generation.md)** - PDF receipts
 - **[Email Notifications](./documentation/Email_Notifications.md)** - Notification system
 - **[File Uploads](./documentation/File_Uploads.md)** - Media upload handling
