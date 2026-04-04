@@ -262,3 +262,9 @@ interface UserCellProps {
   email: string;
   image?: string | null;
 }
+
+interface DashboardStats {
+  totalBooks: number;
+  totalUsers: number;
+  borrowedBooks: number;
+}
