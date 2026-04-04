@@ -87,7 +87,6 @@ const scheduleIdleCleanup = (state: DashboardRealtimeBrokerState) => {
       });
   }, ADMIN_DASHBOARD_SUBSCRIPTION_IDLE_MS);
 };
-};
 
 export const addAdminDashboardRealtimeListener = (
   listener: AdminDashboardRealtimeListener,
