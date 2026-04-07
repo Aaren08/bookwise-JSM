@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import dayjs from "dayjs";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
+import { broadcastAdminDashboardUpdate } from "../realtime/dashboardSocketServer";
 
 export const generateReceipt = async (borrowRecordId: string) => {
   try {
@@ -69,6 +70,9 @@ export const generateReceipt = async (borrowRecordId: string) => {
       .where(eq(borrowRecords.id, borrowRecordId));
 
     revalidatePath("/admin/borrow-records");
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
+    );
 
     // Format dates for receipt
     const issuedAt = dayjs(now).format("DD/MM/YYYY, hh:mm A");
