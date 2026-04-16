@@ -27,6 +27,7 @@ const SearchForm = ({
         placeholder="Search for books, authors, genres..."
         defaultValue={initialQuery}
         className="search-input"
+        aria-label="Search books, authors, genres"
       />
     </form>
   );

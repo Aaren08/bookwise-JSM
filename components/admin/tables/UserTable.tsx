@@ -139,16 +139,25 @@ const UserTable = ({ users }: Props) => {
 
   const handleRoleChange = useCallback(
     async (userId: string, newRole: "USER" | "ADMIN") => {
-      const res = await updateUserRole(userId, newRole);
-      if (res.success) {
-        showSuccessToast("User role updated successfully");
-        setSortedUsers((prev) =>
-          prev.map((user) =>
-            user.id === userId ? { ...user, role: newRole } : user,
-          ),
+      try {
+        const res = await updateUserRole(userId, newRole);
+        if (res.success) {
+          showSuccessToast("User role updated successfully");
+          setSortedUsers((prev) =>
+            prev.map((user) =>
+              user.id === userId ? { ...user, role: newRole } : user,
+            ),
+          );
+        } else {
+          showErrorToast(res.error || "Failed to update user role");
+        }
+      } catch (error) {
+        showErrorToast(
+          error instanceof Error
+            ? error.message
+            : "An error occurred while updating user role",
         );
-      } else {
-        showErrorToast(res.error || "Failed to update user role");
+        console.error(error);
       }
     },
     [setSortedUsers],

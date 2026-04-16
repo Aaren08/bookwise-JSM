@@ -24,13 +24,16 @@ const PrefetchOnIntentLinkComponent = ({
   const hasPrefetchedRef = useRef(false);
 
   const prefetchOnIntent = useCallback(() => {
+    if (prefetch === false) {
+      return;
+    }
     if (hasPrefetchedRef.current || typeof href !== "string") {
       return;
     }
 
     router.prefetch(href);
     hasPrefetchedRef.current = true;
-  }, [href, router]);
+  }, [href, router, prefetch]);
 
   const handleMouseEnter = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -59,7 +62,7 @@ const PrefetchOnIntentLinkComponent = ({
   return (
     <Link
       href={href}
-      prefetch={prefetch ?? true}
+      prefetch={prefetch ?? false}
       onMouseEnter={handleMouseEnter}
       onFocus={handleFocus}
       onTouchStart={handleTouchStart}

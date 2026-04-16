@@ -3,7 +3,6 @@ import FilterData from "@/components/admin/FilterData";
 import UserTable from "@/components/admin/tables/UserTable";
 import { UserTableHeader } from "@/components/admin/tables/table-header/UserTableHeader";
 import { getApprovedUsers } from "@/lib/admin/actions/user";
-import { Suspense } from "react";
 import { PartialTableWrapper } from "@/components/admin/PartialTableWrapper";
 
 // Unified data fetching - called ONCE
@@ -16,59 +15,58 @@ async function getUsersData(page: number) {
 }
 
 // Table body component
-async function UsersTableBody({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const { page: pageParam } = await searchParams;
-  const page = Number(pageParam) || 1;
-  const data = await getUsersData(page);
-  return <UserTable users={data?.users || []} />;
+function UsersTableBody({ users }: { users: User[] }) {
+  return <UserTable users={users} />;
 }
 
 // Pagination component
-async function UsersPagination({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const { page: pageParam } = await searchParams;
-  const page = Number(pageParam) || 1;
-  const data = await getUsersData(page);
-  const totalPages = data?.totalPages || 0;
-
+function UsersPagination({
+  currentPage,
+  totalPages,
+}: {
+  currentPage: number;
+  totalPages: number;
+}) {
   return (
     <div className="mt-8 w-full flex justify-end">
       <NavigatePage
         basePath="/admin/users"
-        currentPage={page}
+        currentPage={currentPage}
         totalPages={totalPages}
       />
     </div>
   );
 }
 
-// Minimal pagination skeleton
-const PaginationSkeleton = () => (
-  <div className="mt-8 w-full flex justify-end">
-    <div className="h-10 w-40 rounded bg-skeleton" />
-  </div>
-);
-
-const Page = ({
+const Page = async ({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
 }) => {
+  const { page: pageParam } = await searchParams;
+  const page = Number(pageParam) || 1;
+  const data = await getUsersData(page);
 
   return (
     <>
       <PartialTableWrapper
-        columns={["avatar-text", "date", "badge", "badge", "text", "text", "actions"]}
+        columns={[
+          "avatar-text",
+          "date",
+          "badge",
+          "badge",
+          "text",
+          "text",
+          "actions",
+        ]}
         header={<UserTableHeader />}
         title="All Users"
         filterSlot={<FilterData label="A-Z" />}
       >
-        <UsersTableBody searchParams={searchParams} />
+        <UsersTableBody users={data?.users || []} />
       </PartialTableWrapper>
 
-      {/* Pagination with minimal skeleton */}
-      <Suspense fallback={<PaginationSkeleton />}>
-        <UsersPagination searchParams={searchParams} />
-      </Suspense>
+      <UsersPagination currentPage={page} totalPages={data?.totalPages || 0} />
     </>
   );
 };

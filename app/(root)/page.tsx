@@ -12,6 +12,12 @@ export default async function Home() {
     getLatestBooksCached(10),
   ]);
   const featuredBook = latestBooks[0];
+
+  if (!latestBooks.length) {
+    // Handle empty state - render placeholder or redirect
+    return <div>No books available</div>;
+  }
+
   const borrowingEligibility = session?.user?.id
     ? await getBorrowingEligibilityCached(session.user.id, featuredBook.id)
     : null;
