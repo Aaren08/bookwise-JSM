@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { useSearch } from "@/components/admin/context/SearchContext";
@@ -28,18 +28,20 @@ function getPlaceholder(pathname: string): string {
   return DEFAULT_PLACEHOLDER;
 }
 
-const AdminSearch = () => {
+const AdminSearchClient = () => {
   const pathname = usePathname();
   const { query, setQuery } = useSearch();
   const [search, setSearch] = useState(query);
+  const deferredSearch = useDeferredValue(search);
+  const placeholder = useMemo(() => getPlaceholder(pathname), [pathname]);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      setQuery(search);
+      setQuery(deferredSearch);
     }, 700);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [search, setQuery]);
+  }, [deferredSearch, setQuery]);
 
   useEffect(() => {
     setSearch(query);
@@ -57,7 +59,7 @@ const AdminSearch = () => {
       <input
         type="text"
         className="admin-search_input"
-        placeholder={getPlaceholder(pathname)}
+        placeholder={placeholder}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         aria-label="Search"
@@ -66,4 +68,4 @@ const AdminSearch = () => {
   );
 };
 
-export default AdminSearch;
+export default AdminSearchClient;

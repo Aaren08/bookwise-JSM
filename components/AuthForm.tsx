@@ -1,14 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  DefaultValues,
-  FieldValues,
-  Path,
-  SubmitHandler,
-  useForm,
-} from "react-hook-form";
-import { ZodType } from "zod";
+import { DefaultValues, FieldValues, Path, SubmitHandler, useForm } from "react-hook-form";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -21,38 +15,69 @@ import {
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { FIELD_NAMES, FIELD_TYPES } from "@/constants";
-import FileUpload from "./FileUpload";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, CheckCircle } from "lucide-react";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
+import { LazyFileUpload } from "@/lib/performance/bundle";
+import { signInSchema, signUpSchema } from "@/lib/validations";
 
-interface Props<T extends FieldValues> {
-  schema: ZodType<T>;
+type AuthFormType = "SIGN_IN" | "SIGN_UP";
+
+type SignInValues = z.infer<typeof signInSchema>;
+type SignUpValues = z.infer<typeof signUpSchema>;
+type AuthFormValues = SignInValues | SignUpValues;
+
+const SIGN_IN_DEFAULT_VALUES: SignInValues = {
+  email: "",
+  password: "",
+};
+
+const SIGN_UP_DEFAULT_VALUES: SignUpValues = {
+  fullName: "",
+  email: "",
+  universityId: "",
+  password: "",
+  universityCard: "",
+};
+
+type SignInProps = {
+  type: "SIGN_IN";
+  onSubmit: (data: SignInValues) => Promise<{ success: boolean; error?: string }>;
+};
+
+type SignUpProps = {
+  type: "SIGN_UP";
+  onSubmit: (data: SignUpValues) => Promise<{ success: boolean; error?: string }>;
+};
+
+type Props = SignInProps | SignUpProps;
+
+interface AuthFormContentProps<T extends AuthFormValues> {
   defaultValues: T;
-  onSubmit: (data: T) => Promise<{ success: boolean; error?: string }>;
-  type: "SIGN_IN" | "SIGN_UP";
+  onSubmit: (data: AuthFormValues) => Promise<{ success: boolean; error?: string }>;
+  schema: z.ZodTypeAny;
+  type: AuthFormType;
 }
 
-const AuthForm = <T extends FieldValues>({
+const AuthFormContent = <T extends AuthFormValues>({
   type,
   schema,
   defaultValues,
   onSubmit,
-}: Props<T>) => {
+}: AuthFormContentProps<T>) => {
   const isSignIn = type === "SIGN_IN";
   const [uploadError, setUploadError] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [signUpSuccess, setSignUpSuccess] = useState<boolean>(false);
   const router = useRouter();
 
-  const form = useForm({
-    // @ts-expect-error - Zod v4 type incompatibility with @hookform/resolvers
-    resolver: zodResolver(schema),
+  const form = useForm<FieldValues>({
+    resolver: zodResolver(schema as never) as never,
     defaultValues: defaultValues as DefaultValues<T>,
   });
 
-  const handleSubmit: SubmitHandler<T> = async (data) => {
+  const handleSubmit: SubmitHandler<FieldValues> = async (data) => {
     const normalizeError = (error: unknown): string => {
       if (error instanceof Error) {
         return error.message;
@@ -71,7 +96,7 @@ const AuthForm = <T extends FieldValues>({
       // Reset signup success state before submitting
       setSignUpSuccess(false);
 
-      const result = await onSubmit(data);
+      const result = await onSubmit(data as AuthFormValues);
 
       if (result.success) {
         if (isSignIn) {
@@ -159,7 +184,7 @@ const AuthForm = <T extends FieldValues>({
             <FormField
               key={field}
               control={form.control}
-              name={field as Path<T>}
+              name={field as Path<FieldValues>}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="capitalize">
@@ -167,7 +192,7 @@ const AuthForm = <T extends FieldValues>({
                   </FormLabel>
                   <FormControl>
                     {field.name === "universityCard" ? (
-                      <FileUpload
+                      <LazyFileUpload
                         type="image"
                         accept="image/*"
                         placeholder="Upload your ID"
@@ -248,6 +273,28 @@ const AuthForm = <T extends FieldValues>({
         </Link>
       </p>
     </div>
+  );
+};
+
+const AuthForm = (props: Props) => {
+  if (props.type === "SIGN_IN") {
+    return (
+      <AuthFormContent
+        type="SIGN_IN"
+        schema={signInSchema}
+        defaultValues={SIGN_IN_DEFAULT_VALUES}
+        onSubmit={(data) => props.onSubmit(data as SignInValues)}
+      />
+    );
+  }
+
+  return (
+    <AuthFormContent
+      type="SIGN_UP"
+      schema={signUpSchema}
+      defaultValues={SIGN_UP_DEFAULT_VALUES}
+      onSubmit={(data) => props.onSubmit(data as SignUpValues)}
+    />
   );
 };
 

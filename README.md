@@ -33,6 +33,9 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 - **SSE Dashboard Streams** - Authenticated Server-Sent Events deliver refresh signals over the main app origin
 - **Authenticated Dashboard Snapshots** - Admin clients refetch fresh dashboard data from `/api/admin/dashboard`
 - **Rate Limiting** - Redis-based rate limiting for security
+- **Prefetch & Lazy-loading** - Route prefetching and dynamic component loading for faster navigation
+- **Partial Table Loading** - Admin tables load with header-first skeletons for smoother UI transitions
+- **Cache Invalidation** - Tagged cache revalidation for books, users, and search results
 - **Email Notifications** - Automated emails for account status and reminders
 - **File Uploads** - ImageKit integration for avatars and book covers
 - **Workflow Automation** - Upstash QStash for scheduled tasks
@@ -202,6 +205,9 @@ Comprehensive documentation is available in the `documentation/` folder:
 - **[User Profile](./documentation/User_Profile.md)** - Profile management
 - **[Admin Dashboard](./documentation/Admin_Dashboard.md)** - Admin interface
 - **[Admin Dashboard Realtime](./documentation/Admin_Dashboard_Realtime.md)** - Redis + SSE-based admin dashboard synchronization
+- **[Performance Improvements](./documentation/Performance_Improvements.md)** - Prefetching, lazy-loading, and route optimization
+- **[Admin Dashboard Optimization](./documentation/Admin_Dashboard_Optimization.md)** - Partial table loading, skeletons, and admin search state
+- **[Cache and Search Consistency](./documentation/Cache_and_Search_Consistency.md)** - Cache tags, invalidation, and search caching
 - **[Receipt Generation](./documentation/Receipt_Generation.md)** - PDF receipts
 - **[Email Notifications](./documentation/Email_Notifications.md)** - Notification system
 - **[File Uploads](./documentation/File_Uploads.md)** - Media upload handling

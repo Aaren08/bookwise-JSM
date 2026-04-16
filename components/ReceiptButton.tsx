@@ -4,8 +4,9 @@ import Image from "next/image";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { getReceipt } from "@/lib/admin/actions/receipt";
-import ReceiptModal, { Receipt } from "./ReceiptModal";
+import type { Receipt } from "./ReceiptModal";
 import { showErrorToast } from "@/lib/essentials/toast-utils";
+import { LazyReceiptModal } from "@/lib/performance/bundle";
 
 const OVERDUE_ICON_FILTER =
   "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
@@ -71,12 +72,14 @@ const ReceiptButton = ({
         />
       </button>
 
-      <ReceiptModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        receipt={receipt}
-        borrowStatus={borrowStatus}
-      />
+      {isModalOpen && (
+        <LazyReceiptModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          receipt={receipt}
+          borrowStatus={borrowStatus}
+        />
+      )}
     </>
   );
 };

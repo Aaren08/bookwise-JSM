@@ -1,40 +1,18 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Input } from "./ui/input";
+import { SearchRouteFilter } from "@/lib/performance/navigation";
 
 interface SearchFormProps {
   initialQuery?: string;
+  currentFilter?: SearchRouteFilter;
 }
 
-const SearchForm = ({ initialQuery = "" }: SearchFormProps) => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [query, setQuery] = useState(initialQuery);
-
-  useEffect(() => {
-    setQuery(initialQuery);
-  }, [initialQuery]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (query.trim()) {
-      const params = new URLSearchParams(searchParams);
-      params.set("query", query.trim());
-      params.delete("page"); // Reset to page 1 on new search
-      router.push(`/search?${params.toString()}`);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQuery(e.target.value);
-  };
-
+const SearchForm = ({
+  initialQuery = "",
+  currentFilter = "author",
+}: SearchFormProps) => {
   return (
-    <form onSubmit={handleSubmit} className="search">
+    <form action="/search" method="get" className="search">
       <Image
         src="/icons/search-fill.svg"
         alt="search"
@@ -42,12 +20,14 @@ const SearchForm = ({ initialQuery = "" }: SearchFormProps) => {
         height={24}
         className="ml-2"
       />
+      <input type="hidden" name="filter" value={currentFilter} />
       <Input
+        name="query"
         type="text"
         placeholder="Search for books, authors, genres..."
-        value={query}
-        onChange={handleInputChange}
+        defaultValue={initialQuery}
         className="search-input"
+        aria-label="Search books, authors, genres"
       />
     </form>
   );

@@ -1,53 +1,55 @@
-"use client";
-import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn, getInitials } from "@/lib/utils";
-import Link from "next/link";
+import { getInitials } from "@/lib/utils";
 import Image from "next/image";
 import { Session } from "next-auth";
 import { handleSignOut } from "@/lib/actions/auth";
+import { ActiveLink } from "@/components/navigation/ActiveLink";
+import { PrefetchOnIntentLink } from "@/lib/performance/PrefetchOnIntentLink";
 
 const Header = ({ session }: { session?: Session | null }) => {
-  const pathname = usePathname();
   return (
     <header className="my-10 flex justify-between gap-5">
-      <Link href="/">
+      <PrefetchOnIntentLink href="/">
         <div className="flex flex-row gap-3">
-          <Image src="/icons/logo.svg" alt="Logo" width={40} height={40} />
+          <Image
+            src="/icons/logo.svg"
+            alt="Logo"
+            width={40}
+            height={40}
+            style={{ width: "auto", height: "auto" }}
+          />
           <h1 className="text-2xl font-semibold text-light-100 max-sm:hidden">
             BookWise
           </h1>
         </div>
-      </Link>
+      </PrefetchOnIntentLink>
 
       <ul className="flex flex-row items-center gap-8">
         <li>
-          <Link
+          <ActiveLink
             href="/"
-            className={cn(
-              "text-base cursor-pointer capitalize",
-              pathname === "/" ? "text-light-200" : "text-light-100",
-            )}
+            className="text-base cursor-pointer capitalize"
+            activeClassName="text-light-200"
+            inactiveClassName="text-light-100"
           >
             Home
-          </Link>
+          </ActiveLink>
         </li>
 
         <li>
-          <Link
+          <ActiveLink
             href="/search"
-            className={cn(
-              "text-base cursor-pointer capitalize",
-              pathname === "/search" ? "text-light-200" : "text-light-100",
-            )}
+            className="text-base cursor-pointer capitalize"
+            activeClassName="text-light-200"
+            inactiveClassName="text-light-100"
           >
             Search
-          </Link>
+          </ActiveLink>
         </li>
 
         {session && (
           <li>
-            <Link href="/my-profile" className="flex items-center gap-2">
+            <PrefetchOnIntentLink href="/my-profile" className="flex items-center gap-2">
               <Avatar>
                 <AvatarImage
                   src={session.user?.image || ""}
@@ -60,7 +62,7 @@ const Header = ({ session }: { session?: Session | null }) => {
               <span className="text-light-100 font-semibold">
                 {session.user?.name?.split(" ")[0]}
               </span>
-            </Link>
+            </PrefetchOnIntentLink>
           </li>
         )}
 

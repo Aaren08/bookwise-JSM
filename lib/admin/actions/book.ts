@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { eq, desc, count, ilike, or, and } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
 import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { CACHE_TAGS } from "@/lib/performance/cache";
 
 export const createBook = async (params: BookParams) => {
   try {
@@ -15,6 +16,8 @@ export const createBook = async (params: BookParams) => {
         availableCopies: params.totalCopies,
       })
       .returning();
+
+    revalidateTag(CACHE_TAGS.books, "max");
 
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
@@ -70,6 +73,8 @@ export const updateBook = async (
       .set(updateData)
       .where(eq(books.id, params.id))
       .returning();
+
+    revalidateTag(CACHE_TAGS.books, "max");
 
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
@@ -158,6 +163,7 @@ export const deleteBook = async (id: string) => {
       .returning();
 
     revalidatePath("/admin/books");
+    revalidateTag(CACHE_TAGS.books, "max");
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
     );

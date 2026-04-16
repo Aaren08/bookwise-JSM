@@ -82,6 +82,7 @@ const Page = async ({ searchParams }: PageProps) => {
             {/* Pagination - Only show if more than 6 books */}
             {showPagination && (
               <NavigatePage
+                basePath="/my-profile"
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
               />

@@ -3,19 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { Trash2, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { clearBorrowRecords } from "@/lib/admin/actions/borrow";
 
-interface ClearRecordMenuProps {
-  onClear: (clearReturned: boolean, clearLateReturned: boolean) => void;
-  isClearing?: boolean;
-}
-
-const ClearRecordMenu = ({
-  onClear,
-  isClearing = false,
-}: ClearRecordMenuProps) => {
+const ClearRecordMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [clearReturned, setClearReturned] = useState(false);
   const [clearLateReturned, setClearLateReturned] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -35,14 +29,30 @@ const ClearRecordMenu = ({
     };
   }, [isOpen]);
 
-  const handleClear = () => {
-    if (clearReturned || clearLateReturned) {
-      onClear(clearReturned, clearLateReturned);
-      // Reset selections
-      setClearReturned(false);
-      setClearLateReturned(false);
-      setIsOpen(false);
+  const handleClear = async () => {
+    if (!clearReturned && !clearLateReturned) {
+      return;
     }
+
+    setIsClearing(true);
+    try {
+      const result = await clearBorrowRecords({
+        clearReturned,
+        clearLateReturned,
+      });
+
+      if (!result.success) {
+        console.error(result.message || "Failed to clear borrow records");
+      }
+    } catch (error) {
+      console.error("Failed to clear borrow records", error);
+    } finally {
+      setIsClearing(false);
+    }
+
+    setClearReturned(false);
+    setClearLateReturned(false);
+    setIsOpen(false);
   };
 
   const handleCancel = () => {

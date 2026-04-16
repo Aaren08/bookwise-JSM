@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { getBookCoverSizes } from "@/lib/performance/lcp";
 import Image from "next/image";
 import BookCoverSvg from "./BookCoverSvg";
 
@@ -17,6 +18,8 @@ interface Props {
   variant?: BookCoverVariant;
   coverColor?: string;
   coverImage?: string;
+  priority?: boolean;
+  sizes?: string;
 }
 
 const BookCover = ({
@@ -24,6 +27,8 @@ const BookCover = ({
   variant = "regular",
   coverColor = "#012b48",
   coverImage = "https://placehold.co/400x600.png",
+  priority = false,
+  sizes,
 }: Props) => {
   return (
     <div
@@ -47,6 +52,8 @@ const BookCover = ({
           src={coverImage}
           alt="book cover"
           fill
+          priority={priority}
+          sizes={sizes ?? getBookCoverSizes(variant)}
           className="rounded-sm object-fill"
         />
       </div>

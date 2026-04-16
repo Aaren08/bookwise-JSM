@@ -5,8 +5,8 @@ import SearchFilter from "@/components/SearchFilter";
 import BookList from "@/components/book/BookList";
 import NavigatePage from "@/components/NavigatePage";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { searchBooks } from "@/lib/essentials/searchQuery";
+import { PrefetchOnIntentLink } from "@/lib/performance/PrefetchOnIntentLink";
 
 const BOOKS_PER_PAGE = 12;
 
@@ -48,7 +48,7 @@ async function BookResults({
                     <span className="font-semibold text-primary">{query}</span>
                   </p>
                 </div>
-                <SearchFilter currentFilter={filter} />
+                <SearchFilter currentFilter={filter} query={query} />
               </div>
 
               {/* Book List */}
@@ -59,6 +59,8 @@ async function BookResults({
                 <NavigatePage
                   currentPage={currentPage}
                   totalPages={totalPages}
+                  query={query}
+                  filter={filter}
                 />
               )}
             </>
@@ -78,11 +80,11 @@ async function BookResults({
                 <br />
                 Try using different keywords or check for typos.
               </p>
-              <Link href="/search">
+              <PrefetchOnIntentLink href="/search">
                 <Button className="not-found-btn cursor-pointer">
                   Clear Search
                 </Button>
-              </Link>
+              </PrefetchOnIntentLink>
             </div>
           )}
         </div>
@@ -132,11 +134,12 @@ async function SearchContent({ searchParams }: SearchPageProps) {
           <span className="text-primary">Any Book</span> In Our Library
         </h1>
 
-        <SearchForm initialQuery={query} />
+        <SearchForm initialQuery={query} currentFilter={filter} />
       </section>
 
       {/* Search Results Section with Suspense for BookResults */}
       <Suspense
+        key={`${query}-${filter}-${currentPage}`}
         fallback={
           <div className="mt-16 flex justify-center">
             <div className="loader"></div>

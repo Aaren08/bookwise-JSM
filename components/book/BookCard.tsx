@@ -1,6 +1,6 @@
-import Link from "next/link";
 import BookCover from "./BookCover";
 import { cn } from "@/lib/utils";
+import { PrefetchOnIntentLink } from "@/lib/performance/PrefetchOnIntentLink";
 
 interface BookCardProps extends Book {
   className?: string;
@@ -17,7 +17,7 @@ const BookCard = ({
   children,
 }: BookCardProps) => (
   <li className={cn(className)}>
-    <Link
+    <PrefetchOnIntentLink
       href={`/books/${id}`}
       className={cn("w-full flex flex-col items-center")}
     >
@@ -34,7 +34,7 @@ const BookCard = ({
       </div>
 
       {children}
-    </Link>
+    </PrefetchOnIntentLink>
   </li>
 );
 

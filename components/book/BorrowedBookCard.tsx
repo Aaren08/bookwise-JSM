@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { X } from "lucide-react";
 import { useState } from "react";
-import Link from "next/link";
 import BookCover from "./BookCover";
 import { cn } from "@/lib/utils";
 import ReceiptButton from "../ReceiptButton";
@@ -15,6 +14,7 @@ import {
 import { dismissBorrowRecord } from "@/lib/actions/book";
 import { formatReturnDate } from "@/lib/utils";
 import { toast } from "sonner";
+import { PrefetchOnIntentLink } from "@/lib/performance/PrefetchOnIntentLink";
 
 const OVERDUE_ICON_FILTER =
   "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
@@ -90,7 +90,7 @@ const BorrowedBookCard = ({
 
   return (
     <li className={cn("w-48 sm:w-60 relative bg-dark-800 rounded-2xl p-4")}>
-      <Link
+      <PrefetchOnIntentLink
         href={`/books/${book.id}`}
         className={cn("w-full flex flex-col items-center")}
       >
@@ -100,7 +100,7 @@ const BorrowedBookCard = ({
           <p className="book-title">{book.title}</p>
           <p className="book-genre">{book.genre}</p>
         </div>
-      </Link>
+      </PrefetchOnIntentLink>
 
       {/* Overdue Warning Icon - Top Left (only for BORROWED status) */}
       {showOverdueWarning && (

@@ -59,6 +59,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   alt="BookWise"
                   width={32}
                   height={32}
+                  style={{ width: "auto", height: "auto" }}
                 />
                 BookWise
               </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { startTransition, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Select,
@@ -8,22 +9,48 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import {
+  buildSearchHref,
+  SearchRouteFilter,
+} from "@/lib/performance/navigation";
 
 interface SearchFilterProps {
-  currentFilter: "author" | "genre" | "rating" | "availability";
+  currentFilter: SearchRouteFilter;
+  query?: string;
 }
 
-const SearchFilter = ({ currentFilter }: SearchFilterProps) => {
+const SearchFilter = ({ currentFilter, query = "" }: SearchFilterProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const handleFilterChange = (value: string) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("filter", value);
-    params.delete("page"); // Reset to page 1 on filter change
-    router.push(`/search?${params.toString()}`);
-    router.refresh();
-  };
+  const baseParams = useMemo(
+    () => new URLSearchParams(searchParams.toString()),
+    [searchParams],
+  );
+
+  const handleFilterChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(baseParams);
+
+      if (query.trim()) {
+        params.set("query", query.trim());
+      }
+
+      params.set("filter", value);
+      params.delete("page");
+
+      startTransition(() => {
+        router.replace(
+          buildSearchHref({
+            query: params.get("query") || "",
+            filter: value as SearchRouteFilter,
+          }),
+          { scroll: false },
+        );
+      });
+    },
+    [baseParams, query, router],
+  );
 
   const getDisplayValue = () => {
     return currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1);
