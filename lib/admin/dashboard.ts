@@ -6,55 +6,58 @@ import { eq, desc } from "drizzle-orm";
 
 export const getDashboardData = async () => {
   try {
-    // Get latest pending borrow requests
-    const latestBorrowRequests = await db
-      .select({
-        id: borrowRecords.id,
-        borrowDate: borrowRecords.borrowDate,
-        status: borrowRecords.borrowStatus,
-        bookTitle: books.title,
-        bookCover: books.coverUrl,
-        bookGenre: books.genre,
-        bookAuthor: books.author,
-        coverColor: books.coverColor,
-        userFullName: users.fullName,
-        userAvatar: users.userAvatar,
-      })
-      .from(borrowRecords)
-      .innerJoin(books, eq(borrowRecords.bookId, books.id))
-      .innerJoin(users, eq(borrowRecords.userId, users.id))
-      .where(eq(borrowRecords.borrowStatus, "PENDING"))
-      .orderBy(desc(borrowRecords.borrowDate))
-      .limit(5);
+    // Execute all 3 queries in PARALLEL instead of sequentially
+    const [latestBorrowRequests, latestAccountRequests, recentBooks] =
+      await Promise.all([
+        // Query 1: Latest borrow requests
+        db
+          .select({
+            id: borrowRecords.id,
+            borrowDate: borrowRecords.borrowDate,
+            status: borrowRecords.borrowStatus,
+            bookTitle: books.title,
+            bookCover: books.coverUrl,
+            bookGenre: books.genre,
+            bookAuthor: books.author,
+            coverColor: books.coverColor,
+            userFullName: users.fullName,
+            userAvatar: users.userAvatar,
+          })
+          .from(borrowRecords)
+          .innerJoin(books, eq(borrowRecords.bookId, books.id))
+          .innerJoin(users, eq(borrowRecords.userId, users.id))
+          .where(eq(borrowRecords.borrowStatus, "PENDING"))
+          .orderBy(desc(borrowRecords.borrowDate))
+          .limit(5),
 
-    // Get latest account requests
-    const { id, userAvatar, fullName, email } = users;
-    const latestAccountRequests = await db
-      .select({
-        id,
-        userAvatar,
-        fullName,
-        email,
-      })
-      .from(users)
-      .where(eq(users.status, "PENDING"))
-      .orderBy(desc(users.createdAt))
-      .limit(9);
+        // Query 2: Latest account requests
+        db
+          .select({
+            id: users.id,
+            userAvatar: users.userAvatar,
+            fullName: users.fullName,
+            email: users.email,
+          })
+          .from(users)
+          .where(eq(users.status, "PENDING"))
+          .orderBy(desc(users.createdAt))
+          .limit(9),
 
-    // Get recent books added
-    const recentBooks = await db
-      .select({
-        id: books.id,
-        bookTitle: books.title,
-        bookAuthor: books.author,
-        bookGenre: books.genre,
-        bookCover: books.coverUrl,
-        coverColor: books.coverColor,
-        createdAt: books.createdAt,
-      })
-      .from(books)
-      .orderBy(desc(books.createdAt))
-      .limit(8);
+        // Query 3: Recent books added
+        db
+          .select({
+            id: books.id,
+            bookTitle: books.title,
+            bookAuthor: books.author,
+            bookGenre: books.genre,
+            bookCover: books.coverUrl,
+            coverColor: books.coverColor,
+            createdAt: books.createdAt,
+          })
+          .from(books)
+          .orderBy(desc(books.createdAt))
+          .limit(8),
+      ]);
 
     return {
       success: true,

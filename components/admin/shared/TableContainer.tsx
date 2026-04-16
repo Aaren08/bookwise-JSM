@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 interface TableContainerProps {
   title: string;
   children: ReactNode;
-  onSort: (order: "asc" | "desc") => void;
+  onSort?: (order: "asc" | "desc") => void;
   filterLabel?: string;
   showCreateButton?: boolean;
   createButtonHref?: string;
@@ -31,7 +31,7 @@ const TableContainer = ({
         <h2 className="text-xl font-semibold text-dark-400">{title}</h2>
         <div className="flex items-center flex-wrap gap-2">
           {clearMenu}
-          <FilterData onSort={onSort} label={filterLabel} />
+          {onSort && <FilterData onSort={onSort} label={filterLabel} />}
           {showCreateButton && (
             <Button
               asChild

@@ -268,3 +268,18 @@ interface DashboardStats {
   totalUsers: number;
   borrowedBooks: number;
 }
+
+interface ActiveLinkProps {
+  href: string;
+  children: React.ReactNode;
+  activeClassName?: string;
+  inactiveClassName?: string;
+  className?: string;
+  exact?: boolean;
+}
+
+interface AdminSidebarLinkProps {
+  href: string;
+  icon: string;
+  label: string;
+}

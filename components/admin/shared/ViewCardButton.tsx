@@ -8,7 +8,13 @@ const ViewCardButton = ({ onClick }: ViewCardButtonProps) => {
   return (
     <button onClick={onClick} className="view-card-btn">
       View ID Card
-      <Image src="/icons/admin/link.svg" alt="link" width={18} height={18} />
+      <Image
+        src="/icons/admin/link.svg"
+        alt="link"
+        width={18}
+        height={18}
+        style={{ width: "auto", height: "auto" }}
+      />
     </button>
   );
 };

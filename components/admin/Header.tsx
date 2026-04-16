@@ -1,5 +1,5 @@
 import { Session } from "next-auth";
-import AdminSearch from "@/components/admin/AdminSearch";
+import AdminSearchClient from "@/components/admin/AdminSearchClient";
 
 const Header = ({ session }: { session: Session }) => {
   return (
@@ -13,7 +13,7 @@ const Header = ({ session }: { session: Session }) => {
         </p>
       </div>
 
-      <AdminSearch />
+      <AdminSearchClient />
     </header>
   );
 };

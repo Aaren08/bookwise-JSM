@@ -10,6 +10,8 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import ImageKit from "imagekit";
 import config from "@/lib/config";
+import { revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/performance/cache";
 
 export async function PUT(request: Request) {
   const { image } = await request.json();
@@ -100,6 +102,8 @@ export async function POST(request: Request) {
       .update(users)
       .set({ userAvatar: imageUrl, userAvatarFileId: fileId })
       .where(eq(users.id, session.user.id));
+
+    revalidateTag(CACHE_TAGS.users, "max");
 
     return NextResponse.json({ success: true });
   } catch (error) {

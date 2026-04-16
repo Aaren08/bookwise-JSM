@@ -23,17 +23,16 @@ const Layout = async ({ children }: { children: ReactNode }) => {
   if (!isAdmin) redirect("/");
 
   return (
-    <main className="flex min-h-screen flex-row w-full">
-      <Sidebar session={session} />
+    <SearchProvider>
+      <main className="flex min-h-screen flex-row w-full">
+        <Sidebar session={session} />
 
-      <div className="admin-container">
-        {/* SearchProvider wraps Header + page children so both share `query` */}
-        <SearchProvider>
+        <div className="admin-container">
           <Header session={session} />
           {children}
-        </SearchProvider>
-      </div>
-    </main>
+        </div>
+      </main>
+    </SearchProvider>
   );
 };
 

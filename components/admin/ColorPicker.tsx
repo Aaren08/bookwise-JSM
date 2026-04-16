@@ -1,3 +1,5 @@
+"use client";
+
 import { HexColorPicker } from "react-colorful";
 import { useState } from "react";
 import Ping from "./Ping";

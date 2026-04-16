@@ -1,6 +1,7 @@
 import { db } from "@/database/drizzle";
 import { books } from "@/database/schema";
 import { ilike, or, sql, desc, asc } from "drizzle-orm";
+import { searchBooksCached } from "@/lib/performance/cache";
 
 export interface SearchOptions {
   query: string;
@@ -19,6 +20,15 @@ export interface SearchResult {
  * Search books based on title, author, or genre with fuzzy matching
  */
 export async function searchBooks(
+  options: SearchOptions
+): Promise<SearchResult> {
+  return searchBooksCached(options);
+}
+
+/**
+ * Search books based on title, author, or genre with fuzzy matching
+ */
+export async function searchBooksUncached(
   options: SearchOptions
 ): Promise<SearchResult> {
   const { query, filter, page, limit } = options;

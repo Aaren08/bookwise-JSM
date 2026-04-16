@@ -1,9 +1,5 @@
-"use client";
-
 import Image from "next/image";
-import ImageCropper from "./ImageCropper";
-import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { LazyImageCropper } from "@/lib/performance/bundle";
 
 const UserProfile = ({
   fullName,
@@ -13,14 +9,6 @@ const UserProfile = ({
   userAvatar,
   status = "PENDING",
 }: UserProfileProps) => {
-  const { data: session } = useSession();
-
-  // Track locally uploaded avatar (before it's saved to session)
-  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
-
-  // Derive the current avatar: prioritize uploaded > session > prop
-  const currentAvatar = uploadedAvatar || session?.user?.image || userAvatar;
-
   const getStatusConfig = () => {
     switch (status) {
       case "APPROVED":
@@ -61,10 +49,7 @@ const UserProfile = ({
       {/* User Profile Card */}
       <div className="profile-card">
         <div className="profile-header">
-          <ImageCropper
-            userAvatar={currentAvatar}
-            onAvatarUpdated={setUploadedAvatar}
-          />
+          <LazyImageCropper userAvatar={userAvatar} />
 
           <div className="profile-details">
             {/* Status Badge */}

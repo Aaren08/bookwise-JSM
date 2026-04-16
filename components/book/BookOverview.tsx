@@ -1,11 +1,14 @@
 import Image from "next/image";
 import BookCover from "./BookCover";
 import BorrowBook from "./BorrowBook";
-import { db } from "@/database/drizzle";
-import { users, borrowRecords } from "@/database/schema";
-import { eq, and } from "drizzle-orm";
+import type { BorrowingEligibility } from "@/lib/performance/cache";
 
-const BookOverview = async ({
+type BookOverviewProps = Book & {
+  userId: string;
+  borrowingEligibility: BorrowingEligibility | null;
+};
+
+const BookOverview = ({
   title,
   author,
   genre,
@@ -17,37 +20,8 @@ const BookOverview = async ({
   coverUrl,
   id,
   userId,
-}: Book & { userId: string }) => {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (!user) return null;
-
-  const [borrowing] = await db
-    .select()
-    .from(borrowRecords)
-    .where(
-      and(
-        eq(borrowRecords.userId, userId),
-        eq(borrowRecords.bookId, id),
-        eq(borrowRecords.borrowStatus, "BORROWED"),
-      ),
-    )
-    .limit(1);
-
-  const borrowingEligibility = {
-    isEligible: availableCopies > 0 && user.status === "APPROVED" && !borrowing,
-    message:
-      availableCopies <= 0
-        ? "Book is not available at the moment. Please check back later."
-        : !borrowing
-          ? "You are not eligible to borrow this book. Please contact the library for more information."
-          : "You have already borrowed this book.",
-  };
-
+  borrowingEligibility,
+}: BookOverviewProps) => {
   return (
     <section className="book-overview">
       <div className="flex flex-1 flex-col gap-5">
@@ -81,7 +55,7 @@ const BookOverview = async ({
 
         <p className="book-description">{description}</p>
 
-        {user && (
+        {borrowingEligibility && (
           <BorrowBook
             bookId={id}
             userId={userId}
@@ -97,6 +71,7 @@ const BookOverview = async ({
             className="z-10"
             coverColor={coverColor}
             coverImage={coverUrl}
+            priority
           />
 
           <div className="absolute left-16 top-10 rotate-12 opacity-40 max-sm:hidden">

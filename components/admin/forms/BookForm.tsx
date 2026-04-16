@@ -16,10 +16,9 @@ import { bookSchema } from "@/lib/validations";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { BookPlus, BookCheck } from "lucide-react";
-import ColorPicker from "../ColorPicker";
-import FileUpload from "@/components/FileUpload";
 import { createBook, updateBook } from "@/lib/admin/actions/book";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
+import { LazyColorPicker, LazyFileUpload } from "@/lib/performance/bundle";
 
 interface Props extends Partial<Book> {
   type: "create" | "update";
@@ -227,7 +226,7 @@ const BookForm = ({ type, ...book }: Props) => {
                 Book Image
               </FormLabel>
               <FormControl>
-                <FileUpload
+                <LazyFileUpload
                   type="image"
                   accept="image/*"
                   placeholder="Upload a book cover"
@@ -251,7 +250,7 @@ const BookForm = ({ type, ...book }: Props) => {
                 Primary Color
               </FormLabel>
               <FormControl>
-                <ColorPicker {...field} />
+                <LazyColorPicker {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -289,7 +288,7 @@ const BookForm = ({ type, ...book }: Props) => {
                 Book Trailer
               </FormLabel>
               <FormControl>
-                <FileUpload
+                <LazyFileUpload
                   type="video"
                   accept="video/*"
                   placeholder="Upload a book trailer"

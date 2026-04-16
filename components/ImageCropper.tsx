@@ -1,3 +1,5 @@
+"use client";
+
 import { useRouter } from "next/navigation";
 import { useState, useRef, useCallback } from "react";
 import Cropper, { Area } from "react-easy-crop";
@@ -17,14 +19,10 @@ import {
   isAllowedMimeType,
 } from "@/lib/essentials/sanitizeFileExt";
 
-interface ImageCropperProps {
-  userAvatar: string;
-  onAvatarUpdated: (url: string) => void;
-}
-
-const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
+const ImageCropper = ({ userAvatar }: { userAvatar: string }) => {
   const router = useRouter();
   const { data: session, update } = useSession();
+  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -34,6 +32,7 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
   const [showCropper, setShowCropper] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentAvatar = uploadedAvatar || session?.user?.image || userAvatar;
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -137,7 +136,7 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
 
         if (apiResponse.ok && result.success) {
           // Update local state immediately for instant feedback
-          onAvatarUpdated(uploadResponse.url);
+          setUploadedAvatar(uploadResponse.url);
 
           // Update session with new image URL - this is crucial for persistence
           await update({
@@ -249,14 +248,14 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
           ) : (
             <>
               <Image
-                src={userAvatar || "/icons/user-fill.svg"}
+                src={currentAvatar || "/icons/user-fill.svg"}
                 alt="user avatar"
-                fill={!!userAvatar}
-                width={!userAvatar ? 40 : undefined}
-                height={!userAvatar ? 40 : undefined}
+                fill={!!currentAvatar}
+                width={!currentAvatar ? 40 : undefined}
+                height={!currentAvatar ? 40 : undefined}
                 className={cn(
                   "object-cover",
-                  !userAvatar && "object-contain w-10 h-10",
+                  !currentAvatar && "object-contain w-10 h-10",
                 )}
               />
 
@@ -264,7 +263,7 @@ const ImageCropper = ({ userAvatar, onAvatarUpdated }: ImageCropperProps) => {
               <div className="cropper-hover_overlay">
                 <Image
                   src={
-                    userAvatar && userAvatar !== "/icons/user-fill.svg"
+                    currentAvatar && currentAvatar !== "/icons/user-fill.svg"
                       ? "/icons/edit.svg"
                       : "/icons/camera.svg"
                   }

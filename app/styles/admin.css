@@ -1,7 +1,30 @@
 @import "tailwindcss";
 @import "./globals.css";
 
+@layer base {
+  /* GPU-friendly shimmer animation using transform */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
 @layer components {
+  /* Global skeleton shimmer class - replaces animate-pulse */
+  .bg-skeleton {
+    @apply bg-gray-200 relative overflow-hidden;
+  }
+
+  .bg-skeleton::after {
+    content: "";
+    @apply absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent;
+    animation: shimmer 2s infinite;
+  }
+
   .admin-container {
     @apply !flex w-[calc(100%-264px)] flex-1 flex-col bg-light-300 p-5 sm:p-10;
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export function useSortedData<T>(
   data: T[],
@@ -10,10 +10,12 @@ export function useSortedData<T>(
     setSortedData(data);
   }, [data]);
 
-  const handleSort = (order: "asc" | "desc") => {
-    const sorted = [...sortedData].sort((a, b) => sortFn(a, b, order));
-    setSortedData(sorted);
-  };
+  const handleSort = useCallback(
+    (order: "asc" | "desc") => {
+      setSortedData((prev) => [...prev].sort((a, b) => sortFn(a, b, order)));
+    },
+    [sortFn],
+  );
 
   return { sortedData, setSortedData, handleSort };
 }

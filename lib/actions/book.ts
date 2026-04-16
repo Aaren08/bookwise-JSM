@@ -1,11 +1,13 @@
 "use server";
 
-import { eq, and, ne } from "drizzle-orm";
+import { revalidateTag } from "next/cache";
+import { eq, and } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
 import { auth } from "@/auth";
 import dayjs from "dayjs";
 import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { CACHE_TAGS, getSimilarBooksCached } from "@/lib/performance/cache";
 
 export const borrowBook = async (params: BorrowBookParams) => {
   const { userId, bookId } = params;
@@ -65,6 +67,9 @@ export const borrowBook = async (params: BorrowBookParams) => {
       .set({ availableCopies: book[0].availableCopies - 1 })
       .where(eq(books.id, bookId));
 
+    revalidateTag(CACHE_TAGS.books, "max");
+    revalidateTag(CACHE_TAGS.users, "max");
+
     // Fire-and-forget: broadcast failure should not affect user response
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("Failed to broadcast dashboard update:", err),
@@ -120,6 +125,8 @@ export const dismissBorrowRecord = async (borrowRecordId: string) => {
       .set({ dismissed: 1 })
       .where(eq(borrowRecords.id, borrowRecordId));
 
+    revalidateTag(CACHE_TAGS.users, "max");
+
     return {
       success: true,
     };
@@ -134,22 +141,7 @@ export const dismissBorrowRecord = async (borrowRecordId: string) => {
 
 export const getSimilarBooks = async (bookId: string) => {
   try {
-    const similarBooks = await db
-      .select()
-      .from(books)
-      .where(
-        and(
-          eq(
-            books.genre,
-            db
-              .select({ genre: books.genre })
-              .from(books)
-              .where(eq(books.id, bookId)),
-          ),
-          ne(books.id, bookId),
-        ),
-      )
-      .limit(6);
+    const similarBooks = await getSimilarBooksCached(bookId);
 
     return {
       success: true,

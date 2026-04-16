@@ -1,16 +1,12 @@
-"use client";
-
 import { adminSideBarLinks } from "@/constants";
-import { cn, getInitials } from "@/lib/utils";
+import { getInitials } from "@/lib/utils";
 import Image from "next/image";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Session } from "next-auth";
 import { handleSignOut } from "@/lib/actions/auth";
+import { AdminSidebarLink } from "@/components/navigation/AdminSidebarLink";
 
 const Sidebar = ({ session }: { session: Session }) => {
-  const pathname = usePathname();
   return (
     <div className="admin-sidebar">
       <div>
@@ -25,38 +21,14 @@ const Sidebar = ({ session }: { session: Session }) => {
         </div>
 
         <div className="mt-10 flex flex-col gap-5">
-          {adminSideBarLinks.map((link) => {
-            const isSelected =
-              (link.route !== "/admin" &&
-                pathname.includes(link.route) &&
-                link.route.length > 1) ||
-              pathname === link.route;
-
-            return (
-              <Link href={link.route} key={link.route}>
-                <div
-                  className={cn(
-                    "link",
-                    isSelected && "bg-primary-admin shadow-sm",
-                  )}
-                >
-                  <div className="relative size-5">
-                    <Image
-                      src={link.img}
-                      alt="icon"
-                      fill
-                      className={`${
-                        isSelected ? "brightness-0 invert" : ""
-                      } object-contain`}
-                    />
-                  </div>
-                  <p className={cn(isSelected ? "text-white" : "text-dark")}>
-                    {link.text}
-                  </p>
-                </div>
-              </Link>
-            );
-          })}
+          {adminSideBarLinks.map((link) => (
+            <AdminSidebarLink
+              key={link.route}
+              href={link.route}
+              icon={link.img}
+              label={link.text}
+            />
+          ))}
         </div>
       </div>
 

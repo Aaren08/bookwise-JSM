@@ -8,23 +8,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import dayjs from "dayjs";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import {
-  updateBorrowStatus,
-  clearBorrowRecords,
-} from "@/lib/admin/actions/borrow";
-import { useSortedData } from "@/lib/essentials/useSortedData";
+import { updateBorrowStatus } from "@/lib/admin/actions/borrow";
+import { useSortedData } from "@/lib/admin/essentials/useSortedData";
 import { showSuccessToast, showErrorToast } from "@/lib/essentials/toast-utils";
 import { useSearch } from "@/components/admin/context/SearchContext";
 import UserCell from "../shared/UserCell";
-import TableContainer from "../shared/TableContainer";
 import TableRow from "../shared/TableRow";
 import GenerateReceipt from "../GenerateReceipt";
 import EmptySearch from "../shared/EmptySearch";
-import ClearRecordMenu from "../shared/ClearRecordMenu";
 import { includes } from "@/lib/utils";
 
 interface Props {
@@ -40,17 +35,26 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const BorrowTable = ({ borrowRecords }: Props) => {
-  const { query } = useSearch();
+  const { query, sortOrder } = useSearch();
+
+  const sortFn = useCallback(
+    (a: BorrowRecord, b: BorrowRecord, order: "asc" | "desc") => {
+      return order === "desc"
+        ? new Date(a.borrowDate).getTime() - new Date(b.borrowDate).getTime()
+        : new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime();
+    },
+    [],
+  );
 
   const {
     sortedData: sortedRecords,
     setSortedData: setSortedRecords,
     handleSort,
-  } = useSortedData(borrowRecords, (a, b, order) => {
-    return order === "asc"
-      ? new Date(a.borrowDate).getTime() - new Date(b.borrowDate).getTime()
-      : new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime();
-  });
+  } = useSortedData(borrowRecords, sortFn);
+
+  useEffect(() => {
+    handleSort(sortOrder);
+  }, [sortOrder, handleSort]);
 
   /* filtered view */
   const filteredRecords = useMemo(() => {
@@ -65,7 +69,6 @@ const BorrowTable = ({ borrowRecords }: Props) => {
   }, [sortedRecords, query]);
 
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
 
   const handleStatusChange = async (
     recordId: string,
@@ -92,58 +95,8 @@ const BorrowTable = ({ borrowRecords }: Props) => {
     }
   };
 
-  const handleClearRecords = async (
-    clearReturned: boolean,
-    clearLateReturned: boolean,
-  ) => {
-    setIsClearing(true);
-    try {
-      const res = await clearBorrowRecords({
-        clearReturned,
-        clearLateReturned,
-      });
-
-      if (res.success) {
-        showSuccessToast(res.data?.message || "Records cleared successfully");
-
-        // Remove cleared records from the UI
-        const statusesToRemove: string[] = [];
-        if (clearReturned) statusesToRemove.push("RETURNED");
-        if (clearLateReturned) statusesToRemove.push("LATE_RETURN");
-
-        setSortedRecords(
-          sortedRecords.filter(
-            (record) => !statusesToRemove.includes(record.status),
-          ),
-        );
-      } else {
-        showErrorToast(res.message || "Failed to clear records");
-      }
-    } finally {
-      setIsClearing(false);
-    }
-  };
-
   return (
-    <TableContainer
-      title="Borrow Book Requests"
-      onSort={handleSort}
-      filterLabel="Oldest to Recent"
-      clearMenu={
-        <ClearRecordMenu onClear={handleClearRecords} isClearing={isClearing} />
-      }
-    >
-      <thead className="h-14 bg-blue-50">
-        <tr>
-          <th className="header-cell">Book</th>
-          <th className="header-cell">User Requested</th>
-          <th className="header-cell">Status</th>
-          <th className="header-cell">Borrowed Date</th>
-          <th className="header-cell">Return Date</th>
-          <th className="header-cell">Due Date</th>
-          <th className="header-cell">Receipt</th>
-        </tr>
-      </thead>
+    <>
       <tbody>
         {filteredRecords.length === 0 && query.trim() ? (
           <EmptySearch query={query} entity="borrow records" colSpan={7} />
@@ -158,6 +111,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                       alt={record.bookTitle}
                       width={40}
                       height={60}
+                      style={{ width: "auto", height: "auto" }}
                       className="rounded-sm object-cover"
                     />
                   ) : (
@@ -272,7 +226,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
           ))
         )}
       </tbody>
-    </TableContainer>
+    </>
   );
 };
 

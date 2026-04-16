@@ -3,8 +3,9 @@
 import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
 import { eq, desc, asc, count, sql, inArray } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { CACHE_TAGS } from "@/lib/performance/cache";
 
 export const getAllBorrowRecords = async ({
   limit = 20,
@@ -132,6 +133,8 @@ export const updateBorrowStatus = async ({
     revalidatePath("/my-profile");
     revalidatePath(`/admin/books/${record.bookId}`);
     revalidatePath("/admin/users");
+    revalidateTag(CACHE_TAGS.books, "max");
+    revalidateTag(CACHE_TAGS.users, "max");
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
@@ -180,6 +183,8 @@ export const clearBorrowRecords = async ({
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
     revalidatePath("/admin/users");
+    revalidateTag(CACHE_TAGS.users, "max");
+    revalidateTag(CACHE_TAGS.books, "max");
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
     );

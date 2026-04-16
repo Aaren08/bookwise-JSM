@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface Props {
   isOpen: boolean;
@@ -20,6 +21,11 @@ const ViewUserCard = ({
   universityId,
 }: Props) => {
   const [isImageLoading, setIsImageLoading] = useState(isOpen);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     setIsImageLoading(isOpen);
@@ -40,9 +46,9 @@ const ViewUserCard = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !isMounted) return null;
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} className="modal-close-btn">
@@ -79,7 +85,8 @@ const ViewUserCard = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
