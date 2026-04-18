@@ -13,6 +13,7 @@ import {
   buildSearchHref,
   SearchRouteFilter,
 } from "@/lib/performance/navigation";
+import { navigateWithTopLoader } from "@/lib/performance/top-loader";
 
 interface SearchFilterProps {
   currentFilter: SearchRouteFilter;
@@ -40,7 +41,9 @@ const SearchFilter = ({ currentFilter, query = "" }: SearchFilterProps) => {
       params.delete("page");
 
       startTransition(() => {
-        router.replace(
+        navigateWithTopLoader(
+          router,
+          "replace",
           buildSearchHref({
             query: params.get("query") || "",
             filter: value as SearchRouteFilter,

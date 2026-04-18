@@ -13,13 +13,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import Link from "next/link";
 import { FIELD_NAMES, FIELD_TYPES } from "@/constants";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, CheckCircle } from "lucide-react";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 import { LazyFileUpload } from "@/lib/performance/bundle";
+import { PrefetchOnIntentLink } from "@/lib/performance/PrefetchOnIntentLink";
+import { navigateWithTopLoader } from "@/lib/performance/top-loader";
 import { signInSchema, signUpSchema } from "@/lib/validations";
 
 type AuthFormType = "SIGN_IN" | "SIGN_UP";
@@ -101,7 +102,7 @@ const AuthFormContent = <T extends AuthFormValues>({
       if (result.success) {
         if (isSignIn) {
           showSuccessToast("Login successful");
-          router.push("/");
+          navigateWithTopLoader(router, "push", "/");
         } else {
           showSuccessToast("Account created successfully");
           setSignUpSuccess(true);
@@ -155,9 +156,9 @@ const AuthFormContent = <T extends AuthFormValues>({
         </div>
 
         {/* Back to login */}
-        <Link href="/sign-in" className="confirmation-link-btn">
+        <PrefetchOnIntentLink href="/sign-in" className="confirmation-link-btn">
           Back to Login
-        </Link>
+        </PrefetchOnIntentLink>
       </div>
     );
   }
@@ -265,12 +266,12 @@ const AuthFormContent = <T extends AuthFormValues>({
       <p className="text-center text-base font-medium">
         {isSignIn ? "Don't have an account?" : "Already have an account?"}
 
-        <Link
+        <PrefetchOnIntentLink
           href={isSignIn ? "/sign-up" : "/sign-in"}
           className="font-bold text-primary pl-2"
         >
           {isSignIn ? "Register here" : "Login"}
-        </Link>
+        </PrefetchOnIntentLink>
       </p>
     </div>
   );
