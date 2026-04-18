@@ -4,7 +4,10 @@ import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
 import { eq, desc, asc, count, sql, inArray } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { 
+  broadcastAdminDashboardUpdate,
+  broadcastBookAvailabilityUpdate,
+} from "@/lib/admin/realtime/dashboardSocketServer";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 
 export const getAllBorrowRecords = async ({
@@ -121,12 +124,22 @@ export const updateBorrowStatus = async ({
 
     // 2️⃣ Update book copies (atomic SQL update)
     if (availableCopiesChange !== 0) {
-      await db
+      const [updatedBook] = await db
         .update(books)
         .set({
           availableCopies: sql`${books.availableCopies} + ${availableCopiesChange}`,
         })
-        .where(eq(books.id, record.bookId));
+        .where(eq(books.id, record.bookId))
+        .returning({ availableCopies: books.availableCopies });
+
+      if (updatedBook) {
+        broadcastBookAvailabilityUpdate(
+          record.bookId,
+          updatedBook.availableCopies,
+        ).catch((err) =>
+          console.error("broadcastBookAvailabilityUpdate failed", err),
+        );
+      }
     }
 
     revalidatePath("/admin/borrow-records");

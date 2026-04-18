@@ -1,6 +1,9 @@
 import "server-only";
 
-import { publishAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardRedisPubSub";
+import {
+  publishAdminDashboardUpdate,
+  publishBookAvailabilityUpdate,
+} from "@/lib/admin/realtime/dashboardRedisPubSub";
 
 declare global {
   var adminDashboardWss: undefined;
@@ -8,4 +11,11 @@ declare global {
 
 export const broadcastAdminDashboardUpdate = async () => {
   await publishAdminDashboardUpdate();
+};
+
+export const broadcastBookAvailabilityUpdate = async (
+  bookId: string,
+  availableCount: number,
+) => {
+  await publishBookAvailabilityUpdate(bookId, availableCount);
 };

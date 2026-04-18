@@ -25,12 +25,11 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 - **User Management** - Approve/reject accounts, manage user roles
 - **Book Catalog** - Add, edit, delete books with cover images and videos
 - **Borrow Oversight** - Manage borrow requests, track returns, generate receipts
-- **Account Requests** - Review pending user registrations
 
 ### Technical Features
 
-- **Redis-Backed Realtime Updates** - Upstash Redis pub/sub broadcasts dashboard refresh signals after mutations
-- **SSE Dashboard Streams** - Authenticated Server-Sent Events deliver refresh signals over the main app origin
+- **Redis-Backed Realtime Updates** - Upstash Redis pub/sub broadcasts dashboard refresh signals and book availability updates after mutations
+- **SSE Streams** - Authenticated and public Server-Sent Events deliver refresh signals over the main app origin
 - **Authenticated Dashboard Snapshots** - Admin clients refetch fresh dashboard data from `/api/admin/dashboard`
 - **Rate Limiting** - Redis-based rate limiting for security
 - **Prefetch & Lazy-loading** - Route prefetching and dynamic component loading for faster navigation
@@ -58,7 +57,7 @@ A modern, full-stack library management system built with Next.js 16, featuring 
 - **NextAuth.js v5** - Authentication framework
 - **Drizzle ORM** - Type-safe database operations
 - **PostgreSQL (Neon)** - Serverless database
-- **Redis (Upstash)** - Rate limiting, caching, and admin dashboard realtime pub/sub
+- **Redis (Upstash)** - Rate limiting, caching, and admin dashboard/book availability realtime pub/sub
 
 ### Infrastructure
 
@@ -166,12 +165,12 @@ bookwise/
    http://localhost:3000
    ```
 
-### Realtime Admin Dashboard Setup
+### Realtime SSE Setup
 
 - The admin dashboard opens an authenticated SSE stream to `/api/admin/dashboard/realtime`.
-- Realtime events are published through Upstash Redis pub/sub after dashboard-relevant mutations.
-- Each Node.js app instance maintains one shared Redis subscription and fans events out locally to connected admin clients.
-- The dashboard waits `3000ms` after each refresh signal to match the existing statistics animation flow.
+- Clients seeking book availability data open a public stream to `/api/stream`.
+- Realtime events are published through Upstash Redis pub/sub after dashboard-relevant mutations or availability changes.
+- Each Node.js app instance maintains one shared Redis subscription and fans events out locally based on connected scopes (filtered correctly).
 - No separate websocket port is required for deployment.
 
 ## 📚 Usage
@@ -205,6 +204,7 @@ Comprehensive documentation is available in the `documentation/` folder:
 - **[User Profile](./documentation/User_Profile.md)** - Profile management
 - **[Admin Dashboard](./documentation/Admin_Dashboard.md)** - Admin interface
 - **[Admin Dashboard Realtime](./documentation/Admin_Dashboard_Realtime.md)** - Redis + SSE-based admin dashboard synchronization
+- **[Realtime Book Availability](./documentation/Realtime_Book_Availability.md)** - Pub/Sub mechanism supporting live book stocks
 - **[Performance Improvements](./documentation/Performance_Improvements.md)** - Prefetching, lazy-loading, and route optimization
 - **[Admin Dashboard Optimization](./documentation/Admin_Dashboard_Optimization.md)** - Partial table loading, skeletons, and admin search state
 - **[Cache and Search Consistency](./documentation/Cache_and_Search_Consistency.md)** - Cache tags, invalidation, and search caching

@@ -54,11 +54,15 @@ await db
   })
   .where(eq(borrowRecords.id, recordId));
 
-// Decrease available copies
-await db
+// Decrease available copies (and return the new value!)
+const [updatedBook] = await db
   .update(books)
   .set({ availableCopies: sql`${books.availableCopies} - 1` })
-  .where(eq(books.id, bookId));
+  .where(eq(books.id, bookId))
+  .returning({ availableCopies: books.availableCopies });
+
+// Broadcast to students observing book availability
+broadcastBookAvailabilityUpdate(bookId, updatedBook.availableCopies);
 ```
 
 ### 3. Book Return
@@ -336,6 +340,7 @@ const generateReceipt = async (borrowRecordId: string) => {
 
 - Borrow request limits per user
 - Prevents abuse of the borrowing system
+- **Real-Time Connections**: Public SSE endpoints stream limited via Upstash Redis per IP, coupled with hard caps to prevent concurrent long-lived connection exhaustion.
 
 ## API Endpoints
 
