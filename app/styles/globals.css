@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "nprogress/nprogress.css";
 
 @theme {
   --color-primary: #e7c9a5;
@@ -70,6 +71,40 @@
 }
 
 @layer components {
+  /* NProgress */
+  #nprogress {
+    pointer-events: none;
+  }
+
+  #nprogress .bar {
+    height: 4px !important;
+    top: 0 !important;
+    background: linear-gradient(
+      90deg,
+      #ffd166 0%,
+      #ff8c42 45%,
+      #ff5a36 100%
+    ) !important;
+    box-shadow:
+      0 0 12px rgba(255, 140, 66, 0.8),
+      0 0 24px rgba(255, 90, 54, 0.45);
+    will-change: transform, opacity;
+  }
+
+  #nprogress .bar {
+    transition:
+      transform 0.2s ease-out,
+      opacity 0.25s ease-out;
+  }
+
+  #nprogress .peg {
+    opacity: 1 !important;
+    box-shadow:
+      0 0 12px #ffd166,
+      0 0 18px #ff8c42,
+      0 0 28px #ff5a36;
+  }
+
   .form-btn {
     @apply !bg-primary !text-dark-100 hover:!bg-primary/90 cursor-pointer !inline-flex !min-h-14 !w-full !items-center !justify-center !rounded-md !px-6 !py-2 !font-bold !text-base;
   }
