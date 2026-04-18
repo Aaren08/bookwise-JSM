@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 import Header from "../../components/Header";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
@@ -48,7 +48,9 @@ const layout = async ({ children }: { children: ReactNode }) => {
     <main className="root-container">
       <div className="mx-auto max-w-7xl">
         <Header session={session} />
-        <TopLoader />
+        <Suspense fallback={null}>
+          <TopLoader />
+        </Suspense>
         <div className="mt-20 pb-20">{children}</div>
       </div>
     </main>

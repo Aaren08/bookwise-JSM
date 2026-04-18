@@ -19,7 +19,6 @@ import { BookPlus, BookCheck } from "lucide-react";
 import { createBook, updateBook } from "@/lib/admin/actions/book";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 import { LazyColorPicker, LazyFileUpload } from "@/lib/performance/bundle";
-import { navigateWithTopLoader } from "@/lib/performance/top-loader";
 
 interface Props extends Partial<Book> {
   type: "create" | "update";
@@ -87,7 +86,7 @@ const BookForm = ({ type, ...book }: Props) => {
 
     if (result.success) {
       showSuccessToast(result.message);
-      navigateWithTopLoader(router, "push", `/admin/books/${result.data.id}`);
+      router.push(`/admin/books/${result.data.id}`);
     } else {
       showErrorToast(result.message);
     }

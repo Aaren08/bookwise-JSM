@@ -216,6 +216,18 @@ export const navigateWithTopLoader = (
   href: string,
   options?: RouterNavigationOptions,
 ) => {
-  startTopLoaderForHref(href);
-  router[method](href, options);
+  const started = startTopLoaderForHref(href);
+
+  try {
+    router[method](href, options);
+  } catch (error) {
+    if (started) {
+      clearPendingCompletion();
+      NProgress.done();
+      isNavigating = false;
+      activeTargetRoute = null;
+    }
+    throw error;
+  }
 };
+
