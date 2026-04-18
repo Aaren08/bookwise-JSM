@@ -7,8 +7,25 @@ import {
 } from "@/lib/admin/realtime/dashboardRealtimeEvents";
 import { encodeBorrowBookSseEvent } from "@/lib/admin/realtime/borrowBookRealtimeEvents";
 import { addAdminDashboardRealtimeListener } from "@/lib/admin/realtime/dashboardRealtimeBroker";
+import { ratelimit, safeRateLimit } from "@/lib/essentials/rateLimit";
+
+let activeStreamListeners = 0;
+const MAX_STREAM_LISTENERS = 100;
 
 export async function GET(request: Request) {
+  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+  
+  // Enforce IP rate limiting to prevent abuse
+  const { success } = await safeRateLimit(ratelimit, ip);
+  if (!success || activeStreamListeners >= MAX_STREAM_LISTENERS) {
+    return new Response("Too Many Requests", { status: 429 });
+  }
+
+  // Parse optional bookId to filter incoming pub/sub events
+  const url = new URL(request.url);
+  const bookId = url.searchParams.get("bookId");
+
+  activeStreamListeners++;
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -25,7 +42,10 @@ export async function GET(request: Request) {
       const removeListener = addAdminDashboardRealtimeListener((message) => {
         // Securely filter out admin dashboard events, only broadcasting public ones
         if (message.type === "BOOK_AVAILABILITY_UPDATED") {
-          enqueue(encodeBorrowBookSseEvent(message));
+          // If a bookId was requested, only send updates for that book
+          if (!bookId || message.bookId === bookId) {
+            enqueue(encodeBorrowBookSseEvent(message));
+          }
         }
       });
 
@@ -36,6 +56,7 @@ export async function GET(request: Request) {
       const close = () => {
         if (isClosed) return;
         isClosed = true;
+        activeStreamListeners--;
         clearInterval(keepAlive);
         request.signal.removeEventListener("abort", close);
         removeListener();
@@ -44,6 +65,9 @@ export async function GET(request: Request) {
 
       request.signal.addEventListener("abort", close);
     },
+    cancel() {
+      // The abort signal listener handles the decrement via close()
+    }
   });
 
   return new Response(stream, {

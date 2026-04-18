@@ -340,6 +340,7 @@ const generateReceipt = async (borrowRecordId: string) => {
 
 - Borrow request limits per user
 - Prevents abuse of the borrowing system
+- **Real-Time Connections**: Public SSE endpoints stream limited via Upstash Redis per IP, coupled with hard caps to prevent concurrent long-lived connection exhaustion.
 
 ## API Endpoints
 

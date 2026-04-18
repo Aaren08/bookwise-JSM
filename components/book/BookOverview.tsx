@@ -35,7 +35,7 @@ const BookOverview = ({
     const connect = () => {
       if (!isActive) return;
 
-      stream = new EventSource("/api/stream", { withCredentials: true });
+      stream = new EventSource(`/api/stream?bookId=${id}`, { withCredentials: true });
 
       stream.onmessage = (event) => {
         try {
