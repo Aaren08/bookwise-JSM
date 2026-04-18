@@ -54,11 +54,15 @@ await db
   })
   .where(eq(borrowRecords.id, recordId));
 
-// Decrease available copies
-await db
+// Decrease available copies (and return the new value!)
+const [updatedBook] = await db
   .update(books)
   .set({ availableCopies: sql`${books.availableCopies} - 1` })
-  .where(eq(books.id, bookId));
+  .where(eq(books.id, bookId))
+  .returning({ availableCopies: books.availableCopies });
+
+// Broadcast to students observing book availability
+broadcastBookAvailabilityUpdate(bookId, updatedBook.availableCopies);
 ```
 
 ### 3. Book Return

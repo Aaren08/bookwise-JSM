@@ -7,9 +7,14 @@ import {
   isDashboardRealtimeMessage,
   type AdminDashboardRealtimeMessage,
 } from "@/lib/admin/realtime/dashboardRealtimeEvents";
+import {
+  createBookAvailabilityUpdatedMessage,
+  isBorrowBookRealtimeMessage,
+  type BorrowBookRealtimeMessage,
+} from "@/lib/admin/realtime/borrowBookRealtimeEvents";
 
 export type AdminDashboardRealtimeListener = (
-  message: AdminDashboardRealtimeMessage,
+  message: AdminDashboardRealtimeMessage | BorrowBookRealtimeMessage,
 ) => void;
 
 export type AdminDashboardRealtimeSubscription = ReturnType<
@@ -18,6 +23,18 @@ export type AdminDashboardRealtimeSubscription = ReturnType<
 
 export const publishAdminDashboardUpdate = async () => {
   const message = createDashboardRefreshMessage();
+
+  await redis.publish(
+    ADMIN_DASHBOARD_REALTIME_CHANNEL,
+    JSON.stringify(message),
+  );
+};
+
+export const publishBookAvailabilityUpdate = async (
+  bookId: string,
+  availableCount: number,
+) => {
+  const message = createBookAvailabilityUpdatedMessage(bookId, availableCount);
 
   await redis.publish(
     ADMIN_DASHBOARD_REALTIME_CHANNEL,
@@ -37,7 +54,7 @@ export const subscribeToAdminDashboardUpdates = (
           ? (JSON.parse(data.message) as unknown)
           : data.message;
 
-      if (isDashboardRealtimeMessage(parsed)) {
+      if (isDashboardRealtimeMessage(parsed) || isBorrowBookRealtimeMessage(parsed)) {
         onMessage(parsed);
       }
     } catch (error) {
