@@ -16,7 +16,7 @@ interface Book {
   borrowDate?: Date | string;
   dueDate?: Date | string;
   borrowRecordId?: string;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
   returnDate?: Date | string | null;
 }
 
@@ -60,7 +60,7 @@ interface BorrowRecord {
   borrowDate: string;
   dueDate: string;
   returnDate: string | null;
-  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
   bookTitle: string;
   bookCover: string;
   bookGenre: string;
@@ -116,7 +116,7 @@ interface FileUploadProps {
 
 interface ReceiptButtonProps {
   borrowRecordId?: string;
-  borrowStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
   showOverdueWarning: boolean;
   userRole?: "USER" | "ADMIN";
 }
@@ -125,7 +125,7 @@ interface BorrowedBookCardProps extends Book {
   borrowDate: Date | string;
   dueDate: Date | string;
   borrowRecordId?: string;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
   returnDate?: Date | string | null;
 }
 

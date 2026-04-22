@@ -16,6 +16,14 @@ export const broadcastAdminDashboardUpdate = async () => {
 export const broadcastBookAvailabilityUpdate = async (
   bookId: string,
   availableCount: number,
+  reservedCount: number,
+  borrowedCount: number,
 ) => {
-  await publishBookAvailabilityUpdate(bookId, availableCount);
+  await publishBookAvailabilityUpdate(
+    bookId,
+    availableCount,
+    reservedCount,
+    borrowedCount,
+  );
 };
+

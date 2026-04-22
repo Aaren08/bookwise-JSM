@@ -2,39 +2,137 @@
 
 ## Overview
 
-The BookWise application features a Realtime Book Availability mechanism to instantly reflect the number of available copies across all connected clients. When an admin updates the status of a borrow request, connected user clients on the book details page react immediately without requiring manual refresh.
+BookWise streams book inventory updates to clients viewing a book detail page. When a request is created, approved, rejected, expired, or returned, connected clients receive a realtime event and immediately update the displayed availability.
 
-## Architecture
+The current public stream endpoint is:
 
-This feature rides on top of the same robust, Redis-backed pub/sub architecture used by the Admin Dashboard.
+```text
+GET /api/book/stream?bookId=<book-id>
+```
 
-### 1. The Broker Pipeline
+## What Triggers Updates
 
-1. **Admin Action**: An admin alters a borrow request status (e.g. `PENDING` -> `BORROWED`) resulting in an inventory deduction.
-2. **PostgreSQL Return**: The atomic SQL update utilizes a `.returning()` clause to pinpoint the exact new quantity of available copies.
-3. **Redis Event Push**: A `BOOK_AVAILABILITY_UPDATED` message is dispatched to the centralized Redis pub/sub channel.
+Book availability events are published when any flow changes inventory counters:
 
-### 2. The SSE Distribution
+- User creates a request: `reservedCount + 1`
+- Admin approves a request: `reservedCount - 1`, `borrowedCount + 1`
+- Admin rejects a request: `reservedCount - 1`
+- Reservation expiry cron rejects stale requests: `reservedCount - n`
+- User or admin returns a borrowed book: `borrowedCount - 1`
 
-Unlike dashboard signals, book availability notifications are pushed to the **public** Server-Sent Events (SSE) route at `/api/stream`.
+Because `availableCopies` is generated from `totalCopies - borrowedCount - reservedCount`, every counter change yields a new availability value.
 
-- The public route leverages the `addAdminDashboardRealtimeListener` global setup securely.
-- **Server-Side Filtering**: The route accepts an optional `bookId` query parameter. It strictly evaluates incoming messages and only calls `enqueue` for matching `BOOK_AVAILABILITY_UPDATED` events where the `bookId` matches the client's request. This prevents the server from beaming unnecessary data arrays into clients and prevents exposing unrelated dashboard analytics logic.
+## Event Contract
 
-### 3. Security & Performance Constraints
-To prevent Long-Lived Request Abuse, the pipeline includes immediate middleware defenses:
-- **Rate-Limiting**: Connections fall under an Upstash Redis strict rate-limiter, keyed contextually by the `x-forwarded-for` client IP. Exceeding limits returns a `429 Too Many Requests`.
-- **Max-Listeners**: The system tracks an `activeStreamListeners` global state integer, capping stream connections concurrently (currently configured to 100). If traffic saturates, requests are dropped cleanly. 
+The public stream forwards only `BOOK_UPDATED` messages:
 
-### 4. The Client Integration
+```typescript
+type BookUpdatedMessage = {
+  type: "BOOK_UPDATED";
+  timestamp: string;
+  bookId: string;
+  availableCount: number;
+  reservedCount: number;
+  borrowedCount: number;
+};
+```
 
-`BookOverview.tsx` manages a dynamic `"use client"` lifecycle.
+SSE payload format:
 
-- When traversing the book details page, the browser mounts an `EventSource` attached to `/api/stream?bookId={id}`.
-- A fast connection listens implicitly for targeted changes.
-- **Granular Updates**: Only the component instance observing the modified book receives a React state update for `availableCopies`. This guarantees highly localized and performant UI modifications.
-- Disconnections are gracefully managed with a retry interval.
+```text
+data: {"type":"BOOK_UPDATED","timestamp":"...","bookId":"...","availableCount":2,"reservedCount":1,"borrowedCount":3}
+```
 
-## Extensibility
+The realtime layer also defines `REQUEST_UPDATED` messages internally, but `/api/book/stream` intentionally filters them out and exposes only inventory-safe public events.
 
-This system operates alongside `dashboardRealtimeEvents.ts` under `lib/admin/realtime/borrowBookRealtimeEvents.ts`. By isolating the feature context, we maintain high scalability for future public broadcast additions.
+## Server Architecture
+
+### 1. Publisher
+
+Server actions and route handlers call:
+
+```typescript
+broadcastBookAvailabilityUpdate(
+  bookId,
+  availableCount,
+  reservedCount,
+  borrowedCount,
+);
+```
+
+That function publishes a `BOOK_UPDATED` message into the shared Redis pub/sub channel used by the realtime broker.
+
+### 2. Broker
+
+`dashboardRedisPubSub.ts` subscribes to the shared channel and accepts both:
+
+- admin dashboard refresh messages
+- borrow/inventory realtime messages
+
+The book stream route attaches a listener through the existing broker and filters the mixed event feed before writing to the public SSE response.
+
+### 3. Public SSE route
+
+`app/api/book/stream/route.ts`:
+
+- runs as `nodejs`
+- is `force-dynamic`
+- reads an optional `bookId` query parameter
+- forwards only matching `BOOK_UPDATED` events
+- sends SSE retry metadata and keepalive comments
+
+Filtering behavior:
+
+- if `bookId` is present, only updates for that book are sent
+- if `bookId` is omitted, all public book inventory updates are sent
+
+## Rate Limiting And Connection Caps
+
+The public stream includes lightweight abuse protection:
+
+- IP-based rate limiting via `safeRateLimit(ratelimit, ip)`
+- a process-level listener cap of `100` concurrent stream listeners
+
+If either protection trips, the route returns:
+
+```text
+429 Too Many Requests
+```
+
+## Client Integration
+
+`components/book/BookOverview.tsx` opens:
+
+```typescript
+new EventSource(`/api/book/stream?bookId=${id}`, {
+  withCredentials: true,
+});
+```
+
+Client behavior:
+
+- listens to default `message` events
+- parses the JSON payload
+- updates local state when `payload.type === "BOOK_UPDATED"`
+- retries after 2 seconds if the stream errors
+- closes the connection on unmount
+
+The UI currently updates the displayed `availableCopies` count only, while the event still carries `reservedCount` and `borrowedCount` for future enhancements.
+
+## Keepalive And Retry
+
+The stream writes:
+
+- `retry: <ADMIN_DASHBOARD_SSE_RETRY_MS>` on connect
+- `: keepalive` comments on an interval using `ADMIN_DASHBOARD_SSE_KEEPALIVE_MS`
+
+This helps clients reconnect cleanly and keeps long-lived HTTP connections from going idle.
+
+## Related Files
+
+- `app/api/book/stream/route.ts`
+- `components/book/BookOverview.tsx`
+- `lib/admin/realtime/borrowBookRealtimeEvents.ts`
+- `lib/admin/realtime/dashboardRedisPubSub.ts`
+- `lib/admin/realtime/dashboardSocketServer.ts`
+- `app/api/book/cron/expire-reservations/route.ts`

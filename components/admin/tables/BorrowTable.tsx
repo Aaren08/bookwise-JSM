@@ -12,7 +12,6 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import dayjs from "dayjs";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { updateBorrowStatus } from "@/lib/admin/actions/borrow";
 import { useSortedData } from "@/lib/admin/essentials/useSortedData";
 import { showSuccessToast, showErrorToast } from "@/lib/essentials/toast-utils";
 import { useSearch } from "@/components/admin/context/SearchContext";
@@ -32,6 +31,7 @@ const STATUS_LABELS: Record<string, string> = {
   BORROWED: "borrowed",
   RETURNED: "returned",
   LATE_RETURN: "late return",
+  REJECTED: "rejected",
 };
 
 const BorrowTable = ({ borrowRecords }: Props) => {
@@ -72,24 +72,36 @@ const BorrowTable = ({ borrowRecords }: Props) => {
 
   const handleStatusChange = async (
     recordId: string,
-    newStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN",
+    newStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED",
   ) => {
     setIsUpdating(true);
     try {
-      const res = await updateBorrowStatus({
-        bookId: recordId,
-        status: newStatus,
-      });
-      if (res.success) {
-        showSuccessToast("Borrow status updated successfully");
+      let endpoint = "";
+      if (newStatus === "BORROWED") endpoint = `/api/requests/${recordId}/approve`;
+      else if (newStatus === "REJECTED") endpoint = `/api/requests/${recordId}/reject`;
+      else if (newStatus === "RETURNED" || newStatus === "LATE_RETURN") endpoint = `/api/requests/${recordId}/return`;
+
+      if (!endpoint) {
+        showErrorToast("Invalid status transition");
+        return;
+      }
+
+      const res = await fetch(endpoint, { method: "PATCH" });
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        showSuccessToast(`Status updated to ${newStatus}`);
         setSortedRecords(
           sortedRecords.map((record) =>
             record.id === recordId ? { ...record, status: newStatus } : record,
           ),
         );
       } else {
-        showErrorToast(res.message || "Failed to update borrow status");
+        showErrorToast(result.error || result.message || "Failed to update status");
       }
+    } catch (error) {
+      console.error(error);
+      showErrorToast("Failed to update borrow status");
     } finally {
       setIsUpdating(false);
     }
@@ -134,7 +146,7 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                   defaultValue="PENDING"
                   value={record.status}
                   onValueChange={(
-                    value: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN",
+                    value: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED",
                   ) => handleStatusChange(record.id, value)}
                   disabled={isUpdating}
                 >
@@ -149,6 +161,8 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                         "bg-green-100 text-green-600",
                       record.status === "LATE_RETURN" &&
                         "bg-red-100 text-red-600",
+                      record.status === "REJECTED" &&
+                        "bg-gray-100 text-gray-600",
                     )}
                   >
                     <SelectValue />
@@ -194,6 +208,17 @@ const BorrowTable = ({ borrowRecords }: Props) => {
                       <div className="flex items-center gap-2">
                         <span>Late Return</span>
                         {record.status === "LATE_RETURN" && (
+                          <Check className="size-3 text-green-500" />
+                        )}
+                      </div>
+                    </SelectItem>
+                    <SelectItem
+                      value="REJECTED"
+                      className="cursor-pointer text-sm font-medium focus:bg-light-300"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Rejected</span>
+                        {record.status === "REJECTED" && (
                           <Check className="size-3 text-green-500" />
                         )}
                       </div>

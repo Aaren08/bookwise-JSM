@@ -9,7 +9,7 @@ import { showErrorToast } from "@/lib/essentials/toast-utils";
 
 interface Props {
   borrowRecordId: string;
-  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
 }
 
 const GenerateReceipt = ({ borrowRecordId, status }: Props) => {

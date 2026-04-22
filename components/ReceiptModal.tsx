@@ -21,7 +21,7 @@ type ReceiptModalProps = {
   isOpen: boolean;
   onClose: () => void;
   receipt: Receipt | null;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
 };
 
 const ReceiptModal: React.FC<ReceiptModalProps> = ({

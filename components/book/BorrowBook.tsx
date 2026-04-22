@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { Button } from "../ui/button";
-import { borrowBook } from "@/lib/actions/book";
 import { useState } from "react";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
@@ -17,7 +16,6 @@ interface Props {
 
 const BorrowBook = ({
   bookId,
-  userId,
   borrowingEligibility: { isEligible, message },
 }: Props) => {
   const [isBorrowing, setIsBorrowing] = useState(false);
@@ -30,14 +28,21 @@ const BorrowBook = ({
     setIsBorrowing(true);
 
     try {
-      const result = await borrowBook({ userId, bookId });
-      if (result.success) {
+      const res = await fetch("/api/book/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookId }),
+      });
+
+      const result = await res.json();
+
+      if (res.ok && result.success) {
         showSuccessToast("Book request is forwarded");
       } else {
         showErrorToast(result.error || "Failed to initiate book request");
       }
     } catch (error) {
-      console.log(error);
+      console.error(error);
       showErrorToast("Failed to initiate book request");
     } finally {
       setIsBorrowing(false);

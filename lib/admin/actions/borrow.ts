@@ -4,7 +4,7 @@ import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
 import { eq, desc, asc, count, sql, inArray } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { 
+import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
 } from "@/lib/admin/realtime/dashboardSocketServer";
@@ -71,17 +71,17 @@ export const getAllBorrowRecords = async ({
 };
 
 export const updateBorrowStatus = async ({
-  bookId,
+  borrowRecordId, // Renamed from bookId to be clearer (it was used as record ID)
   status,
 }: {
-  bookId: string;
-  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+  borrowRecordId: string;
+  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
 }) => {
   try {
     const currentRecord = await db
       .select()
       .from(borrowRecords)
-      .where(eq(borrowRecords.id, bookId))
+      .where(eq(borrowRecords.id, borrowRecordId))
       .limit(1);
 
     if (!currentRecord.length) {
@@ -90,71 +90,99 @@ export const updateBorrowStatus = async ({
 
     const record = currentRecord[0];
     const oldStatus = record.borrowStatus;
+    const bookId = record.bookId;
 
-    let availableCopiesChange = 0;
-
-    if (
-      (oldStatus === "BORROWED" || oldStatus === "PENDING") &&
-      (status === "RETURNED" || status === "LATE_RETURN")
-    ) {
-      availableCopiesChange = 1;
-    } else if (
-      (oldStatus === "RETURNED" || oldStatus === "LATE_RETURN") &&
-      (status === "BORROWED" || status === "PENDING")
-    ) {
-      availableCopiesChange = -1;
+    if (oldStatus === status) {
+      return { success: true, message: "Status already set" };
     }
 
-    const updateData: {
-      borrowStatus: typeof status;
-      returnDate?: string | null;
-    } = { borrowStatus: status };
+    const updateData: Partial<typeof borrowRecords.$inferInsert> = {
+      borrowStatus: status,
+    };
+    if (status === "RETURNED" || status === "LATE_RETURN") {
+      updateData.returnDate = new Date().toISOString().slice(0, 10);
+    } else {
+      updateData.returnDate = null;
+    }
 
-    updateData.returnDate =
-      status === "RETURNED" || status === "LATE_RETURN"
-        ? new Date().toISOString().slice(0, 10)
-        : null;
+    // 1️⃣ Update borrow record and book counters in a transaction
+    const result = await db.transaction(async (tx) => {
+      // Update record
+      const [updatedRecord] = await tx
+        .update(borrowRecords)
+        .set(updateData)
+        .where(eq(borrowRecords.id, borrowRecordId))
+        .returning();
 
-    // 1️⃣ Update borrow record
-    const updatedRecord = await db
-      .update(borrowRecords)
-      .set(updateData)
-      .where(eq(borrowRecords.id, bookId))
-      .returning();
+      // Adjust counters based on status transition
+      let reservedChange = 0;
+      let borrowedChange = 0;
 
-    // 2️⃣ Update book copies (atomic SQL update)
-    if (availableCopiesChange !== 0) {
-      const [updatedBook] = await db
-        .update(books)
-        .set({
-          availableCopies: sql`${books.availableCopies} + ${availableCopiesChange}`,
-        })
-        .where(eq(books.id, record.bookId))
-        .returning({ availableCopies: books.availableCopies });
+      // Handle old status release
+      if (oldStatus === "PENDING") reservedChange--;
+      else if (oldStatus === "BORROWED") borrowedChange--;
 
-      if (updatedBook) {
-        broadcastBookAvailabilityUpdate(
-          record.bookId,
-          updatedBook.availableCopies,
-        ).catch((err) =>
-          console.error("broadcastBookAvailabilityUpdate failed", err),
-        );
+      // Handle new status addition
+      if (status === "PENDING") reservedChange++;
+      else if (status === "BORROWED") borrowedChange++;
+
+      if (reservedChange !== 0 || borrowedChange !== 0) {
+        const [updatedBook] = await tx
+          .update(books)
+          .set({
+            reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
+            borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
+          })
+          .where(eq(books.id, bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+          });
+
+        return { updatedRecord, updatedBook };
       }
+
+      // If no counter change, just get current book stats for broadcast
+      const [currentBook] = await tx
+        .select({
+          availableCopies: books.availableCopies,
+          reservedCount: books.reservedCount,
+          borrowedCount: books.borrowedCount,
+        })
+        .from(books)
+        .where(eq(books.id, bookId))
+        .limit(1);
+
+      return { updatedRecord, updatedBook: currentBook };
+    });
+
+    // 2️⃣ Broadcast updates
+    if (result.updatedBook) {
+      broadcastBookAvailabilityUpdate(
+        bookId,
+        result.updatedBook.availableCopies,
+        result.updatedBook.reservedCount,
+        result.updatedBook.borrowedCount,
+      ).catch((err) =>
+        console.error("broadcastBookAvailabilityUpdate failed", err),
+      );
     }
 
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
-    revalidatePath(`/admin/books/${record.bookId}`);
+    revalidatePath(`/admin/books/${bookId}`);
     revalidatePath("/admin/users");
     revalidateTag(CACHE_TAGS.books, "max");
     revalidateTag(CACHE_TAGS.users, "max");
+
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
     return {
       success: true,
-      data: updatedRecord[0],
+      data: result.updatedRecord,
     };
   } catch (error) {
     console.error(error);

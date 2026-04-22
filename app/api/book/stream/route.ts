@@ -40,9 +40,8 @@ export async function GET(request: Request) {
       enqueue(`retry: ${ADMIN_DASHBOARD_SSE_RETRY_MS}\n\n`);
 
       const removeListener = addAdminDashboardRealtimeListener((message) => {
-        // Securely filter out admin dashboard events, only broadcasting public ones
-        if (message.type === "BOOK_AVAILABILITY_UPDATED") {
-          // If a bookId was requested, only send updates for that book
+        // Only forward public inventory events — never send admin-only messages
+        if (message.type === "BOOK_UPDATED") {
           if (!bookId || message.bookId === bookId) {
             enqueue(encodeBorrowBookSseEvent(message));
           }
