@@ -2,379 +2,223 @@
 
 ## Overview
 
-The borrowing system in BookWise manages the complete lifecycle of book loans, from request to return. It includes eligibility checking, status tracking, due date management, and automated workflows for library operations.
+BookWise now models borrowing as a reservation-first workflow:
+
+1. A user submits a borrow request.
+2. The system reserves one copy immediately by incrementing `reservedCount`.
+3. An admin either approves the request (`BORROWED`) or rejects it (`REJECTED`).
+4. When a borrowed book is returned, the record becomes `RETURNED` or `LATE_RETURN`.
+
+This design prevents overbooking during concurrent requests and keeps inventory consistent by deriving `availableCopies` from counters stored on the `books` table.
 
 ## Borrow Record Data Model
 
 ```typescript
 interface BorrowRecord {
-  id: string; // UUID primary key
-  userId: string; // Foreign key to users table
-  bookId: string; // Foreign key to books table
-  borrowDate: Date; // When borrow was initiated
-  dueDate: Date; // When book should be returned
-  returnDate?: Date; // When book was actually returned
-  borrowStatus: BorrowStatus; // Current status
-  dismissed: number; // User dismissal flag (0/1)
-  createdAt: Date; // Record creation timestamp
+  id: string;
+  userId: string;
+  bookId: string;
+  borrowDate: Date;
+  dueDate: string;
+  returnDate?: string | null;
+  borrowStatus: BorrowStatus;
+  reservedAt?: Date | null;
+  dismissed: number;
+  createdAt: Date;
 }
 
-type BorrowStatus = "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN";
+type BorrowStatus =
+  | "PENDING"
+  | "BORROWED"
+  | "RETURNED"
+  | "LATE_RETURN"
+  | "REJECTED";
 ```
 
-## Borrowing Flow
+## Inventory Model
 
-### 1. Borrow Request
+Borrowing no longer mutates `availableCopies` directly. Instead:
 
-Users initiate borrow requests through the book detail page:
-
-```typescript
-const result = await borrowBook({ userId, bookId });
+```text
+availableCopies = totalCopies - borrowedCount - reservedCount
 ```
 
-**Process:**
+- `reservedCount` tracks pending requests
+- `borrowedCount` tracks approved active loans
+- `availableCopies` is a generated database column
 
-- Check book availability (`availableCopies > 0`)
-- Verify user eligibility
-- Prevent duplicate active requests
-- Create borrow record with `PENDING` status
-- Set due date (default: 14 days from borrow date)
+This makes availability deterministic and removes drift between counters and UI state.
 
-### 2. Admin Approval
+## Borrow Request Flow
 
-Admins review and approve borrow requests:
+### 1. User creates a request
+
+Users request a book from the book details page via `POST /api/book/requests`.
 
 ```typescript
-// Update status to BORROWED
-await db
-  .update(borrowRecords)
-  .set({
-    borrowStatus: "BORROWED",
-    borrowDate: new Date(),
-  })
-  .where(eq(borrowRecords.id, recordId));
-
-// Decrease available copies (and return the new value!)
-const [updatedBook] = await db
-  .update(books)
-  .set({ availableCopies: sql`${books.availableCopies} - 1` })
-  .where(eq(books.id, bookId))
-  .returning({ availableCopies: books.availableCopies });
-
-// Broadcast to students observing book availability
-broadcastBookAvailabilityUpdate(bookId, updatedBook.availableCopies);
+await fetch("/api/book/requests", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ bookId }),
+});
 ```
 
-### 3. Book Return
+Server behavior:
 
-Users return books through their profile or admin dashboard:
+- Requires an authenticated, `APPROVED` user
+- Rejects duplicate active requests for the same user and book
+- Lazily expires stale `PENDING` reservations older than 15 minutes
+- Atomically increments `reservedCount` only when capacity exists
+- Creates a `borrow_records` row with:
+  - `borrowStatus = "PENDING"`
+  - `reservedAt = now`
+  - `dueDate = today + 14 days`
+- Broadcasts a realtime book availability update
 
-```typescript
-// Update borrow record
-await db
-  .update(borrowRecords)
-  .set({
-    borrowStatus: "RETURNED",
-    returnDate: new Date(),
-  })
-  .where(eq(borrowRecords.id, recordId));
+### 2. Admin approves a request
 
-// Increase available copies
-await db
-  .update(books)
-  .set({ availableCopies: sql`${books.availableCopies} + 1` })
-  .where(eq(books.id, bookId));
+Admins approve pending requests through `PATCH /api/book/requests/:id/approve`.
+
+Behavior:
+
+- Requires `ADMIN`
+- Only succeeds when the record is still `PENDING`
+- Transitions `PENDING -> BORROWED`
+- Atomically updates counters:
+  - `reservedCount -= 1`
+  - `borrowedCount += 1`
+- Revalidates cached book and user data
+- Broadcasts admin dashboard and book availability updates
+
+### 3. Admin rejects a request
+
+Admins reject pending requests through `PATCH /api/book/requests/:id/reject`.
+
+Behavior:
+
+- Requires `ADMIN`
+- Only succeeds when the record is still `PENDING`
+- Transitions `PENDING -> REJECTED`
+- Releases the reserved slot by decrementing `reservedCount`
+- Broadcasts updated availability
+
+### 4. User or admin returns a borrowed book
+
+Returns are processed through `PATCH /api/book/requests/:id/return`.
+
+Behavior:
+
+- Allowed for the borrowing user or an admin
+- Only succeeds when the record is currently `BORROWED`
+- Compares `dueDate` to today
+- Transitions:
+  - `BORROWED -> RETURNED` when on time
+  - `BORROWED -> LATE_RETURN` when overdue
+- Sets `returnDate`
+- Decrements `borrowedCount`
+- Broadcasts updated availability
+
+## Reservation Expiry
+
+Pending requests expire after 15 minutes.
+
+Two mechanisms enforce this:
+
+1. Lazy expiry during new request creation
+2. Scheduled cleanup at `GET /api/book/cron/expire-reservations`
+
+The cron endpoint:
+
+- Finds stale `PENDING` records where `reservedAt < now - 15 minutes`
+- Bulk updates them to `REJECTED`
+- Decrements `reservedCount` per affected book
+- Revalidates caches
+- Broadcasts inventory and dashboard updates
+
+If `CRON_SECRET` is configured, the route requires:
+
+```text
+Authorization: Bearer <CRON_SECRET>
 ```
 
-## Eligibility Checking
+## Eligibility Rules
 
-### BorrowingEligibility Interface
+Borrowing eligibility is cached and currently checks:
+
+1. The user exists
+2. The book exists
+3. `availableCopies > 0`
+4. The user status is `APPROVED`
+5. The user has no active `PENDING` or `BORROWED` record for that same book
+
+Example return shape:
 
 ```typescript
-interface BorrowingEligibility {
+type BorrowingEligibility = {
   isEligible: boolean;
   message: string;
-}
-```
-
-### Eligibility Criteria
-
-1. **User Status**: Must be `APPROVED`
-2. **Book Availability**: `availableCopies > 0`
-3. **No Active Borrow**: No current `PENDING` or `BORROWED` record for same book
-4. **Account Status**: User account not rejected
-
-### Eligibility Check Implementation
-
-```typescript
-const checkBorrowingEligibility = async (
-  userId: string,
-  bookId: string,
-): Promise<BorrowingEligibility> => {
-  // Check user status
-  const user = await db
-    .select({ status: users.status })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (user[0]?.status !== "APPROVED") {
-    return {
-      isEligible: false,
-      message: "Your account must be approved to borrow books.",
-    };
-  }
-
-  // Check book availability
-  const book = await db
-    .select({ availableCopies: books.availableCopies })
-    .from(books)
-    .where(eq(books.id, bookId))
-    .limit(1);
-
-  if (!book.length || book[0].availableCopies <= 0) {
-    return {
-      isEligible: false,
-      message: "This book is currently unavailable.",
-    };
-  }
-
-  // Check for existing active borrow
-  const existingBorrow = await db
-    .select()
-    .from(borrowRecords)
-    .where(
-      and(
-        eq(borrowRecords.userId, userId),
-        eq(borrowRecords.bookId, bookId),
-        or(
-          eq(borrowRecords.borrowStatus, "PENDING"),
-          eq(borrowRecords.borrowStatus, "BORROWED"),
-        ),
-      ),
-    )
-    .limit(1);
-
-  if (existingBorrow.length > 0) {
-    return {
-      isEligible: false,
-      message: "You already have a pending request or borrowed this book.",
-    };
-  }
-
-  return { isEligible: true, message: "Eligible to borrow" };
 };
 ```
 
-## Due Date Management
+Example messages:
 
-### Default Loan Period
+- `"Book is not available at the moment. Please check back later."`
+- `"You have already borrowed or requested this book."`
+- `"You are not eligible to borrow this book. Please contact the library for more information."`
 
-- **Standard Period**: 14 days from borrow date
-- **Configurable**: Can be adjusted per book or user type
+## Status Lifecycle
 
-### Due Date Calculation
+```text
+PENDING -> BORROWED     (admin approval)
+PENDING -> REJECTED     (admin rejection or reservation expiry)
+BORROWED -> RETURNED    (returned on time)
+BORROWED -> LATE_RETURN (returned after due date)
+```
+
+Notes:
+
+- `PENDING` now represents an active reservation, not just an untracked request
+- `REJECTED` is used for both manual rejection and automatic expiry cleanup
+- Completed user history can still be dismissed with `dismissed = 1`
+
+## Realtime Behavior
+
+Borrowing operations publish book availability updates that include:
 
 ```typescript
-const dueDate = dayjs(borrowDate).add(14, "days").toDate();
-```
-
-### Late Returns
-
-- Automatically detected when `returnDate > dueDate`
-- Status updated to `LATE_RETURN`
-- May trigger penalty workflows
-
-## Borrow Record Management
-
-### Status Transitions
-
-```
-PENDING → BORROWED (admin approval)
-PENDING → CANCELLED (user/admin cancellation)
-BORROWED → RETURNED (normal return)
-BORROWED → LATE_RETURN (overdue return)
-```
-
-### Record Dismissal
-
-Users can dismiss completed records from their view:
-
-```typescript
-await db
-  .update(borrowRecords)
-  .set({ dismissed: 1 })
-  .where(
-    and(
-      eq(borrowRecords.userId, userId),
-      eq(borrowRecords.id, recordId),
-      or(
-        eq(borrowRecords.borrowStatus, "RETURNED"),
-        eq(borrowRecords.borrowStatus, "LATE_RETURN"),
-      ),
-    ),
-  );
-```
-
-## Admin Dashboard Features
-
-### Borrow Records Table
-
-Displays all borrow records with filtering and sorting:
-
-- Filter by status, user, book, date range
-- Sort by borrow date, due date, return date
-- Bulk operations for status updates
-
-### Status Management
-
-Admins can update borrow statuses:
-
-```typescript
-// Approve pending request
-await updateBorrowStatus(recordId, "BORROWED");
-
-// Mark as returned
-await updateBorrowStatus(recordId, "RETURNED");
-```
-
-### Bulk Operations
-
-- Approve multiple pending requests
-- Mark multiple books as returned
-- Generate receipts for completed borrows
-
-## User Dashboard Features
-
-### My Borrowed Books
-
-Users can view their borrow history:
-
-- Current borrows (PENDING, BORROWED)
-- Past borrows (RETURNED, LATE_RETURN)
-- Due dates and overdue warnings
-- Dismiss completed records
-
-### Borrow History
-
-Detailed view of all borrowing activity:
-
-- Borrow date and due date
-- Return date (if applicable)
-- Book details
-- Receipt download (for completed borrows)
-
-## Notifications and Alerts
-
-### Due Date Reminders
-
-- Email notifications 3 days before due date
-- Dashboard warnings for overdue books
-- Push notifications (future feature)
-
-### Status Updates
-
-- Email confirmation when request approved
-- Notifications for overdue books
-- Return confirmation emails
-
-## Receipt Generation
-
-### Receipt Data Structure
-
-```typescript
-interface Receipt {
-  borrowRecordId: string;
-  userName: string;
-  userEmail: string;
-  bookTitle: string;
-  bookAuthor: string;
-  borrowDate: Date;
-  dueDate: Date;
-  returnDate?: Date;
-  status: BorrowStatus;
-  generatedAt: Date;
+{
+  type: "BOOK_UPDATED";
+  timestamp: string;
+  bookId: string;
+  availableCount: number;
+  reservedCount: number;
+  borrowedCount: number;
 }
 ```
 
-### PDF Generation
+Clients on the book page subscribe through `/api/book/stream?bookId=<id>` and update the displayed available copies without a refresh.
 
-Uses jsPDF and html2canvas for receipt creation:
+## Admin UI Changes
 
-```typescript
-const generateReceipt = async (borrowRecordId: string) => {
-  // Fetch borrow record with user and book details
-  const receiptData = await getReceiptData(borrowRecordId);
+The admin borrow table now supports the full status set, including `REJECTED`.
 
-  // Generate PDF
-  const pdf = new jsPDF();
-  // Add receipt content...
-  return pdf.output("blob");
-};
-```
+Status actions are mapped to request endpoints:
 
-## Analytics and Reporting
+- `BORROWED` -> `PATCH /api/book/requests/:id/approve`
+- `REJECTED` -> `PATCH /api/book/requests/:id/reject`
+- `RETURNED` and `LATE_RETURN` -> `PATCH /api/book/requests/:id/return`
 
-### Borrow Statistics
+The UI treats invalid transitions as errors instead of attempting a generic status write.
 
-- Total active borrows
-- Overdue books count
-- Popular books by borrow count
-- User borrowing patterns
+## Related Files
 
-### Usage Reports
-
-- Monthly borrowing trends
-- Peak borrowing periods
-- Book utilization rates
-
-## Security Considerations
-
-### Authorization Checks
-
-- Users can only view/modify their own records
-- Admins can view all records
-- Server-side validation for all operations
-
-### Rate Limiting
-
-- Borrow request limits per user
-- Prevents abuse of the borrowing system
-- **Real-Time Connections**: Public SSE endpoints stream limited via Upstash Redis per IP, coupled with hard caps to prevent concurrent long-lived connection exhaustion.
-
-## API Endpoints
-
-### User Operations
-
-```typescript
-// Request to borrow a book
-POST / api / books / [id] / borrow;
-
-// View user's borrow records
-GET / api / user / borrow - records;
-
-// Dismiss a borrow record
-PUT / api / borrow - records / [id] / dismiss;
-```
-
-### Admin Operations
-
-```typescript
-// Get all borrow records
-GET / admin / api / borrow - records;
-
-// Update borrow status
-PUT / admin / api / borrow - records / [id] / status;
-
-// Generate receipt
-POST / admin / api / receipts / generate;
-```
-
-## Related Components
-
-- `BorrowBook.tsx` - Borrow request button
-- `BorrowedBookCard.tsx` - Borrow record display
-- `GenerateReceipt.tsx` - Receipt generation
-- `ReceiptModal.tsx` - Receipt display modal
-- `BorrowRecordsTable.tsx` - Admin borrow records table</content>
-  <parameter name="filePath">d:\Full Stack\Next.js\bookwise\documentation\Borrowing_System.md
+- `app/api/book/requests/route.ts`
+- `app/api/book/requests/[id]/approve/route.ts`
+- `app/api/book/requests/[id]/reject/route.ts`
+- `app/api/book/requests/[id]/return/route.ts`
+- `app/api/book/cron/expire-reservations/route.ts`
+- `components/book/BorrowBook.tsx`
+- `components/book/BookOverview.tsx`
+- `components/admin/tables/BorrowTable.tsx`
+- `lib/actions/book.ts`
+- `lib/admin/actions/borrow.ts`

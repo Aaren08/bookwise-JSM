@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { and, asc, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, ne, or, sql, inArray } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
 import type { SearchOptions, SearchResult } from "@/lib/essentials/searchQuery";
@@ -99,21 +99,19 @@ export const getBorrowingEligibilityCached = (userId: string, bookId: string) =>
           and(
             eq(borrowRecords.userId, userId),
             eq(borrowRecords.bookId, bookId),
-            eq(borrowRecords.borrowStatus, "BORROWED"),
+            inArray(borrowRecords.borrowStatus, ["BORROWED", "PENDING"]),
           ),
         )
         .limit(1);
 
       return {
         isEligible:
-          book.availableCopies > 0 &&
-          user.status === "APPROVED" &&
-          !borrowing,
+          book.availableCopies > 0 && user.status === "APPROVED" && !borrowing,
         message:
           book.availableCopies <= 0
             ? "Book is not available at the moment. Please check back later."
             : borrowing
-              ? "You have already borrowed this book."
+              ? "You have already borrowed or requested this book."
               : user.status !== "APPROVED"
                 ? "You are not eligible to borrow this book. Please contact the library for more information."
                 : "You are eligible to borrow this book.",

@@ -8,7 +8,7 @@ import {
   type AdminDashboardRealtimeMessage,
 } from "@/lib/admin/realtime/dashboardRealtimeEvents";
 import {
-  createBookAvailabilityUpdatedMessage,
+  createBookUpdatedMessage,
   isBorrowBookRealtimeMessage,
   type BorrowBookRealtimeMessage,
 } from "@/lib/admin/realtime/borrowBookRealtimeEvents";
@@ -33,8 +33,15 @@ export const publishAdminDashboardUpdate = async () => {
 export const publishBookAvailabilityUpdate = async (
   bookId: string,
   availableCount: number,
+  reservedCount: number,
+  borrowedCount: number,
 ) => {
-  const message = createBookAvailabilityUpdatedMessage(bookId, availableCount);
+  const message = createBookUpdatedMessage(
+    bookId,
+    availableCount,
+    reservedCount,
+    borrowedCount,
+  );
 
   await redis.publish(
     ADMIN_DASHBOARD_REALTIME_CHANNEL,

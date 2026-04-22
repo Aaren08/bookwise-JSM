@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   integer,
   uuid,
@@ -8,6 +9,7 @@ import {
   date,
   timestamp,
   real,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const STATUS_ENUM = pgEnum("status", [
@@ -23,6 +25,7 @@ export const BORROW_STATUS_ENUM = pgEnum("borrow_status", [
   "BORROWED",
   "RETURNED",
   "LATE_RETURN",
+  "REJECTED",
 ]);
 
 export const users = pgTable("users", {
@@ -47,13 +50,26 @@ export const books = pgTable("books", {
   genre: varchar("genre", { length: 255 }).notNull(),
   rating: real("rating").notNull().default(0),
   totalCopies: integer("total_copies").notNull().default(1),
-  availableCopies: integer("available_copies").notNull().default(0),
+  // Managed explicitly by application transactions (never set manually)
+  borrowedCount: integer("borrowed_count").notNull().default(0),
+  reservedCount: integer("reserved_count").notNull().default(0),
+  // GENERATED ALWAYS AS (total_copies - borrowed_count - reserved_count) STORED
+  // PostgreSQL ensures this can never be inconsistent with the two source columns.
+  availableCopies: integer("available_copies")
+    .generatedAlwaysAs(
+      sql`total_copies - borrowed_count - reserved_count`,
+    )
+    .notNull(),
   description: text("description").notNull(),
   coverColor: varchar("cover_color", { length: 7 }).notNull(),
   coverUrl: text("cover_url").notNull(),
   videoUrl: text("video_url").notNull(),
   summary: text("summary").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => {
+  return {
+    availableCopiesIdx: index("available_copies_idx").on(table.availableCopies),
+  };
 });
 
 export const borrowRecords = pgTable("borrow_records", {
@@ -72,6 +88,13 @@ export const borrowRecords = pgTable("borrow_records", {
   borrowStatus: BORROW_STATUS_ENUM("borrow_status")
     .default("PENDING")
     .notNull(),
+  // Timestamp set when status = PENDING; used by expiration cron to detect stale reservations.
+  reservedAt: timestamp("reserved_at", { withTimezone: true }),
   dismissed: integer("dismissed").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => {
+  return {
+    bookStatusIdx: index("book_status_idx").on(table.bookId, table.borrowStatus),
+    reservedAtIdx: index("reserved_at_idx").on(table.reservedAt),
+  };
 });

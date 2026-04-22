@@ -6,84 +6,138 @@ import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
 import { auth } from "@/auth";
 import dayjs from "dayjs";
-import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import {
+  broadcastAdminDashboardUpdate,
+  broadcastBookAvailabilityUpdate,
+} from "@/lib/admin/realtime/dashboardSocketServer";
 import { CACHE_TAGS, getSimilarBooksCached } from "@/lib/performance/cache";
+import { sql } from "drizzle-orm";
 
+/**
+ * borrowBook — Server Action
+ *
+ * Production-safe borrow request creation with:
+ *  - Atomic conditional UPDATE (no SELECT then UPDATE race condition)
+ *  - Duplicate-request guard (same user + book + active status)
+ *  - Correct reservation accounting: only reserved_count incremented (NOT borrowed_count)
+ *  - Real-time broadcast after commit
+ */
 export const borrowBook = async (params: BorrowBookParams) => {
   const { userId, bookId } = params;
 
   try {
-    const book = await db
-      .select({ availableCopies: books.availableCopies })
-      .from(books)
-      .where(eq(books.id, bookId))
-      .limit(1);
-
-    if (!book.length || book[0].availableCopies <= 0) {
-      return {
-        success: false,
-        error: "Book is not available for requesting",
-      };
-    }
-
-    const existingBorrow = await db
-      .select()
+    // ── 1. Gate: no active (PENDING or BORROWED) record for this user+book ───
+    const [existing] = await db
+      .select({ id: borrowRecords.id })
       .from(borrowRecords)
       .where(
         and(
           eq(borrowRecords.userId, userId),
           eq(borrowRecords.bookId, bookId),
-          eq(borrowRecords.bookId, bookId),
+          sql`${borrowRecords.borrowStatus} IN ('PENDING', 'BORROWED')`,
         ),
       )
       .limit(1);
 
-    if (existingBorrow.length > 0) {
-      const activeBorrow = existingBorrow.find(
-        (record) =>
-          record.borrowStatus === "BORROWED" ||
-          record.borrowStatus === "PENDING",
-      );
-
-      if (activeBorrow) {
-        return {
-          success: false,
-          error: "You have already forwarded a request",
-        };
-      }
+    if (existing) {
+      return {
+        success: false,
+        error: "You already have an active request for this book.",
+      };
     }
 
-    const dueDate = dayjs().add(14, "days").toDate().toISOString();
+    // ── 2. Lazy expiry: release any stale PENDING slots for this book ─────────
+    //    This runs before checking availability so freed slots are counted.
+    const staleExpiry = await db
+      .update(borrowRecords)
+      .set({ borrowStatus: "REJECTED" })
+      .where(
+        and(
+          eq(borrowRecords.bookId, bookId),
+          eq(borrowRecords.borrowStatus, "PENDING"),
+          sql`${borrowRecords.reservedAt} < NOW() - INTERVAL '15 minutes'`,
+        ),
+      )
+      .returning({ id: borrowRecords.id });
 
-    const record = await db.insert(borrowRecords).values({
-      userId,
-      bookId,
-      dueDate,
-      borrowStatus: "PENDING",
-    });
+    // Reclaim reserved_count for any expired records
+    if (staleExpiry.length > 0) {
+      await db
+        .update(books)
+        .set({
+          reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${staleExpiry.length})`,
+        })
+        .where(eq(books.id, bookId));
+    }
 
-    await db
+    // ── 3. Atomic reservation: only proceeds when capacity exists ─────────────
+    //    reserved_count + borrowed_count < total_copies  → safe to reserve
+    const [updatedBook] = await db
       .update(books)
-      .set({ availableCopies: book[0].availableCopies - 1 })
-      .where(eq(books.id, bookId));
+      .set({
+        reservedCount: sql`${books.reservedCount} + 1`,
+      })
+      .where(
+        and(
+          eq(books.id, bookId),
+          sql`${books.reservedCount} + ${books.borrowedCount} < ${books.totalCopies}`,
+        ),
+      )
+      .returning({
+        availableCopies: books.availableCopies,
+        reservedCount: books.reservedCount,
+        borrowedCount: books.borrowedCount,
+      });
 
+    if (!updatedBook) {
+      return {
+        success: false,
+        error: "Book is not available for requesting at this time.",
+      };
+    }
+
+    // ── 4. Insert the PENDING borrow record ───────────────────────────────────
+    const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
+    const now = new Date();
+
+    const [record] = await db
+      .insert(borrowRecords)
+      .values({
+        userId,
+        bookId,
+        dueDate,
+        borrowStatus: "PENDING",
+        reservedAt: now,
+        borrowDate: now,
+      })
+      .returning({ id: borrowRecords.id });
+
+    // ── 5. Revalidate caches + fire-and-forget broadcast ──────────────────────
     revalidateTag(CACHE_TAGS.books, "max");
     revalidateTag(CACHE_TAGS.users, "max");
 
-    // Fire-and-forget: broadcast failure should not affect user response
+    broadcastBookAvailabilityUpdate(
+      bookId,
+      updatedBook.availableCopies,
+      updatedBook.reservedCount,
+      updatedBook.borrowedCount,
+    ).catch((err) =>
+      console.error("Failed to broadcast book availability update:", err),
+    );
+
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("Failed to broadcast dashboard update:", err),
     );
 
     return {
       success: true,
-      data: JSON.parse(JSON.stringify(record)),
+      data: { id: record.id, status: "PENDING" },
     };
   } catch (error) {
-    console.log(error);
+    console.error("[borrowBook]", error);
     return {
       success: false,
-      error: "Failed to initiate book request",
+      error: "Failed to initiate book request.",
     };
   }
 };

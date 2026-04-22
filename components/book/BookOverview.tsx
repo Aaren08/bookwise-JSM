@@ -25,7 +25,9 @@ const BookOverview = ({
   userId,
   borrowingEligibility,
 }: BookOverviewProps) => {
-  const [availableCopies, setAvailableCopies] = useState(initialAvailableCopies);
+  const [availableCopies, setAvailableCopies] = useState(
+    initialAvailableCopies,
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -35,15 +37,14 @@ const BookOverview = ({
     const connect = () => {
       if (!isActive) return;
 
-      stream = new EventSource(`/api/stream?bookId=${id}`, { withCredentials: true });
+      stream = new EventSource(`/api/book/stream?bookId=${id}`, {
+        withCredentials: true,
+      });
 
       stream.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (
-            payload.type === "BOOK_AVAILABILITY_UPDATED" && 
-            payload.bookId === id
-          ) {
+          if (payload.type === "BOOK_UPDATED" && payload.bookId === id) {
             setAvailableCopies(payload.availableCount);
           }
         } catch (error) {
@@ -54,7 +55,7 @@ const BookOverview = ({
       stream.onerror = () => {
         stream?.close();
         if (!isActive) return;
-        
+
         reconnectTimeout = setTimeout(() => {
           connect();
         }, 2000);
