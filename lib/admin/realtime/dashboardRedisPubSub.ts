@@ -8,18 +8,33 @@ import {
   type AdminDashboardRealtimeMessage,
 } from "@/lib/admin/realtime/dashboardRealtimeEvents";
 import {
+  BORROW_BOOK_REALTIME_CHANNEL,
+  BORROW_BOOK_REALTIME_REPLAY_KEY,
+  BORROW_BOOK_REALTIME_REPLAY_LIMIT,
+  BORROW_BOOK_REALTIME_SEQUENCE_KEY,
   createBookUpdatedMessage,
-  isBorrowBookRealtimeMessage,
+  isBorrowBookRealtimeEvent,
+  type BorrowBookRealtimeEvent,
   type BorrowBookRealtimeMessage,
 } from "@/lib/admin/realtime/borrowBookRealtimeEvents";
 
 export type AdminDashboardRealtimeListener = (
-  message: AdminDashboardRealtimeMessage | BorrowBookRealtimeMessage,
+  message: AdminDashboardRealtimeMessage,
 ) => void;
 
 export type AdminDashboardRealtimeSubscription = ReturnType<
   typeof redis.subscribe
 >;
+
+export type BorrowBookRealtimeSubscription = ReturnType<typeof redis.subscribe>;
+
+const parsePubSubMessage = (value: unknown) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  return JSON.parse(value) as unknown;
+};
 
 export const publishAdminDashboardUpdate = async () => {
   const message = createDashboardRefreshMessage();
@@ -28,6 +43,41 @@ export const publishAdminDashboardUpdate = async () => {
     ADMIN_DASHBOARD_REALTIME_CHANNEL,
     JSON.stringify(message),
   );
+};
+
+const publishBorrowBookRealtimeMessage = async (
+  message: BorrowBookRealtimeMessage,
+) => {
+  const eventJson = (await redis.eval(
+    `
+    local id = redis.call('INCR', KEYS[1])
+    local message = cjson.decode(ARGV[1])
+    local event = {
+      id = id,
+      event = ARGV[2],
+      message = message,
+      publishedAt = ARGV[3]
+    }
+    local eventJson = cjson.encode(event)
+    redis.call('RPUSH', KEYS[2], eventJson)
+    redis.call('LTRIM', KEYS[2], -tonumber(ARGV[4]), -1)
+    redis.call('PUBLISH', KEYS[3], eventJson)
+    return eventJson
+    `,
+    [
+      BORROW_BOOK_REALTIME_SEQUENCE_KEY,
+      BORROW_BOOK_REALTIME_REPLAY_KEY,
+      BORROW_BOOK_REALTIME_CHANNEL,
+    ],
+    [
+      JSON.stringify(message),
+      message.type,
+      new Date().toISOString(),
+      BORROW_BOOK_REALTIME_REPLAY_LIMIT,
+    ],
+  )) as string;
+
+  return JSON.parse(eventJson) as BorrowBookRealtimeEvent;
 };
 
 export const publishBookAvailabilityUpdate = async (
@@ -43,10 +93,55 @@ export const publishBookAvailabilityUpdate = async (
     borrowedCount,
   );
 
-  await redis.publish(
-    ADMIN_DASHBOARD_REALTIME_CHANNEL,
-    JSON.stringify(message),
-  );
+  return publishBorrowBookRealtimeMessage(message);
+};
+
+export const getBorrowBookRealtimeReplay = async (lastEventId?: number) => {
+  try {
+    const replay = await redis.lrange<string>(BORROW_BOOK_REALTIME_REPLAY_KEY, 0, -1);
+
+    return replay
+      .map((entry) => {
+        try {
+          return parsePubSubMessage(entry);
+        } catch (error) {
+          console.error("Failed to parse replayable book realtime event:", error);
+          return null;
+        }
+      })
+      .filter(isBorrowBookRealtimeEvent)
+      .filter((event) =>
+        typeof lastEventId === "number" ? event.id > lastEventId : true,
+      )
+      .sort((left, right) => left.id - right.id);
+  } catch (error) {
+    console.error("Failed to load book realtime replay events:", error);
+    return [];
+  }
+};
+
+export const subscribeToBorrowBookUpdates = (
+  onMessage: (event: BorrowBookRealtimeEvent) => void,
+) => {
+  const subscription = redis.subscribe([BORROW_BOOK_REALTIME_CHANNEL]);
+
+  subscription.on("message", (data) => {
+    try {
+      const parsed = parsePubSubMessage(data.message);
+
+      if (isBorrowBookRealtimeEvent(parsed)) {
+        onMessage(parsed);
+      }
+    } catch (error) {
+      console.error("Failed to parse book realtime message:", error);
+    }
+  });
+
+  subscription.on("error", (error) => {
+    console.error("Book realtime Redis subscription error:", error);
+  });
+
+  return subscription;
 };
 
 export const subscribeToAdminDashboardUpdates = (
@@ -56,12 +151,9 @@ export const subscribeToAdminDashboardUpdates = (
 
   subscription.on("message", (data) => {
     try {
-      const parsed =
-        typeof data.message === "string"
-          ? (JSON.parse(data.message) as unknown)
-          : data.message;
+      const parsed = parsePubSubMessage(data.message);
 
-      if (isDashboardRealtimeMessage(parsed) || isBorrowBookRealtimeMessage(parsed)) {
+      if (isDashboardRealtimeMessage(parsed)) {
         onMessage(parsed);
       }
     } catch (error) {

@@ -1,76 +1,182 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { auth } from "@/auth";
 import {
   ADMIN_DASHBOARD_SSE_KEEPALIVE_MS,
   ADMIN_DASHBOARD_SSE_RETRY_MS,
 } from "@/lib/admin/realtime/dashboardRealtimeEvents";
 import { encodeBorrowBookSseEvent } from "@/lib/admin/realtime/borrowBookRealtimeEvents";
-import { addAdminDashboardRealtimeListener } from "@/lib/admin/realtime/dashboardRealtimeBroker";
-import { ratelimit, safeRateLimit } from "@/lib/essentials/rateLimit";
+import {
+  getBorrowBookRealtimeReplay,
+  subscribeToBorrowBookUpdates,
+  type BorrowBookRealtimeSubscription,
+} from "@/lib/admin/realtime/dashboardRedisPubSub";
+import {
+  acquireSseConnectionLease,
+  anonymousSseConnectRateLimit,
+  authenticatedSseConnectRateLimit,
+  createRateLimitHeaders,
+  getRateLimitIdentity,
+  releaseSseConnectionLease,
+  refreshSseConnectionLease,
+  safeRateLimit,
+} from "@/lib/essentials/rateLimit";
 
-let activeStreamListeners = 0;
-const MAX_STREAM_LISTENERS = 100;
+const CLOSE_EVENT = "event: stream.close\ndata: {\"reason\":\"server_disconnect\"}\n\n";
+
+const parseLastEventId = (request: Request) => {
+  const rawValue = request.headers.get("last-event-id");
+
+  if (!rawValue) return null;
+
+  const parsed = Number.parseInt(rawValue, 10);
+
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 export async function GET(request: Request) {
-  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-  
-  // Enforce IP rate limiting to prevent abuse
-  const { success } = await safeRateLimit(ratelimit, ip);
-  if (!success || activeStreamListeners >= MAX_STREAM_LISTENERS) {
-    return new Response("Too Many Requests", { status: 429 });
+  const session = await auth();
+  const identity = getRateLimitIdentity(request, session?.user?.id);
+  const rateLimitClient =
+    identity.kind === "user"
+      ? authenticatedSseConnectRateLimit
+      : anonymousSseConnectRateLimit;
+  const rateLimitResult = await safeRateLimit(rateLimitClient, identity.key);
+
+  if (!rateLimitResult.success) {
+    return new Response("Too Many Requests", {
+      status: 429,
+      headers: createRateLimitHeaders(rateLimitResult),
+    });
   }
 
-  // Parse optional bookId to filter incoming pub/sub events
+  const lease = await acquireSseConnectionLease(identity);
+
+  if (!lease.success) {
+    return new Response("Too Many Open Streams", {
+      status: 429,
+      headers: {
+        "Retry-After": "30",
+        "X-Connection-Limit": String(lease.limit),
+      },
+    });
+  }
+
   const url = new URL(request.url);
   const bookId = url.searchParams.get("bookId");
-
-  activeStreamListeners++;
+  const lastEventId = parseLastEventId(request);
   const encoder = new TextEncoder();
 
+  let isClosed = false;
+  let keepAlive: NodeJS.Timeout | undefined;
+  let subscription: BorrowBookRealtimeSubscription | undefined;
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+
+  const cleanup = () => {
+    if (isClosed) return;
+    isClosed = true;
+
+    if (keepAlive) clearInterval(keepAlive);
+    request.signal.removeEventListener("abort", cleanup);
+
+    if (subscription) {
+      void subscription.unsubscribe().catch((error) => {
+        console.error("Failed to unsubscribe book realtime stream:", error);
+      });
+    }
+
+    if (lease.leaseId) {
+      void releaseSseConnectionLease(lease.key, lease.leaseId);
+    }
+
+    if (controller) {
+      try {
+        controller.close();
+      } catch {
+        // Stream is already closed.
+      }
+    }
+  };
+
+  request.signal.addEventListener("abort", cleanup);
+
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let isClosed = false;
+    async start(c) {
+      controller = c;
+      let highestDeliveredEventId = lastEventId ?? 0;
+      const bufferedLiveEvents: Awaited<
+        ReturnType<typeof getBorrowBookRealtimeReplay>
+      > = [];
+      let replayFinished = false;
 
       const enqueue = (payload: string) => {
         if (isClosed) return;
-        controller.enqueue(encoder.encode(payload));
+        controller?.enqueue(encoder.encode(payload));
       };
+
+      const matchesFilter = (eventBookId: string) =>
+        !bookId || eventBookId === bookId;
+
+      const sendEvent = (event: (typeof bufferedLiveEvents)[number]) => {
+        if (!matchesFilter(event.message.bookId)) return;
+        if (event.id <= highestDeliveredEventId) return;
+
+        highestDeliveredEventId = event.id;
+        enqueue(encodeBorrowBookSseEvent(event));
+      };
+
+      subscription = subscribeToBorrowBookUpdates((event) => {
+        if (replayFinished) {
+          sendEvent(event);
+          return;
+        }
+
+        bufferedLiveEvents.push(event);
+      });
+
+      keepAlive = setInterval(() => {
+        enqueue(": keepalive\n\n");
+        if (lease.leaseId) {
+          void refreshSseConnectionLease(lease.key, lease.leaseId);
+        }
+      }, ADMIN_DASHBOARD_SSE_KEEPALIVE_MS);
 
       enqueue(`retry: ${ADMIN_DASHBOARD_SSE_RETRY_MS}\n\n`);
 
-      const removeListener = addAdminDashboardRealtimeListener((message) => {
-        // Only forward public inventory events — never send admin-only messages
-        if (message.type === "BOOK_UPDATED") {
-          if (!bookId || message.bookId === bookId) {
-            enqueue(encodeBorrowBookSseEvent(message));
-          }
+      try {
+        const replayEvents = await getBorrowBookRealtimeReplay(
+          highestDeliveredEventId > 0 ? highestDeliveredEventId : undefined,
+        );
+
+        for (const event of replayEvents) {
+          sendEvent(event);
         }
+      } catch (error) {
+        console.error("Failed while bootstrapping book realtime stream:", error);
+      } finally {
+        replayFinished = true;
+
+        bufferedLiveEvents
+          .sort((left, right) => left.id - right.id)
+          .forEach((event) => {
+            sendEvent(event);
+          });
+      }
+
+      subscription.on("error", () => {
+        enqueue(CLOSE_EVENT);
+        cleanup();
       });
-
-      const keepAlive = setInterval(() => {
-        enqueue(": keepalive\n\n");
-      }, ADMIN_DASHBOARD_SSE_KEEPALIVE_MS);
-
-      const close = () => {
-        if (isClosed) return;
-        isClosed = true;
-        activeStreamListeners--;
-        clearInterval(keepAlive);
-        request.signal.removeEventListener("abort", close);
-        removeListener();
-        controller.close();
-      };
-
-      request.signal.addEventListener("abort", close);
     },
     cancel() {
-      // The abort signal listener handles the decrement via close()
-    }
+      cleanup();
+    },
   });
 
   return new Response(stream, {
     headers: {
+      ...createRateLimitHeaders(rateLimitResult),
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "Content-Type": "text/event-stream; charset=utf-8",

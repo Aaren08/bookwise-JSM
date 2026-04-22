@@ -30,44 +30,31 @@ const BookOverview = ({
   );
 
   useEffect(() => {
-    let isActive = true;
-    let stream: EventSource | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    const stream = new EventSource(`/api/book/stream?bookId=${id}`, {
+      withCredentials: true,
+    });
 
-    const connect = () => {
-      if (!isActive) return;
-
-      stream = new EventSource(`/api/book/stream?bookId=${id}`, {
-        withCredentials: true,
-      });
-
-      stream.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "BOOK_UPDATED" && payload.bookId === id) {
-            setAvailableCopies(payload.availableCount);
-          }
-        } catch (error) {
-          console.error("Invalid streaming message:", error);
+    const handleBookUpdate = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "BOOK_UPDATED" && payload.bookId === id) {
+          setAvailableCopies(payload.availableCount);
         }
-      };
-
-      stream.onerror = () => {
-        stream?.close();
-        if (!isActive) return;
-
-        reconnectTimeout = setTimeout(() => {
-          connect();
-        }, 2000);
-      };
+      } catch (error) {
+        console.error("Invalid streaming message:", error);
+      }
     };
 
-    connect();
+    stream.addEventListener("BOOK_UPDATED", handleBookUpdate);
+
+    stream.onerror = () => {
+      // Native EventSource reconnection is less aggressive than layering a
+      // second reconnect loop on top of it.
+    };
 
     return () => {
-      isActive = false;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      stream?.close();
+      stream.removeEventListener("BOOK_UPDATED", handleBookUpdate);
+      stream.close();
     };
   }, [id]);
 
