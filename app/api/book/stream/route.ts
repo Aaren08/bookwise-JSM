@@ -10,6 +10,7 @@ import { encodeBorrowBookSseEvent } from "@/lib/admin/realtime/borrowBookRealtim
 import {
   getBorrowBookRealtimeReplay,
   subscribeToBorrowBookUpdates,
+  type BorrowBookRealtimeSubscription,
 } from "@/lib/admin/realtime/dashboardRedisPubSub";
 import {
   acquireSseConnectionLease,
@@ -67,9 +68,42 @@ export async function GET(request: Request) {
   const lastEventId = parseLastEventId(request);
   const encoder = new TextEncoder();
 
+  let isClosed = false;
+  let keepAlive: NodeJS.Timeout | undefined;
+  let subscription: BorrowBookRealtimeSubscription | undefined;
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+
+  const cleanup = () => {
+    if (isClosed) return;
+    isClosed = true;
+
+    if (keepAlive) clearInterval(keepAlive);
+    request.signal.removeEventListener("abort", cleanup);
+
+    if (subscription) {
+      void subscription.unsubscribe().catch((error) => {
+        console.error("Failed to unsubscribe book realtime stream:", error);
+      });
+    }
+
+    if (lease.leaseId) {
+      void releaseSseConnectionLease(lease.key, lease.leaseId);
+    }
+
+    if (controller) {
+      try {
+        controller.close();
+      } catch {
+        // Stream is already closed.
+      }
+    }
+  };
+
+  request.signal.addEventListener("abort", cleanup);
+
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let isClosed = false;
+    async start(c) {
+      controller = c;
       let highestDeliveredEventId = lastEventId ?? 0;
       const bufferedLiveEvents: Awaited<
         ReturnType<typeof getBorrowBookRealtimeReplay>
@@ -78,15 +112,13 @@ export async function GET(request: Request) {
 
       const enqueue = (payload: string) => {
         if (isClosed) return;
-        controller.enqueue(encoder.encode(payload));
+        controller?.enqueue(encoder.encode(payload));
       };
 
       const matchesFilter = (eventBookId: string) =>
         !bookId || eventBookId === bookId;
 
-      const sendEvent = (
-        event: (typeof bufferedLiveEvents)[number],
-      ) => {
+      const sendEvent = (event: (typeof bufferedLiveEvents)[number]) => {
         if (!matchesFilter(event.message.bookId)) return;
         if (event.id <= highestDeliveredEventId) return;
 
@@ -94,7 +126,7 @@ export async function GET(request: Request) {
         enqueue(encodeBorrowBookSseEvent(event));
       };
 
-      const subscription = subscribeToBorrowBookUpdates((event) => {
+      subscription = subscribeToBorrowBookUpdates((event) => {
         if (replayFinished) {
           sendEvent(event);
           return;
@@ -103,30 +135,12 @@ export async function GET(request: Request) {
         bufferedLiveEvents.push(event);
       });
 
-      const keepAlive = setInterval(() => {
+      keepAlive = setInterval(() => {
         enqueue(": keepalive\n\n");
-        void refreshSseConnectionLease(lease.key);
-      }, ADMIN_DASHBOARD_SSE_KEEPALIVE_MS);
-
-      const close = () => {
-        if (isClosed) return;
-
-        isClosed = true;
-        clearInterval(keepAlive);
-        request.signal.removeEventListener("abort", close);
-        void subscription.unsubscribe().catch((error) => {
-          console.error("Failed to unsubscribe book realtime stream:", error);
-        });
-        void releaseSseConnectionLease(lease.key);
-
-        try {
-          controller.close();
-        } catch {
-          // Stream is already closed.
+        if (lease.leaseId) {
+          void refreshSseConnectionLease(lease.key, lease.leaseId);
         }
-      };
-
-      request.signal.addEventListener("abort", close);
+      }, ADMIN_DASHBOARD_SSE_KEEPALIVE_MS);
 
       enqueue(`retry: ${ADMIN_DASHBOARD_SSE_RETRY_MS}\n\n`);
 
@@ -152,11 +166,11 @@ export async function GET(request: Request) {
 
       subscription.on("error", () => {
         enqueue(CLOSE_EVENT);
-        close();
+        cleanup();
       });
     },
     cancel() {
-      // The abort listener above handles cleanup.
+      cleanup();
     },
   });
 

@@ -1,5 +1,6 @@
 import redis from "@/database/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import crypto from "node:crypto";
 
 const fallbackResponse = {
   success: true,
@@ -158,6 +159,7 @@ export const updateAvatarRateLimit = new Ratelimit({
 
 export type SseConnectionLease = {
   key: string;
+  leaseId: string | null;
   limit: number;
   current: number;
   reset: number;
@@ -173,38 +175,51 @@ export const acquireSseConnectionLease = async (
       ? AUTHENTICATED_SSE_CONNECTION_LIMIT
       : ANONYMOUS_SSE_CONNECTION_LIMIT;
 
+  const leaseId = crypto.randomUUID();
+  const now = Date.now();
+
   try {
-    const current = await redis.incr(connectionKey);
-    await redis.pexpire(connectionKey, SSE_CONNECTION_TTL_MS);
+    // Atomic: purge expired, check count, and add new lease if under limit.
+    const result = (await redis.eval(
+      `
+      local key = KEYS[1]
+      local now = tonumber(ARGV[1])
+      local ttl_ms = tonumber(ARGV[2])
+      local limit = tonumber(ARGV[3])
+      local lease_id = ARGV[4]
 
-    if (current > limit) {
-      const remaining = await redis.decr(connectionKey);
+      redis.call('ZREMRANGEBYSCORE', key, 0, now)
+      local count = redis.call('ZCARD', key)
 
-      if (remaining <= 0) {
-        await redis.del(connectionKey);
-      }
+      if count < limit then
+        redis.call('ZADD', key, now + ttl_ms, lease_id)
+        redis.call('PEXPIRE', key, ttl_ms)
+        return {1, count + 1}
+      else
+        return {0, count}
+      end
+      `,
+      [connectionKey],
+      [now, SSE_CONNECTION_TTL_MS, limit, leaseId],
+    )) as [number, number];
 
-      return {
-        key: connectionKey,
-        limit,
-        current,
-        reset: Date.now() + SSE_CONNECTION_TTL_MS,
-        success: false,
-      };
-    }
+    const [successCode, current] = result;
+    const success = successCode === 1;
 
     return {
       key: connectionKey,
+      leaseId: success ? leaseId : null,
       limit,
       current,
       reset: Date.now() + SSE_CONNECTION_TTL_MS,
-      success: true,
+      success,
     };
   } catch (error) {
     console.warn("Failed to acquire SSE connection lease:", error);
 
     return {
       key: connectionKey,
+      leaseId,
       limit,
       current: 1,
       reset: Date.now() + SSE_CONNECTION_TTL_MS,
@@ -213,21 +228,26 @@ export const acquireSseConnectionLease = async (
   }
 };
 
-export const refreshSseConnectionLease = async (leaseKey: string) => {
+export const refreshSseConnectionLease = async (
+  leaseKey: string,
+  leaseId: string,
+) => {
   try {
+    const now = Date.now();
+    const expiry = now + SSE_CONNECTION_TTL_MS;
+    await redis.zadd(leaseKey, { score: expiry, member: leaseId });
     await redis.pexpire(leaseKey, SSE_CONNECTION_TTL_MS);
   } catch (error) {
     console.warn("Failed to refresh SSE connection lease:", error);
   }
 };
 
-export const releaseSseConnectionLease = async (leaseKey: string) => {
+export const releaseSseConnectionLease = async (
+  leaseKey: string,
+  leaseId: string,
+) => {
   try {
-    const remaining = await redis.decr(leaseKey);
-
-    if (remaining <= 0) {
-      await redis.del(leaseKey);
-    }
+    await redis.zrem(leaseKey, leaseId);
   } catch (error) {
     console.warn("Failed to release SSE connection lease:", error);
   }

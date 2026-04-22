@@ -48,23 +48,36 @@ export const publishAdminDashboardUpdate = async () => {
 const publishBorrowBookRealtimeMessage = async (
   message: BorrowBookRealtimeMessage,
 ) => {
-  const eventId = await redis.incr(BORROW_BOOK_REALTIME_SEQUENCE_KEY);
-  const event: BorrowBookRealtimeEvent = {
-    id: eventId,
-    event: message.type,
-    message,
-    publishedAt: new Date().toISOString(),
-  };
+  const eventJson = (await redis.eval(
+    `
+    local id = redis.call('INCR', KEYS[1])
+    local message = cjson.decode(ARGV[1])
+    local event = {
+      id = id,
+      event = ARGV[2],
+      message = message,
+      publishedAt = ARGV[3]
+    }
+    local eventJson = cjson.encode(event)
+    redis.call('RPUSH', KEYS[2], eventJson)
+    redis.call('LTRIM', KEYS[2], -tonumber(ARGV[4]), -1)
+    redis.call('PUBLISH', KEYS[3], eventJson)
+    return eventJson
+    `,
+    [
+      BORROW_BOOK_REALTIME_SEQUENCE_KEY,
+      BORROW_BOOK_REALTIME_REPLAY_KEY,
+      BORROW_BOOK_REALTIME_CHANNEL,
+    ],
+    [
+      JSON.stringify(message),
+      message.type,
+      new Date().toISOString(),
+      BORROW_BOOK_REALTIME_REPLAY_LIMIT,
+    ],
+  )) as string;
 
-  await redis.rpush(BORROW_BOOK_REALTIME_REPLAY_KEY, JSON.stringify(event));
-  await redis.ltrim(
-    BORROW_BOOK_REALTIME_REPLAY_KEY,
-    -BORROW_BOOK_REALTIME_REPLAY_LIMIT,
-    -1,
-  );
-  await redis.publish(BORROW_BOOK_REALTIME_CHANNEL, JSON.stringify(event));
-
-  return event;
+  return JSON.parse(eventJson) as BorrowBookRealtimeEvent;
 };
 
 export const publishBookAvailabilityUpdate = async (

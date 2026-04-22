@@ -34,7 +34,7 @@ const BookOverview = ({
       withCredentials: true,
     });
 
-    stream.onmessage = (event) => {
+    const handleBookUpdate = (event: MessageEvent) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === "BOOK_UPDATED" && payload.bookId === id) {
@@ -45,12 +45,15 @@ const BookOverview = ({
       }
     };
 
+    stream.addEventListener("BOOK_UPDATED", handleBookUpdate);
+
     stream.onerror = () => {
       // Native EventSource reconnection is less aggressive than layering a
       // second reconnect loop on top of it.
     };
 
     return () => {
+      stream.removeEventListener("BOOK_UPDATED", handleBookUpdate);
       stream.close();
     };
   }, [id]);
