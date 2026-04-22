@@ -22,7 +22,6 @@ let isConfigured = false;
 let isNavigating = false;
 let navigationStartedAt = 0;
 let navigationSequence = 0;
-let activeTargetRoute: string | null = null;
 let finishTimeout: number | null = null;
 let paintFrame: number | null = null;
 
@@ -53,8 +52,9 @@ const clearPendingCompletion = () => {
   }
 };
 
-const isModifiedEvent = (event: MouseEvent | React.MouseEvent<HTMLAnchorElement>) =>
-  event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+const isModifiedEvent = (
+  event: MouseEvent | React.MouseEvent<HTMLAnchorElement>,
+) => event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
 
 const getCurrentRoute = () => {
   if (typeof window === "undefined") {
@@ -116,6 +116,13 @@ export const shouldStartProgressForAnchorClick = (
   return targetRoute !== getCurrentRoute();
 };
 
+const forceComplete = () => {
+  NProgress.done();
+  isNavigating = false;
+  finishTimeout = null;
+  paintFrame = null;
+};
+
 export const startTopLoader = (targetRoute?: string | null) => {
   if (typeof window === "undefined") {
     return false;
@@ -132,7 +139,6 @@ export const startTopLoader = (targetRoute?: string | null) => {
   clearPendingCompletion();
 
   navigationSequence += 1;
-  activeTargetRoute = resolvedTarget;
 
   if (!isNavigating) {
     isNavigating = true;
@@ -155,7 +161,7 @@ export const startTopLoaderForHref = (href: string) => {
   return startTopLoader(targetRoute);
 };
 
-export const bumpTopLoaderForRouteCommit = (route: string) => {
+export const bumpTopLoaderForRouteCommit = () => {
   if (typeof window === "undefined") {
     return;
   }
@@ -168,18 +174,26 @@ export const bumpTopLoaderForRouteCommit = (route: string) => {
     NProgress.start();
   }
 
-  activeTargetRoute = route;
-
   if ((NProgress.status ?? 0) < ROUTE_COMMIT_PROGRESS) {
     NProgress.set(ROUTE_COMMIT_PROGRESS);
   }
 };
 
-export const completeTopLoader = (route: string) => {
-  if (typeof window === "undefined" || !isNavigating) {
+export const completeTopLoader = () => {
+  if (typeof window === "undefined") {
     return;
   }
 
+  // If nothing is navigating, make sure any lingering bar is cleaned up.
+  if (!isNavigating) {
+    if (NProgress.status !== null) {
+      forceComplete();
+    }
+    return;
+  }
+
+  // Snapshot the sequence at the moment completeTopLoader is called so the
+  // closure below can detect whether *another* navigation has since started.
   const completionSequence = navigationSequence;
 
   clearPendingCompletion();
@@ -191,17 +205,18 @@ export const completeTopLoader = (route: string) => {
         const remainingVisibleTime = Math.max(MIN_VISIBLE_MS - elapsed, 0);
 
         finishTimeout = window.setTimeout(() => {
-          if (
-            completionSequence !== navigationSequence ||
-            activeTargetRoute !== route
-          ) {
+          finishTimeout = null;
+          paintFrame = null;
+
+          // A newer navigation has started — let it own the bar instead of
+          // completing here, but only bail if it truly started *after* us.
+          if (completionSequence !== navigationSequence) {
             return;
           }
 
-          NProgress.done();
-          isNavigating = false;
-          activeTargetRoute = null;
-          finishTimeout = null;
+          // The sequence check above is sufficient — if it matches, we're the
+          // rightful owner of this bar and can safely complete it.
+          forceComplete();
         }, remainingVisibleTime + FINISH_DELAY_MS);
       });
     });
@@ -223,11 +238,8 @@ export const navigateWithTopLoader = (
   } catch (error) {
     if (started) {
       clearPendingCompletion();
-      NProgress.done();
-      isNavigating = false;
-      activeTargetRoute = null;
+      forceComplete();
     }
     throw error;
   }
 };
-

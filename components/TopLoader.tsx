@@ -16,9 +16,9 @@ export default function TopLoader() {
   const hasMountedRef = useRef(false);
   const route = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`;
 
-  const handleRouteReady = useEffectEvent((nextRoute: string) => {
-    bumpTopLoaderForRouteCommit(nextRoute);
-    completeTopLoader(nextRoute);
+  const handleRouteReady = useEffectEvent(() => {
+    bumpTopLoaderForRouteCommit();
+    completeTopLoader();
   });
 
   const handleDocumentClick = useEffectEvent((event: MouseEvent) => {
@@ -51,7 +51,7 @@ export default function TopLoader() {
       return;
     }
 
-    handleRouteReady(route);
+    handleRouteReady();
   }, [route]);
 
   useEffect(() => {
