@@ -25,7 +25,6 @@ export const useAdminDashboardRealtime = (
 
   useEffect(() => {
     let isActive = true;
-    let stream: EventSource | null = null;
 
     const clearRefreshTimeout = () => {
       if (refreshTimeoutRef.current) {
@@ -63,39 +62,39 @@ export const useAdminDashboardRealtime = (
       }, DASHBOARD_REALTIME_DELAY_MS);
     };
 
-    const connect = () => {
-      const url = getAdminDashboardRealtimeUrl();
-      if (!url || !isActive) return;
+    const url = getAdminDashboardRealtimeUrl();
+    if (!url) return;
 
-      stream = new EventSource(url, { withCredentials: true });
+    const stream = new EventSource(url, { withCredentials: true });
 
-      stream.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data) as unknown;
-          if (
-            isDashboardRealtimeMessage(payload) &&
-            (payload.type === "dashboard:refresh" ||
-              payload.type === "dashboard:connected")
-          ) {
-            queueRefresh();
-          }
-        } catch (error) {
-          console.error("Invalid admin dashboard realtime message:", error);
+    stream.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as unknown;
+        if (
+          isDashboardRealtimeMessage(payload) &&
+          (payload.type === "dashboard:refresh" ||
+            payload.type === "dashboard:connected")
+        ) {
+          queueRefresh();
         }
-      };
-
-      stream.onerror = () => {
-        stream?.close();
-
-        if (!isActive) return;
-
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, RECONNECT_DELAY_MS);
-      };
+      } catch (error) {
+        console.error("Invalid admin dashboard realtime message:", error);
+      }
     };
 
-    connect();
+    stream.onerror = () => {
+      if (!isActive) return;
+
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+
+      reconnectTimeoutRef.current = setTimeout(() => {
+        // Let the built-in SSE reconnect attempt proceed before we refresh
+        // local state as a fallback.
+        void refreshSnapshot();
+      }, RECONNECT_DELAY_MS);
+    };
 
     return () => {
       isActive = false;
@@ -105,7 +104,7 @@ export const useAdminDashboardRealtime = (
         clearTimeout(reconnectTimeoutRef.current);
       }
 
-      stream?.close();
+      stream.close();
     };
   }, []);
 

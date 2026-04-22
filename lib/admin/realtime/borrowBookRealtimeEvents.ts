@@ -1,5 +1,10 @@
-// ─── BOOK_UPDATED ──────────────────────────────────────────────────────────
-// Broadcast whenever availableCopies, reservedCount, or borrowedCount change.
+export const BORROW_BOOK_REALTIME_CHANNEL = "book:borrow:realtime";
+export const BORROW_BOOK_REALTIME_REPLAY_KEY =
+  "book:borrow:realtime:recent";
+export const BORROW_BOOK_REALTIME_SEQUENCE_KEY =
+  "book:borrow:realtime:sequence";
+export const BORROW_BOOK_REALTIME_REPLAY_LIMIT = 250;
+
 export type BookUpdatedMessage = {
   type: "BOOK_UPDATED";
   timestamp: string;
@@ -9,8 +14,6 @@ export type BookUpdatedMessage = {
   borrowedCount: number;
 };
 
-// ─── REQUEST_UPDATED ───────────────────────────────────────────────────────
-// Broadcast when a borrow-record status changes (admin approval, rejection…).
 export type RequestUpdatedMessage = {
   type: "REQUEST_UPDATED";
   timestamp: string;
@@ -24,7 +27,12 @@ export type BorrowBookRealtimeMessage =
   | BookUpdatedMessage
   | RequestUpdatedMessage;
 
-// ─── Factories ─────────────────────────────────────────────────────────────
+export type BorrowBookRealtimeEvent = {
+  id: number;
+  event: BorrowBookRealtimeMessage["type"];
+  message: BorrowBookRealtimeMessage;
+  publishedAt: string;
+};
 
 export const createBookUpdatedMessage = (
   bookId: string,
@@ -54,20 +62,20 @@ export const createRequestUpdatedMessage = (
   status,
 });
 
-// ─── Type Guards ───────────────────────────────────────────────────────────
-
 export const isBookUpdatedMessage = (
   value: unknown,
 ): value is BookUpdatedMessage => {
   if (!value || typeof value !== "object") return false;
-  const m = value as Record<string, unknown>;
+
+  const message = value as Record<string, unknown>;
+
   return (
-    m.type === "BOOK_UPDATED" &&
-    typeof m.timestamp === "string" &&
-    typeof m.bookId === "string" &&
-    typeof m.availableCount === "number" &&
-    typeof m.reservedCount === "number" &&
-    typeof m.borrowedCount === "number"
+    message.type === "BOOK_UPDATED" &&
+    typeof message.timestamp === "string" &&
+    typeof message.bookId === "string" &&
+    typeof message.availableCount === "number" &&
+    typeof message.reservedCount === "number" &&
+    typeof message.borrowedCount === "number"
   );
 };
 
@@ -75,25 +83,37 @@ export const isRequestUpdatedMessage = (
   value: unknown,
 ): value is RequestUpdatedMessage => {
   if (!value || typeof value !== "object") return false;
-  const m = value as Record<string, unknown>;
+
+  const message = value as Record<string, unknown>;
+
   return (
-    m.type === "REQUEST_UPDATED" &&
-    typeof m.timestamp === "string" &&
-    typeof m.requestId === "string" &&
-    typeof m.bookId === "string" &&
-    typeof m.userId === "string"
+    message.type === "REQUEST_UPDATED" &&
+    typeof message.timestamp === "string" &&
+    typeof message.requestId === "string" &&
+    typeof message.bookId === "string" &&
+    typeof message.userId === "string"
   );
 };
 
-/** Backward-compat alias kept for any code still referencing the old type name. */
 export const isBorrowBookRealtimeMessage = (
   value: unknown,
 ): value is BorrowBookRealtimeMessage =>
   isBookUpdatedMessage(value) || isRequestUpdatedMessage(value);
 
-// ─── SSE Encoder ──────────────────────────────────────────────────────────
+export const isBorrowBookRealtimeEvent = (
+  value: unknown,
+): value is BorrowBookRealtimeEvent => {
+  if (!value || typeof value !== "object") return false;
 
-export const encodeBorrowBookSseEvent = (
-  message: BorrowBookRealtimeMessage,
-) => `data: ${JSON.stringify(message)}\n\n`;
+  const event = value as Record<string, unknown>;
 
+  return (
+    typeof event.id === "number" &&
+    typeof event.event === "string" &&
+    typeof event.publishedAt === "string" &&
+    isBorrowBookRealtimeMessage(event.message)
+  );
+};
+
+export const encodeBorrowBookSseEvent = (event: BorrowBookRealtimeEvent) =>
+  `id: ${event.id}\nevent: ${event.event}\ndata: ${JSON.stringify(event.message)}\n\n`;

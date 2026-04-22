@@ -2,46 +2,117 @@
 
 ## Overview
 
-BookWise implements comprehensive rate limiting using Upstash Redis to protect against abuse, ensure fair usage, and maintain system stability. Rate limits are applied at multiple levels throughout the application.
+BookWise uses Upstash Redis for distributed rate limiting so limits remain correct across local dev, multiple Node processes, and serverless deployments such as Vercel.
+
+The current design separates:
+
+- request-rate limits
+- SSE connection-admission limits
+- concurrent SSE connection leases
+
+This is important because an SSE handshake is not the same thing as a normal API request. Treating both with the same tiny IP bucket caused false `429 Too Many Requests` responses during development and would be unfair in production.
+
+## Goals
+
+- Prevent abusive bursts without throttling normal page loads and SSE reconnects
+- Differentiate anonymous traffic from authenticated traffic
+- Keep limits valid across distributed/serverless instances
+- Return useful rate-limit metadata to clients
 
 ## Technology Stack
 
-- **Upstash Redis** - Serverless Redis for storing rate limit counters
-- **@upstash/ratelimit** - Rate limiting SDK for Upstash Redis
+- `@upstash/redis`
+- `@upstash/ratelimit`
+- Next.js App Router route handlers
 
-## Configuration
+## Current Configuration
 
-### Redis Client
+The active configuration lives in `lib/essentials/rateLimit.ts`.
+
+### Identity Model
+
+Requests are keyed by identity instead of always using IPs:
+
+- authenticated traffic: `user:<userId>`
+- anonymous traffic: `ip:<clientIp>`
+
+Helper:
 
 ```typescript
-// database/redis.ts
-import { Redis } from "@upstash/redis";
-import config from "@/lib/config";
+export const getRateLimitIdentity = (
+  request: Request,
+  userId?: string | null,
+) => {
+  if (userId) {
+    return { key: `user:${userId}`, kind: "user", value: userId };
+  }
 
-const redis = new Redis({
-  url: config.env.upstash.redisUrl,
-  token: config.env.upstash.restToken,
-});
-
-export default redis;
+  const ip = getClientIp(request);
+  return { key: `ip:${ip}`, kind: "ip", value: ip };
+};
 ```
 
-### Rate Limit Definitions
+### API Request Limits
 
 ```typescript
-// lib/essentials/rateLimit.ts
-import redis from "@/database/redis";
-import { Ratelimit } from "@upstash/ratelimit";
-
-// General authentication rate limit
 export const ratelimit = new Ratelimit({
-  redis: redis,
-  limiter: Ratelimit.fixedWindow(5, "1 m"),
+  redis,
+  limiter: Ratelimit.slidingWindow(60, "1 m"),
   analytics: true,
-  prefix: "@upstash/ratelimit",
+  prefix: "ratelimit:api:anonymous",
 });
 
-// Receipt download - per minute limit
+export const authenticatedApiRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(300, "1 m"),
+  analytics: true,
+  prefix: "ratelimit:api:authenticated",
+});
+```
+
+### SSE Handshake Limits
+
+These protect the stream endpoint from reconnect storms without treating a healthy long-lived stream like repeated API spam.
+
+```typescript
+export const anonymousSseConnectRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(12, "1 m"),
+  analytics: true,
+  prefix: "ratelimit:sse:anonymous-connect",
+});
+
+export const authenticatedSseConnectRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(30, "1 m"),
+  analytics: true,
+  prefix: "ratelimit:sse:authenticated-connect",
+});
+```
+
+### Auth Endpoint Limits
+
+Authentication flows are better protected by a token bucket so small bursts are allowed but sustained abuse is throttled quickly.
+
+```typescript
+export const authEndpointRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.tokenBucket(3, "10 m", 6),
+  analytics: true,
+  prefix: "ratelimit:auth:token-bucket",
+});
+```
+
+Meaning:
+
+- refill rate: `3` tokens every `10 minutes`
+- burst size: `6`
+
+### Feature-Specific Limits
+
+These older route-specific limits still exist and are separate from the new SSE work:
+
+```typescript
 export const receiptMinuteRateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, "1 m"),
@@ -49,7 +120,6 @@ export const receiptMinuteRateLimit = new Ratelimit({
   prefix: "ratelimit:receipt:minute",
 });
 
-// Receipt download - daily limit
 export const receiptDailyRateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(10, "1 d"),
@@ -57,7 +127,6 @@ export const receiptDailyRateLimit = new Ratelimit({
   prefix: "ratelimit:receipt:daily",
 });
 
-// Avatar upload rate limit
 export const uploadAvatarRateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(10, "1 d"),
@@ -65,7 +134,6 @@ export const uploadAvatarRateLimit = new Ratelimit({
   prefix: "ratelimit:uploadAvatar:daily",
 });
 
-// Avatar update rate limit
 export const updateAvatarRateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(5, "1 d"),
@@ -74,207 +142,153 @@ export const updateAvatarRateLimit = new Ratelimit({
 });
 ```
 
-## Rate Limit Types
+## Distributed SSE Connection Control
 
-### Fixed Window
-Counts requests in fixed time intervals.
+The old process-level listener cap was removed. It was not valid in serverless because every instance only knew about its own memory.
+
+BookWise now uses Redis-backed connection leases:
 
 ```typescript
-Ratelimit.fixedWindow(5, "1 m") // 5 requests per minute
+const SSE_CONNECTION_TTL_MS = 90_000;
+
+export const ANONYMOUS_SSE_CONNECTION_LIMIT = 2;
+export const AUTHENTICATED_SSE_CONNECTION_LIMIT = 3;
 ```
 
-**Behavior:**
-- Window resets at fixed intervals
-- Simple and predictable
-- Potential for burst at window boundaries
+On connect:
+
+1. Increment `sse:book-stream:connections:<identity>`
+2. Apply a Redis TTL
+3. Reject if the count exceeds the per-identity limit
+
+On keepalive:
+
+1. Refresh the TTL so healthy streams stay leased
+
+On disconnect:
+
+1. Decrement the counter
+2. Delete the key when it reaches zero
+
+This gives BookWise a distributed, crash-tolerant approximation of open stream counts without depending on in-memory global state.
+
+## Algorithms Used
 
 ### Sliding Window
-Smooths out request rates across time.
 
-```typescript
-Ratelimit.slidingWindow(5, "1 m") // 5 requests per minute, smoothed
+Used for general API requests and SSE connection attempts.
+
+Why:
+
+- smoother than fixed windows
+- less boundary bursting
+- better fit for reconnect-heavy traffic
+
+### Token Bucket
+
+Used for auth endpoints.
+
+Why:
+
+- allows short legitimate bursts
+- throttles sustained abuse
+- works well for login/signup/reset flows
+
+### Fixed Window
+
+Still acceptable for coarse daily quotas such as avatars and receipt downloads.
+
+## Recommended Thresholds
+
+These are the practical thresholds currently represented by the code or intended by the architecture:
+
+| Category | Identity | Limit |
+|----------|----------|-------|
+| API requests | Anonymous | `60/min` |
+| API requests | Authenticated | `300/min` |
+| SSE connect attempts | Anonymous | `12/min` |
+| SSE connect attempts | Authenticated | `30/min` |
+| Open SSE streams | Anonymous | `2` |
+| Open SSE streams | Authenticated | `3` |
+| Auth endpoints | Per identity | token bucket `3/10 min`, burst `6` |
+
+## Rate-Limit Responses
+
+When a rate limit trips, the server returns `429 Too Many Requests`.
+
+The helper `createRateLimitHeaders(...)` adds:
+
+```text
+Retry-After
+X-RateLimit-Limit
+X-RateLimit-Remaining
+X-RateLimit-Reset
 ```
 
-**Behavior:**
-- More accurate rate limiting
-- Prevents burst at boundaries
-- Slightly more resource intensive
+Example:
 
-## Rate Limits by Feature
-
-### Authentication
-
-| Endpoint | Limit | Window | Key |
-|----------|-------|--------|-----|
-| Sign In | 5 | 1 minute | IP address |
-| Sign Up | 5 | 1 minute | IP address |
-
-**Implementation:**
 ```typescript
-// lib/actions/auth.ts
-export const signInWithCredentials = async (credentials) => {
-  const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
-  const { success } = await ratelimit.limit(ip);
-
-  if (!success) {
-    return redirect("/too-fast");
-  }
-  // Continue with authentication
-};
-```
-
-### Avatar Management
-
-| Action | Limit | Window | Key |
-|--------|-------|--------|-----|
-| Upload | 10 | 1 day | User ID |
-| Update | 5 | 1 day | User ID |
-
-**Implementation:**
-```typescript
-// app/api/avatar/route.ts
-export async function PUT(request: Request) {
-  const session = await auth();
-  const { success } = await uploadAvatarRateLimit.limit(session.user.id);
-
-  if (!success) {
-    return NextResponse.json({
-      error: "You can only upload your avatar 10 times per day.",
-    }, { status: 429 });
-  }
-  // Continue with upload
+if (!rateLimitResult.success) {
+  return new Response("Too Many Requests", {
+    status: 429,
+    headers: createRateLimitHeaders(rateLimitResult),
+  });
 }
 ```
 
-### Receipt Downloads
+SSE connection leases may also return:
 
-| Action | Limit | Window | Key |
-|--------|-------|--------|-----|
-| Download (burst) | 5 | 1 minute | User ID + Receipt ID |
-| Download (daily) | 10 | 1 day | User ID + Receipt ID |
-
-**Implementation:**
-```typescript
-// app/api/receipt/download/route.ts
-export async function POST(req: Request) {
-  const key = `receipt-download:user:${session.user.id}:receipt:${receiptId}`;
-
-  // Check minute limit
-  const minuteLimit = await receiptMinuteRateLimit.limit(key);
-  if (!minuteLimit.success) {
-    return NextResponse.json({
-      error: "You are downloading this receipt too frequently.",
-      reset: minuteLimit.reset,
-    }, { status: 429 });
-  }
-
-  // Check daily limit
-  const dailyLimit = await receiptDailyRateLimit.limit(key);
-  if (!dailyLimit.success) {
-    return NextResponse.json({
-      error: "You have reached the daily download limit for this receipt.",
-      reset: dailyLimit.reset,
-    }, { status: 429 });
-  }
-
-  return NextResponse.json({ allowed: true });
-}
+```text
+X-Connection-Limit
 ```
 
-## Rate Limit Response
+when the client already has too many open streams.
 
-### HTTP Status
-Rate-limited requests return `429 Too Many Requests`.
+## Why The Previous Design Caused 429s
 
-### Response Body
-```json
-{
-  "error": "Rate limit exceeded message",
-  "reset": 1640000000000
-}
-```
+The earlier implementation used:
 
-The `reset` field contains the Unix timestamp (milliseconds) when the limit resets.
+- a fixed-window `5 requests / minute` limiter
+- an IP-only key
+- a process-local `100` stream cap
+- extra manual reconnect loops on the client
 
-## Too Fast Page
+That caused false positives because:
 
-When authentication rate limits are exceeded, users are redirected to `/too-fast`:
-
-```typescript
-// app/too-fast/page.tsx
-export default function TooFast() {
-  return (
-    <main>
-      <h1>Slow Down!</h1>
-      <p>You're making too many requests. Please wait before trying again.</p>
-    </main>
-  );
-}
-```
-
-## Rate Limit Keys
-
-Keys are constructed to scope limits appropriately:
-
-| Scope | Key Format | Example |
-|-------|------------|---------|
-| IP-based | IP address | `192.168.1.1` |
-| User-based | User ID | `user:abc123` |
-| Resource-specific | User ID + Resource ID | `receipt-download:user:abc123:receipt:xyz789` |
-
-## Analytics
-
-Rate limit analytics are enabled for all limits:
-
-```typescript
-analytics: true
-```
-
-This allows monitoring rate limit usage through the Upstash dashboard.
+- React Strict Mode can mount/unmount twice in dev
+- HMR can reopen EventSource connections repeatedly
+- browser SSE already reconnects automatically
+- manual reconnect logic adds even more handshakes
+- IP-only keys are unfair for shared networks and proxies
+- in-memory caps do not reflect global usage on Vercel
 
 ## Best Practices
 
-### 1. Choose Appropriate Windows
-- Short windows (minutes) for burst protection
-- Long windows (days) for quota management
+### 1. Use identity-aware keys
 
-### 2. Use Meaningful Prefixes
-```typescript
-prefix: "ratelimit:feature:scope"
-```
+Prefer user-based limits for authenticated traffic and IP-based limits only for anonymous traffic.
 
-### 3. Provide Clear Error Messages
-```typescript
-return NextResponse.json({
-  error: "You can only upload your avatar 10 times per day.",
-}, { status: 429 });
-```
+### 2. Separate request limits from stream limits
 
-### 4. Include Reset Time
-```typescript
-{
-  error: "Rate limited",
-  reset: result.reset
-}
-```
+Do not treat long-lived SSE connections like ordinary REST requests.
 
-### 5. Layer Rate Limits
-Combine multiple limits for better protection:
-- Per-minute for burst protection
-- Per-day for quota management
+### 3. Avoid process-global counters
 
-## Environment Variables
+If a limit must be valid across instances, store it in Redis.
 
-```env
-UPSTASH_REDIS_REST_URL=https://your-redis-url.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
-```
+### 4. Return retry metadata
+
+Clients need `Retry-After` and reset information for graceful backoff.
+
+### 5. Keep daily quotas and burst protection separate
+
+Use short windows for bursts and longer windows for quotas.
 
 ## Related Files
 
-- `database/redis.ts` - Redis client configuration
-- `lib/essentials/rateLimit.ts` - Rate limit definitions
-- `lib/actions/auth.ts` - Authentication rate limiting
-- `app/api/avatar/route.ts` - Avatar API rate limiting
-- `app/api/receipt/download/route.ts` - Receipt download rate limiting
-- `app/too-fast/page.tsx` - Rate limit exceeded page
+- `lib/essentials/rateLimit.ts`
+- `app/api/book/stream/route.ts`
+- `components/book/BookOverview.tsx`
+- `lib/admin/realtime/useAdminDashboardRealtime.ts`
+- `app/api/receipt/download/route.ts`
+- `app/api/avatar/route.ts`
