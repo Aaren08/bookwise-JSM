@@ -90,10 +90,16 @@ const BorrowTable = ({ borrowRecords }: Props) => {
       const result = await res.json();
 
       if (res.ok && result.success) {
-        showSuccessToast(`Status updated to ${newStatus}`);
+        showSuccessToast(`Status updated to ${result.data?.status || newStatus}`);
         setSortedRecords(
           sortedRecords.map((record) =>
-            record.id === recordId ? { ...record, status: newStatus } : record,
+            record.id === recordId
+              ? {
+                  ...record,
+                  status: result.data?.status || newStatus,
+                  returnDate: result.data?.returnDate || record.returnDate,
+                }
+              : record,
           ),
         );
       } else {
