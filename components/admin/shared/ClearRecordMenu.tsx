@@ -9,6 +9,7 @@ const ClearRecordMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [clearReturned, setClearReturned] = useState(false);
   const [clearLateReturned, setClearLateReturned] = useState(false);
+  const [clearRejected, setClearRejected] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +31,7 @@ const ClearRecordMenu = () => {
   }, [isOpen]);
 
   const handleClear = async () => {
-    if (!clearReturned && !clearLateReturned) {
+    if (!clearReturned && !clearLateReturned && !clearRejected) {
       return;
     }
 
@@ -39,6 +40,7 @@ const ClearRecordMenu = () => {
       const result = await clearBorrowRecords({
         clearReturned,
         clearLateReturned,
+        clearRejected,
       });
 
       if (!result.success) {
@@ -52,16 +54,18 @@ const ClearRecordMenu = () => {
 
     setClearReturned(false);
     setClearLateReturned(false);
+    setClearRejected(false);
     setIsOpen(false);
   };
 
   const handleCancel = () => {
     setClearReturned(false);
     setClearLateReturned(false);
+    setClearRejected(false);
     setIsOpen(false);
   };
 
-  const hasSelection = clearReturned || clearLateReturned;
+  const hasSelection = clearReturned || clearLateReturned || clearRejected;
 
   return (
     <div className="relative" ref={menuRef}>
@@ -104,6 +108,21 @@ const ClearRecordMenu = () => {
               />
               <label htmlFor="clear-late-returned" className="clear-menu-label">
                 Clear late returned records
+              </label>
+            </div>
+
+            <div
+              className="clear-menu-option"
+              onClick={() => setClearRejected(!clearRejected)}
+            >
+              <Checkbox
+                id="clear-rejected"
+                checked={clearRejected}
+                onCheckedChange={(value) => setClearRejected(!!value)}
+                className="clear-menu-checkbox"
+              />
+              <label htmlFor="clear-rejected" className="clear-menu-label">
+                Clear rejected records
               </label>
             </div>
 

@@ -193,12 +193,14 @@ export const updateBorrowStatus = async ({
 export const clearBorrowRecords = async ({
   clearReturned = false,
   clearLateReturned = false,
+  clearRejected = false,
 }: {
   clearReturned?: boolean;
   clearLateReturned?: boolean;
+  clearRejected?: boolean;
 }) => {
   try {
-    const statusesToClear: Array<"RETURNED" | "LATE_RETURN"> = [];
+    const statusesToClear: Array<"RETURNED" | "LATE_RETURN" | "REJECTED"> = [];
 
     if (clearReturned) {
       statusesToClear.push("RETURNED");
@@ -206,6 +208,10 @@ export const clearBorrowRecords = async ({
 
     if (clearLateReturned) {
       statusesToClear.push("LATE_RETURN");
+    }
+
+    if (clearRejected) {
+      statusesToClear.push("REJECTED");
     }
 
     if (statusesToClear.length === 0) {
