@@ -2,22 +2,30 @@
  * PATCH /api/requests/:id/reject
  *
  * Transitions a PENDING request to REJECTED.
- * - Atomically decrements reserved_count.
- * - Idempotent: returns 409 if record is not currently PENDING.
+ * Uses a single SQL statement so the record update and reserved counter release
+ * stay atomic on the Neon HTTP driver.
  */
 export const runtime = "nodejs";
 
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
-import { books, borrowRecords } from "@/database/schema";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
 } from "@/lib/admin/realtime/dashboardSocketServer";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
-import { eq, and, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
+type RejectRow = {
+  request_id: string;
+  book_id: string;
+  user_id: string;
+  available_copies: number | null;
+  reserved_count: number | null;
+  borrowed_count: number | null;
+};
 
 export async function PATCH(
   _request: Request,
@@ -31,55 +39,56 @@ export async function PATCH(
 
     const { id: recordId } = await params;
 
-    // ── 1. Atomically transition PENDING → REJECTED ──────────────────────────
-    const [record] = await db
-      .update(borrowRecords)
-      .set({ borrowStatus: "REJECTED" })
-      .where(
-        and(
-          eq(borrowRecords.id, recordId),
-          eq(borrowRecords.borrowStatus, "PENDING"),
-        ),
+    const result = await db.execute(sql`
+      WITH updated_record AS (
+        UPDATE borrow_records
+        SET borrow_status = 'REJECTED'::borrow_status
+        WHERE id = ${recordId}
+          AND borrow_status = 'PENDING'::borrow_status
+        RETURNING id, book_id, user_id
+      ),
+      updated_book AS (
+        UPDATE books
+        SET reserved_count = GREATEST(0, reserved_count - 1)
+        WHERE id = (SELECT book_id FROM updated_record)
+        RETURNING id, available_copies, reserved_count, borrowed_count
       )
-      .returning({
-        id: borrowRecords.id,
-        bookId: borrowRecords.bookId,
-        userId: borrowRecords.userId,
-      });
+      SELECT
+        ur.id AS request_id,
+        ur.book_id,
+        ur.user_id,
+        ub.available_copies,
+        ub.reserved_count,
+        ub.borrowed_count
+      FROM updated_record ur
+      LEFT JOIN updated_book ub ON TRUE;
+    `);
 
-    if (!record) {
+    const row = (result.rows[0] as RejectRow | undefined) ?? null;
+
+    if (!row) {
       return NextResponse.json(
         { error: "Request not found or no longer pending." },
         { status: 409 },
       );
     }
 
-    // ── 2. Release the reserved slot ─────────────────────────────────────────
-    const [updatedBook] = await db
-      .update(books)
-      .set({
-        reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
-      })
-      .where(eq(books.id, record.bookId))
-      .returning({
-        availableCopies: books.availableCopies,
-        reservedCount: books.reservedCount,
-        borrowedCount: books.borrowedCount,
-      });
-
-    // ── 3. Revalidate + broadcast ─────────────────────────────────────────────
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
-    revalidatePath(`/admin/books/${record.bookId}`);
+    revalidatePath(`/admin/books/${row.book_id}`);
     revalidateTag(CACHE_TAGS.books, "max");
     revalidateTag(CACHE_TAGS.users, "max");
 
-    if (updatedBook) {
+    if (
+      row.available_copies !== null &&
+      row.reserved_count !== null &&
+      row.borrowed_count !== null
+    ) {
       broadcastBookAvailabilityUpdate(
-        record.bookId,
-        updatedBook.availableCopies,
-        updatedBook.reservedCount,
-        updatedBook.borrowedCount,
+        row.book_id,
+        row.available_copies,
+        row.reserved_count,
+        row.borrowed_count,
       ).catch((err) =>
         console.error("broadcastBookAvailabilityUpdate failed", err),
       );
@@ -92,9 +101,9 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       data: {
-        requestId: record.id,
+        requestId: row.request_id,
         status: "REJECTED",
-        availableCount: updatedBook?.availableCopies ?? null,
+        availableCount: row.available_copies,
       },
     });
   } catch (error) {

@@ -68,6 +68,7 @@ Server behavior:
 - Requires an authenticated, `APPROVED` user
 - Rejects duplicate active requests for the same user and book
 - Lazily expires stale `PENDING` reservations older than 15 minutes
+- Reclaims `reservedCount` using the exact number of rows expired in that request
 - Atomically increments `reservedCount` only when capacity exists
 - Creates a `borrow_records` row with:
   - `borrowStatus = "PENDING"`
@@ -84,6 +85,7 @@ Behavior:
 - Requires `ADMIN`
 - Only succeeds when the record is still `PENDING`
 - Transitions `PENDING -> BORROWED`
+- Uses a single SQL statement on Neon HTTP so the record update and counter swap stay atomic without `db.transaction()`
 - Atomically updates counters:
   - `reservedCount -= 1`
   - `borrowedCount += 1`
@@ -99,6 +101,7 @@ Behavior:
 - Requires `ADMIN`
 - Only succeeds when the record is still `PENDING`
 - Transitions `PENDING -> REJECTED`
+- Uses a single SQL statement on Neon HTTP so the status update and reserved slot release happen together
 - Releases the reserved slot by decrementing `reservedCount`
 - Broadcasts updated availability
 
@@ -111,6 +114,7 @@ Behavior:
 - Allowed for the borrowing user or an admin
 - Only succeeds when the record is currently `BORROWED`
 - Compares `dueDate` to today
+- Uses a single SQL statement on Neon HTTP for the status change and `borrowedCount` decrement
 - Transitions:
   - `BORROWED -> RETURNED` when on time
   - `BORROWED -> LATE_RETURN` when overdue
@@ -200,7 +204,7 @@ Clients on the book page subscribe through `/api/book/stream?bookId=<id>` and up
 
 ## Admin UI Changes
 
-The admin borrow table now supports the full status set, including `REJECTED`.
+The admin borrow table now supports the full status set, including `REJECTED` and explicit `LATE_RETURN` handling for borrowed records.
 
 Status actions are mapped to request endpoints:
 
@@ -208,7 +212,13 @@ Status actions are mapped to request endpoints:
 - `REJECTED` -> `PATCH /api/book/requests/:id/reject`
 - `RETURNED` and `LATE_RETURN` -> `PATCH /api/book/requests/:id/return`
 
-The UI treats invalid transitions as errors instead of attempting a generic status write.
+Recent UX improvements:
+
+- Status changes are optimistic, so the row updates immediately before server confirmation
+- Rollback restores the previous row state on API failure or transition conflict
+- Pending state is tracked per row, so one request does not block the whole table
+- Borrow rows are memoized to reduce full-table re-renders during status updates
+- Invalid transitions are filtered in the dropdown instead of being sent to the server
 
 ## Related Files
 
