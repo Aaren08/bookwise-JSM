@@ -111,8 +111,8 @@ export async function PATCH(
     revalidatePath("/admin/borrow-records");
     revalidatePath("/my-profile");
     revalidatePath(`/admin/books/${current.bookId}`);
-    revalidateTag(CACHE_TAGS.books);
-    revalidateTag(CACHE_TAGS.users);
+    revalidateTag(CACHE_TAGS.books, "max");
+    revalidateTag(CACHE_TAGS.users, "max");
 
     if (updatedBook) {
       broadcastBookAvailabilityUpdate(

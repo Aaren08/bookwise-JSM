@@ -9,15 +9,10 @@ import { CACHE_TAGS } from "@/lib/performance/cache";
 
 export const createBook = async (params: BookParams) => {
   try {
-    const newBook = await db
-      .insert(books)
-      .values({
-        ...params,
-        availableCopies: params.totalCopies,
-      })
-      .returning();
+    const newBook = await db.insert(books).values(params).returning();
 
     revalidateTag(CACHE_TAGS.books, "max");
+
 
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
@@ -42,7 +37,8 @@ export const updateBook = async (
   params: Partial<BookParams> & { id: string },
 ) => {
   try {
-    const updateData: Partial<Book> = { ...params };
+    const { id, ...data } = params;
+    const updateData: Partial<Book> = { ...data };
 
     if (params.totalCopies !== undefined) {
       const [borrowedCountResult] = await db
@@ -50,7 +46,7 @@ export const updateBook = async (
         .from(borrowRecords)
         .where(
           and(
-            eq(borrowRecords.bookId, params.id),
+            eq(borrowRecords.bookId, id),
             eq(borrowRecords.borrowStatus, "BORROWED"),
           ),
         );
@@ -64,17 +60,16 @@ export const updateBook = async (
           message: `Cannot reduce total copies below ${borrowedCount} (currently borrowed)`,
         };
       }
-
-      updateData.availableCopies = newAvailableCopies;
     }
 
     const updatedBook = await db
       .update(books)
       .set(updateData)
-      .where(eq(books.id, params.id))
+      .where(eq(books.id, id))
       .returning();
 
     revalidateTag(CACHE_TAGS.books, "max");
+
 
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
