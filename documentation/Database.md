@@ -22,6 +22,12 @@ const sql = neon(config.env.databaseUrl);
 export const db = drizzle({ client: sql });
 ```
 
+Important driver note:
+
+- The app currently uses the Neon HTTP driver (`drizzle-orm/neon-http`)
+- `db.transaction()` is not supported with this driver
+- Borrow-status mutation routes therefore use single SQL statements with CTEs to keep record and counter updates atomic
+
 ## Enums
 
 ```typescript
@@ -122,6 +128,7 @@ export const borrowRecords = pgTable("borrow_records", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   bookStatusIdx: index("book_status_idx").on(table.bookId, table.borrowStatus),
+  borrowDateIdx: index("borrow_date_idx").on(table.borrowDate),
   reservedAtIdx: index("reserved_at_idx").on(table.reservedAt),
 }));
 ```
@@ -132,6 +139,7 @@ Notable fields:
 - `borrowStatus` now includes `REJECTED`
 - `reservedAtIdx` supports stale reservation cleanup
 - `bookStatusIdx` supports book/status lookups during borrowing flows
+- `borrowDateIdx` supports admin borrow-record sorting and pagination
 
 ## Relationships
 
@@ -170,6 +178,14 @@ Key changes:
 - recreates `available_copies` as a generated stored column
 
 ## Query Patterns
+
+### Atomic approve/reject/return writes on Neon HTTP
+
+Borrow status mutation endpoints use a single SQL statement with CTEs so:
+
+- the borrow record status update succeeds or fails with the related counter update
+- the implementation stays compatible with the Neon HTTP driver
+- conflict detection still works through status-qualified `UPDATE ... WHERE ...`
 
 ### Reserve a copy atomically
 
@@ -211,14 +227,23 @@ await db.update(books).set({
 
 - `available_copies_idx` supports availability-heavy filtering and sorting
 - `book_status_idx` helps status-scoped borrow queries
+- `borrow_date_idx` helps admin borrow-record ordering by `borrow_date`
 - `reserved_at_idx` helps reservation-expiry scans
 - Generated `available_copies` avoids repeated recomputation in application code while preserving consistency
+
+## Migration `0005_borrow_records_borrow_date_idx`
+
+Latest change:
+
+- adds `borrow_date_idx` on `borrow_records.borrow_date`
+- supports the optimized admin borrow-record listing query, which pages `borrow_records` before joining `books` and `users`
 
 ## Related Files
 
 - `database/schema.ts`
 - `database/drizzle.ts`
 - `migrations/0004_shocking_lady_deathstrike.sql`
+- `migrations/0005_borrow_records_borrow_date_idx.sql`
 - `migrations/meta/0004_snapshot.json`
 - `lib/actions/book.ts`
 - `lib/admin/actions/borrow.ts`

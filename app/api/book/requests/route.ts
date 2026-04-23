@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     }
 
     // ── 3. Lazy expiry check: release stale PENDING reservations ────────────
-    await db
+    const expiredReservations = await db
       .update(borrowRecords)
       .set({
         borrowStatus: "REJECTED",
@@ -87,23 +87,18 @@ export async function POST(request: Request) {
           eq(borrowRecords.borrowStatus, "PENDING"),
           sql`${borrowRecords.reservedAt} < NOW() - INTERVAL '15 minutes'`,
         ),
-      );
+      )
+      .returning({ id: borrowRecords.id });
 
     // Reclaim reserved slots for any newly-expired reservations
-    await db
-      .update(books)
-      .set({
-        reservedCount: sql`GREATEST(0,
-          reserved_count - (
-            SELECT COUNT(*) FROM borrow_records
-            WHERE book_id = ${bookId}
-              AND borrow_status = 'REJECTED'
-              AND reserved_at < NOW() - INTERVAL '15 minutes'
-              AND updated_at > NOW() - INTERVAL '1 second'
-          )
-        )`,
-      })
-      .where(eq(books.id, bookId));
+    if (expiredReservations.length > 0) {
+      await db
+        .update(books)
+        .set({
+          reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredReservations.length})`,
+        })
+        .where(eq(books.id, bookId));
+    }
 
     // ── 4. Atomic reservation: increment reserved_count only if capacity exists
     const [updatedBook] = await db

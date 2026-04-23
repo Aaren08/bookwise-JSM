@@ -24,6 +24,12 @@ This document describes the uncommitted admin dashboard and table loading change
 - Updated admin table components.
   - `BookTable`, `UserTable`, `BorrowTable`, `AccountTable` now use `useSortedData` and shared search state.
   - Extracted memoized row components and local state updates to reduce re-renders.
+  - `BorrowTable` now performs optimistic per-row status updates with rollback on failure.
+  - `BorrowTable` keeps request-pending state per row and allows `LATE_RETURN` as a direct option for borrowed items.
+
+- Updated `lib/admin/actions/borrow.ts`.
+  - The borrow-record list now pages `borrow_records` before joining related book and user data.
+  - This reduces unnecessary join work for paginated admin tables.
 
 - Updated `components/admin/dashboard/AdminDashboardRealtime.tsx`.
   - Lazy-loads non-critical dashboard sections using dynamic imports.
@@ -34,6 +40,8 @@ This document describes the uncommitted admin dashboard and table loading change
 - Admin pages now provide a smoother load experience.
 - Table headers remain stable while body content fetches and updates.
 - Search and sort controls share context, giving consistent state across admin sections.
+- Borrow status changes feel immediate while still rolling back cleanly on conflicts or server failures.
+- Borrow record pages scale better because the heaviest joins happen only after pagination.
 
 ## Testing considerations
 

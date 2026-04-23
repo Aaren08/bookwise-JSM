@@ -21,14 +21,33 @@ export const getAllBorrowRecords = async ({
 }) => {
   try {
     const offset = (page - 1) * limit;
-
-    const recordsQuery = db
+    const pagedBorrowRecords = db
       .select({
         id: borrowRecords.id,
         borrowDate: borrowRecords.borrowDate,
         dueDate: borrowRecords.dueDate,
         returnDate: borrowRecords.returnDate,
         status: borrowRecords.borrowStatus,
+        bookId: borrowRecords.bookId,
+        userId: borrowRecords.userId,
+      })
+      .from(borrowRecords)
+      .orderBy(
+        sortOrder === "asc"
+          ? asc(borrowRecords.borrowDate)
+          : desc(borrowRecords.borrowDate),
+      )
+      .limit(limit)
+      .offset(offset)
+      .as("paged_borrow_records");
+
+    const recordsQuery = db
+      .select({
+        id: pagedBorrowRecords.id,
+        borrowDate: pagedBorrowRecords.borrowDate,
+        dueDate: pagedBorrowRecords.dueDate,
+        returnDate: pagedBorrowRecords.returnDate,
+        status: pagedBorrowRecords.status,
         bookTitle: books.title,
         bookCover: books.coverUrl,
         bookGenre: books.genre,
@@ -36,16 +55,16 @@ export const getAllBorrowRecords = async ({
         userEmail: users.email,
         userAvatar: users.userAvatar,
       })
-      .from(borrowRecords)
-      .innerJoin(books, eq(borrowRecords.bookId, books.id))
-      .innerJoin(users, eq(borrowRecords.userId, users.id))
+      .from(pagedBorrowRecords)
+      .innerJoin(books, eq(pagedBorrowRecords.bookId, books.id))
+      .innerJoin(users, eq(pagedBorrowRecords.userId, users.id))
       .orderBy(
         sortOrder === "asc"
-          ? asc(borrowRecords.borrowDate)
-          : desc(borrowRecords.borrowDate),
+          ? asc(pagedBorrowRecords.borrowDate)
+          : desc(pagedBorrowRecords.borrowDate),
       )
       .limit(limit)
-      .offset(offset);
+      .offset(0);
 
     const [records, [{ value: totalRecords }]] = await Promise.all([
       recordsQuery,
@@ -71,7 +90,7 @@ export const getAllBorrowRecords = async ({
 };
 
 export const updateBorrowStatus = async ({
-  borrowRecordId, // Renamed from bookId to be clearer (it was used as record ID)
+  borrowRecordId,
   status,
 }: {
   borrowRecordId: string;
@@ -98,53 +117,50 @@ export const updateBorrowStatus = async ({
 
     const updateData: Partial<typeof borrowRecords.$inferInsert> = {
       borrowStatus: status,
+      returnDate:
+        status === "RETURNED" || status === "LATE_RETURN"
+          ? new Date().toISOString().slice(0, 10)
+          : null,
     };
-    if (status === "RETURNED" || status === "LATE_RETURN") {
-      updateData.returnDate = new Date().toISOString().slice(0, 10);
+
+    let reservedChange = 0;
+    let borrowedChange = 0;
+
+    if (oldStatus === "PENDING") reservedChange--;
+    else if (oldStatus === "BORROWED") borrowedChange--;
+
+    if (status === "PENDING") reservedChange++;
+    else if (status === "BORROWED") borrowedChange++;
+
+    const [updatedRecord] = await db
+      .update(borrowRecords)
+      .set(updateData)
+      .where(eq(borrowRecords.id, borrowRecordId))
+      .returning();
+
+    let updatedBook:
+      | {
+          availableCopies: number;
+          reservedCount: number;
+          borrowedCount: number;
+        }
+      | undefined;
+
+    if (reservedChange !== 0 || borrowedChange !== 0) {
+      [updatedBook] = await db
+        .update(books)
+        .set({
+          reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
+          borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
+        })
+        .where(eq(books.id, bookId))
+        .returning({
+          availableCopies: books.availableCopies,
+          reservedCount: books.reservedCount,
+          borrowedCount: books.borrowedCount,
+        });
     } else {
-      updateData.returnDate = null;
-    }
-
-    // 1️⃣ Update borrow record and book counters in a transaction
-    const result = await db.transaction(async (tx) => {
-      // Update record
-      const [updatedRecord] = await tx
-        .update(borrowRecords)
-        .set(updateData)
-        .where(eq(borrowRecords.id, borrowRecordId))
-        .returning();
-
-      // Adjust counters based on status transition
-      let reservedChange = 0;
-      let borrowedChange = 0;
-
-      // Handle old status release
-      if (oldStatus === "PENDING") reservedChange--;
-      else if (oldStatus === "BORROWED") borrowedChange--;
-
-      // Handle new status addition
-      if (status === "PENDING") reservedChange++;
-      else if (status === "BORROWED") borrowedChange++;
-
-      if (reservedChange !== 0 || borrowedChange !== 0) {
-        const [updatedBook] = await tx
-          .update(books)
-          .set({
-            reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
-            borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
-          })
-          .where(eq(books.id, bookId))
-          .returning({
-            availableCopies: books.availableCopies,
-            reservedCount: books.reservedCount,
-            borrowedCount: books.borrowedCount,
-          });
-
-        return { updatedRecord, updatedBook };
-      }
-
-      // If no counter change, just get current book stats for broadcast
-      const [currentBook] = await tx
+      [updatedBook] = await db
         .select({
           availableCopies: books.availableCopies,
           reservedCount: books.reservedCount,
@@ -153,17 +169,14 @@ export const updateBorrowStatus = async ({
         .from(books)
         .where(eq(books.id, bookId))
         .limit(1);
+    }
 
-      return { updatedRecord, updatedBook: currentBook };
-    });
-
-    // 2️⃣ Broadcast updates
-    if (result.updatedBook) {
+    if (updatedBook) {
       broadcastBookAvailabilityUpdate(
         bookId,
-        result.updatedBook.availableCopies,
-        result.updatedBook.reservedCount,
-        result.updatedBook.borrowedCount,
+        updatedBook.availableCopies,
+        updatedBook.reservedCount,
+        updatedBook.borrowedCount,
       ).catch((err) =>
         console.error("broadcastBookAvailabilityUpdate failed", err),
       );
@@ -182,7 +195,7 @@ export const updateBorrowStatus = async ({
 
     return {
       success: true,
-      data: result.updatedRecord,
+      data: updatedRecord,
     };
   } catch (error) {
     console.error(error);
@@ -221,7 +234,6 @@ export const clearBorrowRecords = async ({
       };
     }
 
-    // Delete records with the specified statuses
     const deletedRecords = await db
       .delete(borrowRecords)
       .where(inArray(borrowRecords.borrowStatus, statusesToClear))

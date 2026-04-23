@@ -95,6 +95,7 @@ export const borrowRecords = pgTable("borrow_records", {
 }, (table) => {
   return {
     bookStatusIdx: index("book_status_idx").on(table.bookId, table.borrowStatus),
+    borrowDateIdx: index("borrow_date_idx").on(table.borrowDate),
     reservedAtIdx: index("reserved_at_idx").on(table.reservedAt),
   };
 });
