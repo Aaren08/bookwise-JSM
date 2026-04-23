@@ -77,9 +77,9 @@ const BorrowTable = ({ borrowRecords }: Props) => {
     setIsUpdating(true);
     try {
       let endpoint = "";
-      if (newStatus === "BORROWED") endpoint = `/api/requests/${recordId}/approve`;
-      else if (newStatus === "REJECTED") endpoint = `/api/requests/${recordId}/reject`;
-      else if (newStatus === "RETURNED" || newStatus === "LATE_RETURN") endpoint = `/api/requests/${recordId}/return`;
+      if (newStatus === "BORROWED") endpoint = `/api/book/requests/${recordId}/approve`;
+      else if (newStatus === "REJECTED") endpoint = `/api/book/requests/${recordId}/reject`;
+      else if (newStatus === "RETURNED" || newStatus === "LATE_RETURN") endpoint = `/api/book/requests/${recordId}/return`;
 
       if (!endpoint) {
         showErrorToast("Invalid status transition");
