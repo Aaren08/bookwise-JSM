@@ -17,6 +17,10 @@ const MIN_VISIBLE_MS = 420;
 const FINISH_DELAY_MS = 160;
 const CLICK_BUMP = 0.08;
 const ROUTE_COMMIT_PROGRESS = 0.82;
+// If no route commit arrives within this window, force-complete the bar.
+// This covers the case where Next.js serves from cache and never triggers
+// a pathname/searchParams change, so handleRouteReady() is never called.
+const NAVIGATION_TIMEOUT_MS = 5000;
 
 let isConfigured = false;
 let isNavigating = false;
@@ -24,6 +28,7 @@ let navigationStartedAt = 0;
 let navigationSequence = 0;
 let finishTimeout: number | null = null;
 let paintFrame: number | null = null;
+let navigationSafetyTimeout: number | null = null; // ← NEW
 
 const ensureConfigured = () => {
   if (isConfigured) {
@@ -49,6 +54,14 @@ const clearPendingCompletion = () => {
   if (finishTimeout !== null) {
     window.clearTimeout(finishTimeout);
     finishTimeout = null;
+  }
+};
+
+// ← NEW: clears the safety net without completing
+const clearNavigationSafety = () => {
+  if (navigationSafetyTimeout !== null) {
+    window.clearTimeout(navigationSafetyTimeout);
+    navigationSafetyTimeout = null;
   }
 };
 
@@ -121,6 +134,7 @@ const forceComplete = () => {
   isNavigating = false;
   finishTimeout = null;
   paintFrame = null;
+  clearNavigationSafety(); // ← NEW: always clean up safety net on completion
 };
 
 export const startTopLoader = (targetRoute?: string | null) => {
@@ -137,6 +151,7 @@ export const startTopLoader = (targetRoute?: string | null) => {
 
   ensureConfigured();
   clearPendingCompletion();
+  clearNavigationSafety(); // ← NEW: reset safety net on each new navigation
 
   navigationSequence += 1;
 
@@ -144,8 +159,30 @@ export const startTopLoader = (targetRoute?: string | null) => {
     isNavigating = true;
     navigationStartedAt = window.performance.now();
     NProgress.start();
+
+    // ← NEW: arm the safety net — if completeTopLoader is never called
+    // (e.g. Next.js cache hit doesn't update pathname), force-complete.
+    const safetySequence = navigationSequence;
+    navigationSafetyTimeout = window.setTimeout(() => {
+      navigationSafetyTimeout = null;
+      // Only fire if this navigation is still the active one and never completed
+      if (isNavigating && navigationSequence === safetySequence) {
+        forceComplete();
+      }
+    }, NAVIGATION_TIMEOUT_MS);
+
     return true;
   }
+
+  // Already navigating — bump progress and reset the safety net for the
+  // new sequence so it gets its own fresh timeout window.
+  const safetySequence = navigationSequence;
+  navigationSafetyTimeout = window.setTimeout(() => {
+    navigationSafetyTimeout = null;
+    if (isNavigating && navigationSequence === safetySequence) {
+      forceComplete();
+    }
+  }, NAVIGATION_TIMEOUT_MS);
 
   NProgress.inc(CLICK_BUMP);
   return false;
@@ -192,8 +229,6 @@ export const completeTopLoader = () => {
     return;
   }
 
-  // Snapshot the sequence at the moment completeTopLoader is called so the
-  // closure below can detect whether *another* navigation has since started.
   const completionSequence = navigationSequence;
 
   clearPendingCompletion();
@@ -208,14 +243,14 @@ export const completeTopLoader = () => {
           finishTimeout = null;
           paintFrame = null;
 
-          // A newer navigation has started — let it own the bar instead of
-          // completing here, but only bail if it truly started *after* us.
           if (completionSequence !== navigationSequence) {
+            // Newer navigation owns the bar — but rescue if it's been abandoned
+            if (paintFrame === null && finishTimeout === null) {
+              forceComplete();
+            }
             return;
           }
 
-          // The sequence check above is sufficient — if it matches, we're the
-          // rightful owner of this bar and can safely complete it.
           forceComplete();
         }, remainingVisibleTime + FINISH_DELAY_MS);
       });
