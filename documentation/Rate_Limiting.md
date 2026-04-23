@@ -29,6 +29,16 @@ This is important because an SSE handshake is not the same thing as a normal API
 
 The active configuration lives in `lib/essentials/rateLimit.ts`.
 
+### Resilient Fallback Behavior
+
+If Upstash Redis is temporarily unavailable, `safeRateLimit(...)` fails open instead of blocking requests:
+
+- `success: true`
+- effectively unbounded `limit` and `remaining`
+- a synthetic `reset` about `60s` in the future
+
+This keeps user-facing traffic available during transient rate-limit backend failures while logging a warning on the server.
+
 ### Identity Model
 
 Requests are keyed by identity instead of always using IPs:
@@ -146,7 +156,7 @@ export const updateAvatarRateLimit = new Ratelimit({
 
 The old process-level listener cap was removed. It was not valid in serverless because every instance only knew about its own memory.
 
-BookWise now uses Redis-backed connection leases:
+BookWise now uses Redis-backed connection leases stored in a sorted set with per-lease expiry:
 
 ```typescript
 const SSE_CONNECTION_TTL_MS = 90_000;
@@ -157,20 +167,23 @@ export const AUTHENTICATED_SSE_CONNECTION_LIMIT = 3;
 
 On connect:
 
-1. Increment `sse:book-stream:connections:<identity>`
-2. Apply a Redis TTL
-3. Reject if the count exceeds the per-identity limit
+1. Build a key: `sse:book-stream:connections:<identity>`
+2. Remove expired lease ids with `ZREMRANGEBYSCORE`
+3. Count active leases with `ZCARD`
+4. Insert a new random lease id with expiry score `now + 90s` when under limit
+5. Apply `PEXPIRE` to the sorted-set key
+6. Reject the connection when the active lease count is already at the limit
 
 On keepalive:
 
-1. Refresh the TTL so healthy streams stay leased
+1. Refresh that lease id with a new expiry score via `ZADD`
+2. Refresh the Redis key TTL with `PEXPIRE`
 
 On disconnect:
 
-1. Decrement the counter
-2. Delete the key when it reaches zero
+1. Remove the lease id with `ZREM`
 
-This gives BookWise a distributed, crash-tolerant approximation of open stream counts without depending on in-memory global state.
+Because each connection has its own lease id, stale connections naturally age out after `90s` even if an instance crashes before cleanup runs.
 
 ## Algorithms Used
 
@@ -243,6 +256,8 @@ X-Connection-Limit
 ```
 
 when the client already has too many open streams.
+
+If the lease check fails because Redis is unavailable, the lease helper also fails open and allows the connection while logging a warning. In that fallback path it returns a synthetic successful lease with `current: 1`.
 
 ## Why The Previous Design Caused 429s
 

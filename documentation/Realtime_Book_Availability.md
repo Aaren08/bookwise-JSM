@@ -94,7 +94,7 @@ This allows browsers to send `Last-Event-ID` automatically when reconnecting.
 Inventory-changing flows call:
 
 ```typescript
-broadcastBookAvailabilityUpdate(
+publishBookAvailabilityUpdate(
   bookId,
   availableCount,
   reservedCount,
@@ -102,7 +102,7 @@ broadcastBookAvailabilityUpdate(
 );
 ```
 
-That publishes a `BOOK_UPDATED` message into a dedicated borrowing realtime channel.
+That helper creates a `BOOK_UPDATED` message and publishes a replayable event into the borrowing realtime channel.
 
 ### 2. Redis Publish + Replay Buffer
 
@@ -119,6 +119,16 @@ Important keys:
 - replay list: `book:borrow:realtime:recent`
 
 The replay list is trimmed to the most recent `250` events.
+
+The publish step is atomic. A single Redis `EVAL` script:
+
+- increments the sequence
+- wraps the message in `{ id, event, message, publishedAt }`
+- pushes it into the replay list
+- trims the replay list
+- publishes the exact same JSON payload to subscribers
+
+That keeps replay and live delivery aligned on the same event envelope.
 
 ### 3. Public SSE Route
 
@@ -138,6 +148,8 @@ Filtering behavior:
 
 - if `bookId` is present, only that book's events are sent
 - if `bookId` is omitted, all public book inventory events are sent
+- only events whose `message.bookId` matches the requested book are forwarded
+- duplicate delivery is avoided by tracking the highest delivered event id
 
 ## Why This Replaced The Old Design
 
@@ -170,11 +182,12 @@ Instead it acquires a Redis lease per identity:
 
 Lease flow:
 
-1. increment `sse:book-stream:connections:<identity>`
-2. set a `90s` TTL
-3. reject if the count exceeds the configured limit
-4. refresh the TTL on keepalive
-5. decrement on disconnect
+1. use key `sse:book-stream:connections:<identity>`
+2. purge expired lease ids from a Redis sorted set
+3. count active leases
+4. insert a new random `leaseId` with expiry score `now + 90s` when under limit
+5. refresh that lease on keepalive
+6. remove the lease id on disconnect
 
 This is not a perfect global connection registry, but it is serverless-safe and far more accurate than instance-local memory.
 
@@ -189,6 +202,11 @@ On connect, the route writes:
 - live events from Redis Pub/Sub
 - `: keepalive` comments every keepalive interval
 
+Current values:
+
+- retry delay: `2000ms`
+- keepalive interval: `25000ms`
+
 If the Redis subscription fails, the route emits a final close event and shuts down the stream.
 
 ### Client Side
@@ -200,7 +218,7 @@ This is safer because double reconnect loops can multiply handshake volume and t
 Current client behavior:
 
 - open one `EventSource` per mounted book page
-- listen to default `message` events
+- listen to `BOOK_UPDATED` SSE events
 - parse `BOOK_UPDATED`
 - update `availableCopies`
 - close the stream on unmount
@@ -232,6 +250,8 @@ with rate-limit headers such as:
 If the identity already has too many open streams, the route also returns:
 
 - `X-Connection-Limit`
+
+If Redis is temporarily unavailable during rate-limit or lease checks, the backend currently fails open and allows the connection while logging a warning.
 
 ## Scaling Notes
 
