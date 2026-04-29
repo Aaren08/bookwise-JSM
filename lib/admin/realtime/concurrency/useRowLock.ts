@@ -261,6 +261,7 @@ export const useRowLock = ({
     async (
       method: "POST" | "PATCH" | "DELETE",
       entityId: string,
+      token?: string | null,
     ): Promise<{
       success: boolean;
       lock?: AdminRowLock | null;
@@ -273,7 +274,7 @@ export const useRowLock = ({
         body: JSON.stringify({
           entity,
           entityId,
-          token: method === "DELETE" ? activeTokenRef.current : undefined,
+          token: method === "DELETE" ? (token ?? activeTokenRef.current) : undefined,
         }),
       });
 
@@ -335,6 +336,8 @@ export const useRowLock = ({
         return copy;
       });
 
+      const token = activeTokenRef.current;
+
       if (heartbeatRowIdRef.current === entityId) {
         heartbeatRowIdRef.current = null;
         activeTokenRef.current = null;
@@ -346,7 +349,7 @@ export const useRowLock = ({
       }
 
       try {
-        const result = await syncLock("DELETE", entityId);
+        const result = await syncLock("DELETE", entityId, token);
 
         if (!result.success) {
           throw new Error(result.message || "Failed to release lock");

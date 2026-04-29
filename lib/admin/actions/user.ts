@@ -2,7 +2,7 @@
 
 import { db } from "@/database/drizzle";
 import { users, borrowRecords } from "@/database/schema";
-import { eq, desc, count, and, or } from "drizzle-orm";
+import { eq, desc, count, and, or, sql } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 import { CACHE_TAGS } from "@/lib/performance/cache";
@@ -327,12 +327,29 @@ export const deleteUser = async ({
       };
     }
 
-    await db.delete(borrowRecords).where(eq(borrowRecords.userId, userId));
+    const deletedUserCTE = db.$with("deletedUser").as(
+      db
+        .delete(users)
+        .where(and(eq(users.id, userId), eq(users.version, expectedVersion)))
+        .returning(),
+    );
+
+    const deletedRecordsCTE = db.$with("deletedRecords").as(
+      db
+        .delete(borrowRecords)
+        .where(
+          and(
+            eq(borrowRecords.userId, userId),
+            sql`EXISTS (SELECT 1 FROM ${deletedUserCTE})`,
+          ),
+        )
+        .returning({ id: borrowRecords.id }),
+    );
 
     const deletedUser = await db
-      .delete(users)
-      .where(and(eq(users.id, userId), eq(users.version, expectedVersion)))
-      .returning();
+      .with(deletedUserCTE, deletedRecordsCTE)
+      .select()
+      .from(deletedUserCTE);
 
     if (!deletedUser[0]) {
       return {

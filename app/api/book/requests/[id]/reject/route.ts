@@ -82,21 +82,46 @@ export async function PATCH(
         );
       }
 
-      const [updatedRecord] = await db
-        .update(borrowRecords)
+      const updatedBorrowRecord = db.$with("updatedBorrowRecord").as(
+        db
+          .update(borrowRecords)
+          .set({
+            borrowStatus: "REJECTED",
+            updatedAt: new Date(),
+            version: sql`${borrowRecords.version} + 1`,
+          })
+          .where(
+            and(
+              eq(borrowRecords.id, recordId),
+              eq(borrowRecords.borrowStatus, "PENDING"),
+              eq(borrowRecords.version, body.expectedVersion),
+            ),
+          )
+          .returning({
+            id: borrowRecords.id,
+            bookId: borrowRecords.bookId,
+          }),
+      );
+
+      const [result] = await db
+        .with(updatedBorrowRecord)
+        .update(books)
         .set({
-          borrowStatus: "REJECTED",
+          reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
           updatedAt: new Date(),
-          version: sql`${borrowRecords.version} + 1`,
+          version: sql`${books.version} + 1`,
         })
-        .where(
-          and(
-            eq(borrowRecords.id, recordId),
-            eq(borrowRecords.borrowStatus, "PENDING"),
-            eq(borrowRecords.version, body.expectedVersion),
-          ),
-        )
-        .returning({ id: borrowRecords.id });
+        .from(updatedBorrowRecord)
+        .where(eq(books.id, updatedBorrowRecord.bookId))
+        .returning({
+          availableCopies: books.availableCopies,
+          reservedCount: books.reservedCount,
+          borrowedCount: books.borrowedCount,
+          recordId: updatedBorrowRecord.id,
+        });
+
+      const updatedRecord = result ? { id: result.recordId } : null;
+      const updatedBook = result;
 
       if (!updatedRecord) {
         return NextResponse.json(
@@ -104,20 +129,6 @@ export async function PATCH(
           { status: 409 },
         );
       }
-
-      const [updatedBook] = await db
-        .update(books)
-        .set({
-          reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
-          updatedAt: new Date(),
-          version: sql`${books.version} + 1`,
-        })
-        .where(eq(books.id, current.bookId))
-        .returning({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-        });
 
       revalidatePath("/admin/borrow-records");
       revalidatePath("/my-profile");

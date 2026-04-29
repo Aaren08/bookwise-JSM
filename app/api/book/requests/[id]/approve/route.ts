@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
@@ -82,43 +82,50 @@ export async function PATCH(
         );
       }
 
-      const [updatedRecord] = await db
-        .update(borrowRecords)
-        .set({
-          borrowStatus: "BORROWED",
-          updatedAt: new Date(),
-          version: sql`${borrowRecords.version} + 1`,
-        })
-        .where(
-          and(
-            eq(borrowRecords.id, recordId),
-            eq(borrowRecords.borrowStatus, "PENDING"),
-            eq(borrowRecords.version, body.expectedVersion),
-          ),
+      const result = await db.execute<{
+        id: string;
+        availableCopies: number;
+        reservedCount: number;
+        borrowedCount: number;
+      }>(sql`
+        WITH updated_borrow AS (
+          UPDATE ${borrowRecords}
+          SET borrow_status = 'BORROWED',
+              updated_at = NOW(),
+              version = version + 1
+          WHERE id = ${recordId}
+            AND borrow_status = 'PENDING'
+            AND version = ${body.expectedVersion}
+          RETURNING id, book_id
+        ),
+        updated_book AS (
+          UPDATE ${books}
+          SET reserved_count = GREATEST(0, reserved_count - 1),
+              borrowed_count = borrowed_count + 1,
+              updated_at = NOW(),
+              version = version + 1
+          WHERE id = (SELECT book_id FROM updated_borrow)
+          RETURNING available_copies, reserved_count, borrowed_count
         )
-        .returning({ id: borrowRecords.id });
+        SELECT
+          ub.id,
+          bk.available_copies as "availableCopies",
+          bk.reserved_count as "reservedCount",
+          bk.borrowed_count as "borrowedCount"
+        FROM updated_borrow ub
+        JOIN updated_book bk ON true;
+      `);
 
-      if (!updatedRecord) {
+      const [row] = result.rows;
+
+      if (!row) {
         return NextResponse.json(
           { error: CONFLICT_ERROR_MESSAGE },
           { status: 409 },
         );
       }
 
-      const [updatedBook] = await db
-        .update(books)
-        .set({
-          reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
-          borrowedCount: sql`${books.borrowedCount} + 1`,
-          updatedAt: new Date(),
-          version: sql`${books.version} + 1`,
-        })
-        .where(eq(books.id, current.bookId))
-        .returning({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-        });
+      const updatedBook = row;
 
       revalidatePath("/admin/borrow-records");
       revalidatePath("/my-profile");
