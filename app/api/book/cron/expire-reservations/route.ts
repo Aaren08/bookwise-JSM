@@ -25,6 +25,8 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
 
 const RESERVATION_EXPIRY_MINUTES = 15;
 
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
     // ── 2. Bulk-transition PENDING → REJECTED ─────────────────────────────────
     await db
       .update(borrowRecords)
-      .set({ borrowStatus: "REJECTED" })
+      .set({ borrowStatus: "REJECTED", updatedAt: new Date() })
       .where(inArray(borrowRecords.id, expiredIds));
 
     // ── 3. Group by bookId and decrement each book's reserved_count ──────────
@@ -85,6 +87,7 @@ export async function GET(request: Request) {
         .update(books)
         .set({
           reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredCount})`,
+          updatedAt: new Date(),
         })
         .where(eq(books.id, bookId))
         .returning({
@@ -116,6 +119,16 @@ export async function GET(request: Request) {
       broadcastAdminDashboardUpdate().catch((err) =>
         console.error("broadcastAdminDashboardUpdate failed", err),
       ),
+      ...expiredIds.map(async (borrowRecordId) => {
+        const record = await getBorrowRecordById(borrowRecordId);
+        if (!record) return;
+
+        await publishEvent("borrow_requests", {
+          type: "UPDATE",
+          entityId: borrowRecordId,
+          data: record,
+        });
+      }),
     ]);
 
     console.log(

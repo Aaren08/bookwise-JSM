@@ -20,7 +20,7 @@ const ROUTE_COMMIT_PROGRESS = 0.82;
 // If no route commit arrives within this window, force-complete the bar.
 // This covers the case where Next.js serves from cache and never triggers
 // a pathname/searchParams change, so handleRouteReady() is never called.
-const NAVIGATION_TIMEOUT_MS = 5000;
+const NAVIGATION_TIMEOUT_MS = 3000;
 
 let isConfigured = false;
 let isNavigating = false;

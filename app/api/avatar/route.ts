@@ -12,6 +12,11 @@ import ImageKit from "imagekit";
 import config from "@/lib/config";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
+import {
+  getApprovedUserById,
+  getPendingUserById,
+} from "@/lib/admin/actions/user";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 
 export async function PUT(request: Request) {
   const { image } = await request.json();
@@ -85,7 +90,10 @@ export async function POST(request: Request) {
     });
 
     const existingUser = await db
-      .select({ userAvatarFileId: users.userAvatarFileId })
+      .select({
+        userAvatarFileId: users.userAvatarFileId,
+        status: users.status,
+      })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
@@ -100,10 +108,34 @@ export async function POST(request: Request) {
 
     await db
       .update(users)
-      .set({ userAvatar: imageUrl, userAvatarFileId: fileId })
+      .set({
+        userAvatar: imageUrl,
+        userAvatarFileId: fileId,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, session.user.id));
 
     revalidateTag(CACHE_TAGS.users, "max");
+
+    if (existingUser[0]?.status === "APPROVED") {
+      const approvedUser = await getApprovedUserById(session.user.id);
+      if (approvedUser) {
+        await publishEvent("users", {
+          type: "UPDATE",
+          entityId: session.user.id,
+          data: approvedUser,
+        });
+      }
+    } else if (existingUser[0]?.status === "PENDING") {
+      const pendingUser = await getPendingUserById(session.user.id);
+      if (pendingUser) {
+        await publishEvent("account_requests", {
+          type: "UPDATE",
+          entityId: session.user.id,
+          data: pendingUser,
+        });
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

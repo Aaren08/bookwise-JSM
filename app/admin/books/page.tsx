@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import FilterData from "@/components/admin/FilterData";
 import { PartialTableWrapper } from "@/components/admin/PartialTableWrapper";
+import { auth } from "@/auth";
 
 // Unified data fetching - called ONCE and result is split
 async function getBooksData(page: number) {
@@ -23,7 +24,17 @@ async function BooksTableBody({ searchParams }: { searchParams: Promise<{ page?:
   const { page: pageParam } = await searchParams;
   const page = Number(pageParam) || 1;
   const data = await getBooksData(page);
-  return <BookTable books={data?.books || []} />;
+  const session = await auth();
+
+  return (
+    <BookTable
+      books={data?.books || []}
+      currentAdmin={{
+        id: session?.user?.id || "",
+        name: session?.user?.name || "Admin",
+      }}
+    />
+  );
 }
 
 // Pagination component - uses same data

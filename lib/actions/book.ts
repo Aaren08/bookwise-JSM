@@ -12,6 +12,8 @@ import {
 } from "@/lib/admin/realtime/dashboardSocketServer";
 import { CACHE_TAGS, getSimilarBooksCached } from "@/lib/performance/cache";
 import { sql } from "drizzle-orm";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
 
 /**
  * borrowBook — Server Action
@@ -50,7 +52,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
     //    This runs before checking availability so freed slots are counted.
     const staleExpiry = await db
       .update(borrowRecords)
-      .set({ borrowStatus: "REJECTED" })
+      .set({ borrowStatus: "REJECTED", updatedAt: new Date() })
       .where(
         and(
           eq(borrowRecords.bookId, bookId),
@@ -66,6 +68,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
         .update(books)
         .set({
           reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${staleExpiry.length})`,
+          updatedAt: new Date(),
         })
         .where(eq(books.id, bookId));
     }
@@ -76,6 +79,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
       .update(books)
       .set({
         reservedCount: sql`${books.reservedCount} + 1`,
+        updatedAt: new Date(),
       })
       .where(
         and(
@@ -129,6 +133,15 @@ export const borrowBook = async (params: BorrowBookParams) => {
       console.error("Failed to broadcast dashboard update:", err),
     );
 
+    const realtimeRecord = await getBorrowRecordById(record.id);
+    if (realtimeRecord) {
+      await publishEvent("borrow_requests", {
+        type: "CREATE",
+        entityId: record.id,
+        data: realtimeRecord,
+      });
+    }
+
     return {
       success: true,
       data: { id: record.id, status: "PENDING" },
@@ -176,7 +189,7 @@ export const dismissBorrowRecord = async (borrowRecordId: string) => {
     // Update the record to dismissed
     await db
       .update(borrowRecords)
-      .set({ dismissed: 1 })
+      .set({ dismissed: 1, updatedAt: new Date() })
       .where(eq(borrowRecords.id, borrowRecordId));
 
     revalidateTag(CACHE_TAGS.users, "max");

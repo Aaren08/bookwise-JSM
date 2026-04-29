@@ -9,6 +9,13 @@ import {
   broadcastBookAvailabilityUpdate,
 } from "@/lib/admin/realtime/dashboardSocketServer";
 import { CACHE_TAGS } from "@/lib/performance/cache";
+import {
+  CONFLICT_ERROR_MESSAGE,
+  publishEvent,
+  updateWithVersionCheck,
+} from "@/lib/admin/realtime/concurrency/rowConcurrency";
+
+type BorrowStatus = BorrowRecord["status"];
 
 export const getAllBorrowRecords = async ({
   limit = 20,
@@ -30,6 +37,8 @@ export const getAllBorrowRecords = async ({
         status: borrowRecords.borrowStatus,
         bookId: borrowRecords.bookId,
         userId: borrowRecords.userId,
+        updatedAt: borrowRecords.updatedAt,
+        version: borrowRecords.version,
       })
       .from(borrowRecords)
       .orderBy(
@@ -48,6 +57,8 @@ export const getAllBorrowRecords = async ({
         dueDate: pagedBorrowRecords.dueDate,
         returnDate: pagedBorrowRecords.returnDate,
         status: pagedBorrowRecords.status,
+        updatedAt: pagedBorrowRecords.updatedAt,
+        version: pagedBorrowRecords.version,
         bookTitle: books.title,
         bookCover: books.coverUrl,
         bookGenre: books.genre,
@@ -89,12 +100,55 @@ export const getAllBorrowRecords = async ({
   }
 };
 
+export const getBorrowRecordById = async (borrowRecordId: string) => {
+  const [record] = await db
+    .select({
+      id: borrowRecords.id,
+      borrowDate: borrowRecords.borrowDate,
+      dueDate: borrowRecords.dueDate,
+      returnDate: borrowRecords.returnDate,
+      status: borrowRecords.borrowStatus,
+      updatedAt: borrowRecords.updatedAt,
+      version: borrowRecords.version,
+      bookTitle: books.title,
+      bookCover: books.coverUrl,
+      bookGenre: books.genre,
+      userFullName: users.fullName,
+      userEmail: users.email,
+      userAvatar: users.userAvatar,
+    })
+    .from(borrowRecords)
+    .innerJoin(books, eq(borrowRecords.bookId, books.id))
+    .innerJoin(users, eq(borrowRecords.userId, users.id))
+    .where(eq(borrowRecords.id, borrowRecordId))
+    .limit(1);
+
+  return record ? (JSON.parse(JSON.stringify(record)) as BorrowRecord) : null;
+};
+
+export const validateBorrowStatusTransition = async (
+  currentStatus: BorrowStatus,
+  nextStatus: BorrowStatus,
+) => {
+  const allowedTransitions: Record<BorrowStatus, BorrowStatus[]> = {
+    PENDING: ["BORROWED", "REJECTED"],
+    BORROWED: ["RETURNED", "LATE_RETURN"],
+    RETURNED: [],
+    LATE_RETURN: [],
+    REJECTED: [],
+  };
+
+  return allowedTransitions[currentStatus].includes(nextStatus);
+};
+
 export const updateBorrowStatus = async ({
   borrowRecordId,
   status,
+  expectedVersion,
 }: {
   borrowRecordId: string;
-  status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
+  status: BorrowStatus;
+  expectedVersion: number;
 }) => {
   try {
     const currentRecord = await db
@@ -115,6 +169,10 @@ export const updateBorrowStatus = async ({
       return { success: true, message: "Status already set" };
     }
 
+    if (!(await validateBorrowStatusTransition(oldStatus, status))) {
+      return { success: false, message: "Invalid status transition" };
+    }
+
     const updateData: Partial<typeof borrowRecords.$inferInsert> = {
       borrowStatus: status,
       returnDate:
@@ -132,11 +190,14 @@ export const updateBorrowStatus = async ({
     if (status === "PENDING") reservedChange++;
     else if (status === "BORROWED") borrowedChange++;
 
-    const [updatedRecord] = await db
-      .update(borrowRecords)
-      .set(updateData)
-      .where(eq(borrowRecords.id, borrowRecordId))
-      .returning();
+    const updatedRecord = await updateWithVersionCheck({
+      table: borrowRecords,
+      idColumn: borrowRecords.id,
+      versionColumn: borrowRecords.version,
+      id: borrowRecordId,
+      expectedVersion,
+      values: updateData,
+    });
 
     let updatedBook:
       | {
@@ -152,6 +213,8 @@ export const updateBorrowStatus = async ({
         .set({
           reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
           borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
+          updatedAt: new Date(),
+          version: sql`${books.version} + 1`,
         })
         .where(eq(books.id, bookId))
         .returning({
@@ -193,13 +256,28 @@ export const updateBorrowStatus = async ({
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
+    const realtimeRecord = await getBorrowRecordById(borrowRecordId);
+    if (realtimeRecord) {
+      await publishEvent("borrow_requests", {
+        type: "UPDATE",
+        entityId: borrowRecordId,
+        data: realtimeRecord,
+      });
+    }
+
     return {
       success: true,
       data: updatedRecord,
     };
   } catch (error) {
     console.error(error);
-    return { success: false, message: "Failed to update borrow status" };
+    return {
+      success: false,
+      message:
+        error instanceof Error && error.message === CONFLICT_ERROR_MESSAGE
+          ? CONFLICT_ERROR_MESSAGE
+          : "Failed to update borrow status",
+    };
   }
 };
 
@@ -246,6 +324,16 @@ export const clearBorrowRecords = async ({
     revalidateTag(CACHE_TAGS.books, "max");
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
+    );
+
+    await Promise.all(
+      deletedRecords.map((record) =>
+        publishEvent("borrow_requests", {
+          type: "DELETE",
+          entityId: record.id,
+          data: null,
+        }),
+      ),
     );
 
     return {

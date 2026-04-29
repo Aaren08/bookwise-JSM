@@ -8,10 +8,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check, LoaderCircle } from "lucide-react";
-import { memo, useState, useMemo, useEffect, useCallback } from "react";
+import { memo, useState, useMemo, useEffect, useCallback, useRef } from "react";
 import dayjs from "dayjs";
 import Image from "next/image";
-import { cn } from "@/lib/utils";
+import { cn, includes } from "@/lib/utils";
 import { useSortedData } from "@/lib/admin/essentials/useSortedData";
 import { showSuccessToast, showErrorToast } from "@/lib/essentials/toast-utils";
 import { useSearch } from "@/components/admin/context/SearchContext";
@@ -19,20 +19,19 @@ import UserCell from "../shared/UserCell";
 import TableRow from "../shared/TableRow";
 import GenerateReceipt from "../GenerateReceipt";
 import EmptySearch from "../shared/EmptySearch";
-import { includes } from "@/lib/utils";
+import RowLockIndicator from "../shared/RowLockIndicator";
+import { useRowLock } from "@/lib/admin/realtime/concurrency/useRowLock";
+import { useRealtimeUpdates } from "@/lib/admin/realtime/concurrency/useRealtimeUpdates";
+import { useOptimisticUpdate } from "@/lib/admin/realtime/concurrency/useOptimisticUpdate";
+import type { AdminRowLock } from "@/lib/admin/realtime/concurrency/adminRealtimeEvents";
 
 interface Props {
   borrowRecords: BorrowRecord[];
+  currentAdmin: AdminActor;
 }
 
-type BorrowStatus =
-  | "PENDING"
-  | "BORROWED"
-  | "RETURNED"
-  | "LATE_RETURN"
-  | "REJECTED";
+type BorrowStatus = BorrowRecord["status"];
 
-/* human-readable status labels for search matching */
 const STATUS_LABELS: Record<BorrowStatus, string> = {
   PENDING: "pending",
   BORROWED: "borrowed",
@@ -71,8 +70,6 @@ const getAllowedStatuses = (status: BorrowStatus): BorrowStatus[] => {
       return ["LATE_RETURN"];
     case "REJECTED":
       return ["REJECTED"];
-    default:
-      return [status];
   }
 };
 
@@ -103,7 +100,10 @@ const resolveStatusEndpoint = (
   return null;
 };
 
-const getOptimisticStatus = (record: BorrowRecord, nextStatus: BorrowStatus) => {
+const getOptimisticStatus = (
+  record: BorrowRecord,
+  nextStatus: BorrowStatus,
+) => {
   if (record.status !== "BORROWED" || nextStatus !== "RETURNED") {
     return nextStatus;
   }
@@ -116,16 +116,22 @@ const getOptimisticStatus = (record: BorrowRecord, nextStatus: BorrowStatus) => 
 const BorrowTableRow = memo(function BorrowTableRow({
   record,
   isUpdating,
+  isLocked,
+  lock,
+  onOpenChange,
   onStatusChange,
 }: {
   record: BorrowRecord;
   isUpdating: boolean;
+  isLocked: boolean;
+  lock: AdminRowLock | null;
+  onOpenChange: (record: BorrowRecord, open: boolean) => void;
   onStatusChange: (record: BorrowRecord, nextStatus: BorrowStatus) => void;
 }) {
   const allowedStatuses = getAllowedStatuses(record.status);
 
   return (
-    <TableRow>
+    <TableRow className={isUpdating ? "z-10" : undefined}>
       <td className="py-4 pr-4 max-sm:pr-6">
         <div className="flex items-center gap-3">
           {record.bookCover ? (
@@ -138,9 +144,9 @@ const BorrowTableRow = memo(function BorrowTableRow({
               className="rounded-sm object-cover"
             />
           ) : (
-            <div className="h-[60px] w-[40px] bg-gray-200 rounded-sm" />
+            <div className="h-[60px] w-[40px] rounded-sm bg-gray-200" />
           )}
-          <p className="font-semibold text-dark-400 line-clamp-1 max-w-[200px]">
+          <p className="line-clamp-1 max-w-[200px] font-semibold text-dark-400">
             {record.bookTitle}
           </p>
         </div>
@@ -155,12 +161,16 @@ const BorrowTableRow = memo(function BorrowTableRow({
       <td className="py-4 pr-4 max-sm:pr-6">
         <Select
           value={record.status}
+          onOpenChange={(open) => onOpenChange(record, open)}
           onValueChange={(value: BorrowStatus) => onStatusChange(record, value)}
-          disabled={isUpdating}
+          disabled={isUpdating || isLocked}
         >
           <SelectTrigger
             aria-busy={isUpdating}
-            className={cn(getStatusClasses(record.status), isUpdating && "opacity-80")}
+            className={cn(
+              getStatusClasses(record.status),
+              isUpdating && "opacity-80",
+            )}
           >
             <div className="flex w-full items-center justify-between gap-2">
               <SelectValue />
@@ -189,33 +199,40 @@ const BorrowTableRow = memo(function BorrowTableRow({
           </SelectContent>
         </Select>
       </td>
-      <td className="py-4 pr-4 max-sm:pr-6 text-sm text-dark-400">
+      <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
         {record.status === "PENDING"
           ? "-"
           : dayjs(record.borrowDate).format("MMM DD YYYY")}
       </td>
-      <td className="py-4 pr-4 max-sm:pr-6 text-sm text-dark-400">
-        {record.returnDate ? dayjs(record.returnDate).format("MMM DD YYYY") : "-"}
+      <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
+        {record.returnDate
+          ? dayjs(record.returnDate).format("MMM DD YYYY")
+          : "-"}
       </td>
-      <td className="py-4 pr-4 max-sm:pr-6 text-sm text-dark-400">
-        {record.status === "PENDING" ? "-" : dayjs(record.dueDate).format("MMM DD YYYY")}
+      <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
+        {record.status === "PENDING"
+          ? "-"
+          : dayjs(record.dueDate).format("MMM DD YYYY")}
       </td>
-      <td className="py-4 pr-4 max-sm:pr-6">
+      <td className="relative py-4 pr-4 max-sm:pr-6">
+        <RowLockIndicator lock={lock} />
         <GenerateReceipt borrowRecordId={record.id} status={record.status} />
       </td>
     </TableRow>
   );
 });
 
-const BorrowTable = ({ borrowRecords }: Props) => {
+const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
   const { query, sortOrder } = useSearch();
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  const [pinnedRowId, setPinnedRowId] = useState<string | null>(null);
 
   const sortFn = useCallback(
-    (a: BorrowRecord, b: BorrowRecord, order: "asc" | "desc") => {
-      return order === "desc"
+    (a: BorrowRecord, b: BorrowRecord, order: "asc" | "desc") =>
+      order === "desc"
         ? new Date(a.borrowDate).getTime() - new Date(b.borrowDate).getTime()
-        : new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime();
-    },
+        : new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime(),
     [],
   );
 
@@ -225,27 +242,89 @@ const BorrowTable = ({ borrowRecords }: Props) => {
     handleSort,
   } = useSortedData(borrowRecords, sortFn);
 
+  const { updateItem } = useOptimisticUpdate(setSortedRecords);
+
+  const matchesFilter = useCallback(
+    (record: BorrowRecord) =>
+      !query.trim() ||
+      includes(record.bookTitle, query) ||
+      includes(record.userFullName, query) ||
+      includes(record.userEmail, query) ||
+      includes(STATUS_LABELS[record.status], query),
+    [query],
+  );
+
   useEffect(() => {
     handleSort(sortOrder);
   }, [sortOrder, handleSort]);
 
-  /* filtered view */
-  const filteredRecords = useMemo(() => {
-    if (!query.trim()) return sortedRecords;
-    return sortedRecords.filter(
-      (r) =>
-        includes(r.bookTitle, query) ||
-        includes(r.userFullName, query) ||
-        includes(r.userEmail, query) ||
-        includes(STATUS_LABELS[r.status], query),
-    );
-  }, [sortedRecords, query]);
+  useRealtimeUpdates({
+    entity: "borrow_requests",
+    setItems: setSortedRecords,
+    sortFn,
+    sortOrder,
+    pinnedRowId,
+    matchesFilter,
+  });
 
-  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const rowIds = useMemo(
+    () => sortedRecords.map((record) => record.id),
+    [sortedRecords],
+  );
+  const rowLock = useRowLock({
+    entity: "borrow_requests",
+    rowIds,
+    currentAdminId: currentAdmin.id,
+  });
+
+  const filteredRecords = useMemo(
+    () => sortedRecords.filter(matchesFilter),
+    [matchesFilter, sortedRecords],
+  );
+
+  const handleOpenChange = useCallback(
+    async (record: BorrowRecord, open: boolean) => {
+      if (open) {
+        if (rowLock.isLockedByOther(record.id)) {
+          const lock = rowLock.lockForRow(record.id);
+          showErrorToast(
+            lock ? `Row locked by ${lock.adminName}` : "Row is locked",
+          );
+          return;
+        }
+
+        if (!rowLock.isLockedByCurrentAdmin(record.id)) {
+          const result = await rowLock.acquireRowLock(record.id);
+          if (!result.success) {
+            showErrorToast(result.message || "Unable to lock row");
+            return;
+          }
+        }
+
+        setPinnedRowId(record.id);
+        return;
+      }
+
+      if (
+        !pendingIdsRef.current.has(record.id) &&
+        rowLock.isLockedByCurrentAdmin(record.id)
+      ) {
+        await rowLock.releaseRowLock(record.id);
+        setPinnedRowId((current) => (current === record.id ? null : current));
+      }
+    },
+    [rowLock],
+  );
 
   const handleStatusChange = useCallback(
     async (record: BorrowRecord, newStatus: BorrowStatus) => {
-      const endpoint = resolveStatusEndpoint(record.id, record.status, newStatus);
+      if (pendingIdsRef.current.has(record.id)) return;
+
+      const endpoint = resolveStatusEndpoint(
+        record.id,
+        record.status,
+        newStatus,
+      );
 
       if (!endpoint) {
         if (record.status !== newStatus) {
@@ -254,93 +333,88 @@ const BorrowTable = ({ borrowRecords }: Props) => {
         return;
       }
 
-      const previousRecord = record;
+      if (!rowLock.isLockedByCurrentAdmin(record.id)) {
+        const lockResult = await rowLock.acquireRowLock(record.id);
+        if (!lockResult.success) {
+          showErrorToast(lockResult.message || "Unable to lock row");
+          return;
+        }
+      }
+
       const optimisticStatus = getOptimisticStatus(record, newStatus);
       const optimisticReturnDate =
         optimisticStatus === "RETURNED" || optimisticStatus === "LATE_RETURN"
           ? dayjs().format("YYYY-MM-DD")
           : null;
 
-      setPendingIds((prev) => new Set(prev).add(record.id));
-      setSortedRecords((prev) =>
-        prev.map((item) =>
-          item.id === record.id
-            ? {
-                ...item,
-                status: optimisticStatus,
-                returnDate: optimisticReturnDate,
-              }
-            : item,
-        ),
-      );
+      setPinnedRowId(record.id);
+      pendingIdsRef.current.add(record.id);
+      setPendingIds(new Set(pendingIdsRef.current));
+      const previousRecord = updateItem(record.id, (item) => ({
+        ...item,
+        status: optimisticStatus,
+        returnDate: optimisticReturnDate,
+      }));
 
       try {
-        const res = await fetch(endpoint, {
+        const response = await fetch(endpoint, {
           method: "PATCH",
           cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            expectedVersion: record.version,
+            lockToken: rowLock.lockForRow(record.id)?.token,
+          }),
         });
-        const result = await res.json();
+        const result = await response.json();
 
-        if (res.ok && result.success) {
-          const confirmedStatus = (result.data?.status || optimisticStatus) as BorrowStatus;
-          const confirmedReturnDate =
-            result.data?.returnDate ??
-            (confirmedStatus === "RETURNED" || confirmedStatus === "LATE_RETURN"
-              ? optimisticReturnDate
-              : null);
-
-          showSuccessToast(`Status updated to ${confirmedStatus}`);
-          setSortedRecords((prev) =>
-            prev.map((item) =>
-              item.id === record.id
-                ? {
-                    ...item,
-                    status: confirmedStatus,
-                    returnDate: confirmedReturnDate,
-                  }
-                : item,
-            ),
-          );
+        if (response.ok && result.success && result.data) {
+          showSuccessToast(`Status updated to ${result.data.status}`);
+          updateItem(record.id, () => result.data as BorrowRecord);
         } else {
-          setSortedRecords((prev) =>
-            prev.map((item) => (item.id === record.id ? previousRecord : item)),
+          if (previousRecord) {
+            updateItem(record.id, () => previousRecord);
+          }
+          showErrorToast(
+            result.error || result.message || "Failed to update status",
           );
-          showErrorToast(result.error || result.message || "Failed to update status");
         }
       } catch (error) {
-        setSortedRecords((prev) =>
-          prev.map((item) => (item.id === record.id ? previousRecord : item)),
-        );
+        if (previousRecord) {
+          updateItem(record.id, () => previousRecord);
+        }
         console.error(error);
         showErrorToast("Failed to update borrow status");
       } finally {
-        setPendingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(record.id);
-          return next;
-        });
+        pendingIdsRef.current.delete(record.id);
+        setPendingIds(new Set(pendingIdsRef.current));
+        await rowLock.releaseRowLock(record.id);
+        setPinnedRowId((current) => (current === record.id ? null : current));
       }
     },
-    [setSortedRecords],
+    [rowLock, updateItem],
   );
 
   return (
-    <>
-      <tbody>
-        {filteredRecords.length === 0 && query.trim() ? (
-          <EmptySearch query={query} entity="borrow records" colSpan={7} />
-        ) : (
-          filteredRecords.map((record) => (
-            <BorrowTableRow
-              key={record.id}
-              record={record}
-              isUpdating={pendingIds.has(record.id)}
-              onStatusChange={handleStatusChange}
-            />
-          ))
-        )}
-      </tbody>
-    </>
+    <tbody>
+      {filteredRecords.length === 0 && query.trim() ? (
+        <EmptySearch query={query} entity="borrow records" colSpan={7} />
+      ) : (
+        filteredRecords.map((record) => (
+          <BorrowTableRow
+            key={record.id}
+            record={record}
+            isUpdating={pendingIds.has(record.id)}
+            isLocked={rowLock.isLockedByOther(record.id)}
+            lock={rowLock.lockForRow(record.id)}
+            onOpenChange={handleOpenChange}
+            onStatusChange={handleStatusChange}
+          />
+        ))
+      )}
+    </tbody>
   );
 };
 

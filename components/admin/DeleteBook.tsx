@@ -18,14 +18,40 @@ import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 interface Props {
   id: string;
+  expectedVersion: number;
   onDelete?: () => void;
+  onAcquireLock: () => Promise<boolean>;
+  onReleaseLock: () => Promise<void>;
+  lockToken?: string;
+  disabled?: boolean;
 }
 
-const DeleteBook = ({ id, onDelete }: Props) => {
+const DeleteBook = ({
+  id,
+  expectedVersion,
+  onDelete,
+  onAcquireLock,
+  onReleaseLock,
+  lockToken,
+  disabled = false,
+}: Props) => {
   const [open, setOpen] = useState(false);
 
-  const handleDelete = async (id: string) => {
-    const res = await deleteBook(id);
+  const handleOpenChange = async (nextOpen: boolean) => {
+    if (nextOpen) {
+      if (disabled) return;
+      const acquired = await onAcquireLock();
+      if (!acquired) return;
+      setOpen(true);
+      return;
+    }
+
+    setOpen(false);
+    await onReleaseLock();
+  };
+
+  const handleDelete = async () => {
+    const res = await deleteBook({ id, expectedVersion, lockToken });
     if (res.success) {
       setOpen(false);
       showSuccessToast("Book deleted successfully");
@@ -33,19 +59,25 @@ const DeleteBook = ({ id, onDelete }: Props) => {
     } else {
       showErrorToast(res.message || "Failed to delete book");
     }
+
+    await onReleaseLock();
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogTrigger asChild>
-        <div className="cursor-pointer">
+        <button
+          type="button"
+          className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled}
+        >
           <Image
             src="/icons/admin/trash.svg"
             alt="delete"
             width={24}
             height={24}
           />
-        </div>
+        </button>
       </AlertDialogTrigger>
       <AlertDialogContent className="bg-white">
         <AlertDialogHeader>
@@ -60,11 +92,11 @@ const DeleteBook = ({ id, onDelete }: Props) => {
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              handleDelete(id);
+            onClick={(event) => {
+              event.preventDefault();
+              void handleDelete();
             }}
-            className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white"
+            className="cursor-pointer bg-blue-500 text-white hover:bg-blue-600"
           >
             Confirm
           </AlertDialogAction>

@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,31 +16,60 @@ import { useState } from "react";
 import Image from "next/image";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
-interface Props {
+interface DeleteUserProps {
   userId: string;
-  onDelete: () => void;
+  expectedVersion: number;
+  onDelete?: () => void;
+  onAcquireLock: () => Promise<boolean>;
+  onReleaseLock: () => Promise<void>;
+  lockToken?: string;
+  disabled?: boolean;
 }
 
-const DeleteUser = ({ userId, onDelete }: Props) => {
+const DeleteUser = ({
+  userId,
+  expectedVersion,
+  onDelete,
+  onAcquireLock,
+  onReleaseLock,
+  lockToken,
+  disabled = false,
+}: DeleteUserProps) => {
   const [open, setOpen] = useState(false);
 
-  const handleDelete = async (userId: string) => {
-    const res = await deleteUser(userId);
+  const handleOpenChange = async (nextOpen: boolean) => {
+    if (nextOpen) {
+      if (disabled) return;
+      const acquired = await onAcquireLock();
+      if (!acquired) return;
+      setOpen(true);
+      return;
+    }
+
+    setOpen(false);
+    await onReleaseLock();
+  };
+
+  const handleDelete = async () => {
+    const res = await deleteUser({ userId, expectedVersion, lockToken });
     if (res.success) {
       setOpen(false);
       showSuccessToast("User deleted successfully");
-      onDelete();
+      onDelete?.();
     } else {
       showErrorToast(res.error || "Failed to delete user");
     }
+
+    await onReleaseLock();
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogTrigger asChild>
         <button
           aria-label="Delete user"
-          className="cursor-pointer text-red-500 hover:text-red-600 transition-colors"
+          className="cursor-pointer text-red-500 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled}
         >
           <Image
             src="/icons/admin/trash.svg"
@@ -61,11 +92,11 @@ const DeleteUser = ({ userId, onDelete }: Props) => {
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              handleDelete(userId);
+            onClick={(event) => {
+              event.preventDefault();
+              void handleDelete();
             }}
-            className="cursor-pointer bg-red-500 hover:bg-red-600 text-white"
+            className="cursor-pointer bg-red-500 text-white hover:bg-red-600"
           >
             Confirm
           </AlertDialogAction>

@@ -16,7 +16,7 @@ import {
   isBorrowBookRealtimeEvent,
   type BorrowBookRealtimeEvent,
   type BorrowBookRealtimeMessage,
-} from "@/lib/admin/realtime/borrowBookRealtimeEvents";
+} from "@/lib/admin/realtime/concurrency/borrowBookRealtimeEvents";
 
 export type AdminDashboardRealtimeListener = (
   message: AdminDashboardRealtimeMessage,
@@ -48,7 +48,7 @@ export const publishAdminDashboardUpdate = async () => {
 const publishBorrowBookRealtimeMessage = async (
   message: BorrowBookRealtimeMessage,
 ) => {
-  const eventJson = (await redis.eval(
+  const eventJson = await redis.eval(
     `
     local id = redis.call('INCR', KEYS[1])
     local message = cjson.decode(ARGV[1])
@@ -75,9 +75,11 @@ const publishBorrowBookRealtimeMessage = async (
       new Date().toISOString(),
       BORROW_BOOK_REALTIME_REPLAY_LIMIT,
     ],
-  )) as string;
+  );
 
-  return JSON.parse(eventJson) as BorrowBookRealtimeEvent;
+  return (
+    typeof eventJson === "string" ? JSON.parse(eventJson) : eventJson
+  ) as BorrowBookRealtimeEvent;
 };
 
 export const publishBookAvailabilityUpdate = async (
@@ -98,14 +100,21 @@ export const publishBookAvailabilityUpdate = async (
 
 export const getBorrowBookRealtimeReplay = async (lastEventId?: number) => {
   try {
-    const replay = await redis.lrange<string>(BORROW_BOOK_REALTIME_REPLAY_KEY, 0, -1);
+    const replay = await redis.lrange<string>(
+      BORROW_BOOK_REALTIME_REPLAY_KEY,
+      0,
+      -1,
+    );
 
     return replay
       .map((entry) => {
         try {
           return parsePubSubMessage(entry);
         } catch (error) {
-          console.error("Failed to parse replayable book realtime event:", error);
+          console.error(
+            "Failed to parse replayable book realtime event:",
+            error,
+          );
           return null;
         }
       })

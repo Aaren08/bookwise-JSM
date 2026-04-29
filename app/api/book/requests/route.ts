@@ -23,6 +23,8 @@ import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql } from "drizzle-orm";
 import dayjs from "dayjs";
 import { NextResponse } from "next/server";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
 
 export async function POST(request: Request) {
   try {
@@ -80,6 +82,7 @@ export async function POST(request: Request) {
       .update(borrowRecords)
       .set({
         borrowStatus: "REJECTED",
+        updatedAt: new Date(),
       })
       .where(
         and(
@@ -96,6 +99,7 @@ export async function POST(request: Request) {
         .update(books)
         .set({
           reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredReservations.length})`,
+          updatedAt: new Date(),
         })
         .where(eq(books.id, bookId));
     }
@@ -103,7 +107,10 @@ export async function POST(request: Request) {
     // ── 4. Atomic reservation: increment reserved_count only if capacity exists
     const [updatedBook] = await db
       .update(books)
-      .set({ reservedCount: sql`${books.reservedCount} + 1` })
+      .set({
+        reservedCount: sql`${books.reservedCount} + 1`,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(books.id, bookId),
@@ -152,6 +159,15 @@ export async function POST(request: Request) {
     ).catch((err) =>
       console.error("broadcastBookAvailabilityUpdate failed", err),
     );
+
+    const realtimeRecord = await getBorrowRecordById(record.id);
+    if (realtimeRecord) {
+      await publishEvent("borrow_requests", {
+        type: "CREATE",
+        entityId: record.id,
+        data: realtimeRecord,
+      });
+    }
 
     return NextResponse.json(
       {

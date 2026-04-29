@@ -19,9 +19,12 @@ import { BookPlus, BookCheck } from "lucide-react";
 import { createBook, updateBook } from "@/lib/admin/actions/book";
 import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 import { LazyColorPicker, LazyFileUpload } from "@/lib/performance/bundle";
+import { useRowLock } from "@/lib/admin/realtime/concurrency/useRowLock";
+import { useEffect, useState, useMemo } from "react";
 
 interface Props extends Partial<Book> {
   type: "create" | "update";
+  currentAdmin?: AdminActor;
 }
 
 type BookFormValues = z.infer<typeof bookSchema>;
@@ -59,8 +62,9 @@ const zodFormResolver = <T extends z.ZodType>(schema: T) => {
   };
 };
 
-const BookForm = ({ type, ...book }: Props) => {
+const BookForm = ({ type, currentAdmin, ...book }: Props) => {
   const router = useRouter();
+  const [lockReady, setLockReady] = useState(type === "create");
 
   const form = useForm<BookFormValues>({
     resolver: zodFormResolver(bookSchema),
@@ -78,15 +82,60 @@ const BookForm = ({ type, ...book }: Props) => {
     },
   });
 
+  const rowIds = useMemo(() => (book.id ? [book.id] : []), [book.id]);
+
+  const { acquireRowLock, releaseRowLock } = useRowLock({
+    entity: "books",
+    rowIds,
+    currentAdminId: currentAdmin?.id || "",
+  });
+
+  useEffect(() => {
+    if (type !== "update" || !book.id || !currentAdmin?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const acquire = async () => {
+      const result = await acquireRowLock(book.id as string);
+
+      if (!result.success) {
+        if (!cancelled) {
+          setLockReady(false);
+          showErrorToast(result.message || "Unable to lock book for editing");
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLockReady(true);
+      }
+    };
+
+    void acquire();
+
+    return () => {
+      cancelled = true;
+      void releaseRowLock(book.id as string);
+    };
+  }, [book.id, currentAdmin?.id, acquireRowLock, releaseRowLock, type]);
+
   const onSubmit: SubmitHandler<BookFormValues> = async (values) => {
     const result =
       type === "create"
         ? await createBook(values)
-        : await updateBook({ ...values, id: book.id as string });
+        : await updateBook({
+            ...values,
+            id: book.id as string,
+            expectedVersion: book.version as number,
+          });
 
     if (result.success) {
       showSuccessToast(result.message);
-      router.push(`/admin/books/${result.data.id}`);
+      if (result.data?.id) {
+        router.push(`/admin/books/${result.data.id}`);
+      }
     } else {
       showErrorToast(result.message);
     }
@@ -327,7 +376,7 @@ const BookForm = ({ type, ...book }: Props) => {
 
         <Button
           type="submit"
-          disabled={form.formState.isSubmitting}
+          disabled={form.formState.isSubmitting || !lockReady}
           className="book-form_btn cursor-pointer text-white"
         >
           {form.formState.isSubmitting ? (

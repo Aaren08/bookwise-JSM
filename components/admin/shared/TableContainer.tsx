@@ -45,7 +45,7 @@ const TableContainer = ({
           )}
         </div>
       </div>
-      <div className="mt-7 w-full overflow-x-auto">
+      <div className="mt-7 table-scroll-container">
         <table className="w-full min-w-max table-auto text-left">
           {children}
         </table>
