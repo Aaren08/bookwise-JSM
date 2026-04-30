@@ -105,8 +105,8 @@ type AdminRowLock = {
   "entity": "books",
   "entityId": "550e8400-e29b-41d4-a716-446655440000",
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "adminName": null,
-  "lock": null,
+  "adminName": "string | null",
+  "lock": "AdminRowLock | null",
   "publishedAt": "2026-04-29T10:00:00Z"
 }
 ```

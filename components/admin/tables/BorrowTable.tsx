@@ -260,6 +260,7 @@ const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
 
   useRealtimeUpdates({
     entity: "borrow_requests",
+    items: sortedRecords,
     setItems: setSortedRecords,
     sortFn,
     sortOrder,
@@ -267,20 +268,21 @@ const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
     matchesFilter,
   });
 
-  const rowIds = useMemo(
-    () => sortedRecords.map((record) => record.id),
-    [sortedRecords],
+  const filteredRecords = useMemo(
+    () => sortedRecords.filter(matchesFilter),
+    [matchesFilter, sortedRecords],
   );
+
+  const rowIds = useMemo(
+    () => filteredRecords.map((record) => record.id),
+    [filteredRecords],
+  );
+
   const rowLock = useRowLock({
     entity: "borrow_requests",
     rowIds,
     currentAdminId: currentAdmin.id,
   });
-
-  const filteredRecords = useMemo(
-    () => sortedRecords.filter(matchesFilter),
-    [matchesFilter, sortedRecords],
-  );
 
   const handleOpenChange = useCallback(
     async (record: BorrowRecord, open: boolean) => {

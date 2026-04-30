@@ -35,6 +35,132 @@ The admin row concurrency system provides optimistic locking with conflict detec
    - `LOCK_RELEASED` – lock expired or was released
    - `kind: "lock"` – SSE event structure
 
+## Error Handling
+
+### LockOwnershipError Class
+
+**NEW**: Type-safe error for lock conflicts:
+
+```typescript
+export class LockOwnershipError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "LockOwnershipError";
+    this.code = code;
+  }
+}
+```
+
+**Error Codes**:
+
+- `"lock_expired"` – Lock doesn't exist or expired
+- `"lock_conflict"` – Lock held by another admin
+
+### assertLockOwnership Updates
+
+Now throws typed errors:
+
+```typescript
+export const assertLockOwnership = async (
+  entity: AdminRealtimeEntity,
+  entityId: string,
+  adminId: string,
+  token?: string,
+): Promise<AdminRowLock> => {
+  const lock = await getRowLock(entity, entityId);
+
+  if (!lock) {
+    throw new LockOwnershipError(
+      "This session expired. Please reopen the action.",
+      "lock_expired",
+    );
+  }
+  if (lock.adminId !== adminId) {
+    throw new LockOwnershipError(
+      `Currently being edited by ${lock.adminName}`,
+      "lock_conflict",
+    );
+  }
+  if (token && lock.token !== token) {
+    throw new LockOwnershipError(
+      "Your editing session expired. Please reopen and try again.",
+      "lock_expired",
+    );
+  }
+  return lock;
+};
+```
+
+### API Route Pattern
+
+All admin routes now catch lock errors early:
+
+```typescript
+try {
+  await assertLockOwnership(
+    "borrow_requests",
+    recordId,
+    session.user.id,
+    body.lockToken,
+  );
+} catch (error) {
+  if (error instanceof LockOwnershipError) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 409 }, // Conflict
+    );
+  }
+  throw error;
+} finally {
+  // ... business logic ...
+
+  try {
+    await releaseLock(
+      "borrow_requests",
+      recordId,
+      session.user.id,
+      body.lockToken,
+    );
+  } catch (lockError) {
+    console.error("releaseLock failed best-effort cleanup", {
+      recordId,
+      lockToken: body.lockToken,
+      error: lockError,
+    });
+  }
+}
+```
+
+### Best-Effort Realtime Publishing
+
+Realtime events are wrapped in try-catch to never block operations:
+
+```typescript
+let realtimeRecord: BorrowRecord | null = null;
+try {
+  realtimeRecord = await getBorrowRecordById(recordId);
+  if (realtimeRecord) {
+    await publishEvent("borrow_requests", {
+      type: "UPDATE",
+      entityId: recordId,
+      data: realtimeRecord,
+    });
+  }
+} catch (realtimeError) {
+  console.error(
+    `Failed to publish realtime update for record ${recordId}:`,
+    realtimeError,
+  );
+}
+
+// Return success regardless of realtime publishing
+return NextResponse.json({
+  success: true,
+  data: realtimeRecord,
+});
+```
+
 ## Data Model
 
 ### Lock Structure
@@ -310,6 +436,12 @@ export const useRowLock = ({
          acquired: true,
          lock,
        });
+       const { acquired, lock } = await acquireLock(
+         entity,
+         activeRowId,
+         currentAdmin,
+         currentLock?.token,
+       );
      }, ROW_LOCK_HEARTBEAT_MS);
    }
    ```

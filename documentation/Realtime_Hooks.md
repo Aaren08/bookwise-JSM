@@ -138,6 +138,84 @@ const safeResync = async () => {
 1. **On reconnect**: When status changes from `"reconnecting"` → `"connected"`
 2. **Periodic safety**: Every 60 seconds (via `onPeriodicResync` listener)
 
+## Hook: useRealtimeUpdates
+
+Subscribes to and applies row-level CREATE/UPDATE/DELETE events with local optimistic state management.
+
+### Updated Signature (v2.0)
+
+```typescript
+type UseRealtimeUpdatesOptions<T extends IdentifiableRow> = {
+  entity: AdminRealtimeEntity;
+  items: T[]; // NEW REQUIRED: Current list for tracking
+  setItems: Dispatch<SetStateAction<T[]>>;
+  sortFn?: (a: T, b: T, order: SortOrder) => number;
+  sortOrder?: SortOrder;
+  pinnedRowId?: string | null;
+  matchesFilter?: (item: T) => boolean;
+  onResync?: () => void | Promise<void>;
+};
+```
+
+### Why items is Required
+
+The hook maintains an internal `currentIdsRef` that tracks which row IDs are currently visible. This is seeded from the `items` prop:
+
+```typescript
+useEffect(() => {
+  currentIdsRef.current = items.map((item) => item.id);
+}, [items]);
+```
+
+When DELETE events arrive, this tracking ensures proper cleanup:
+
+```typescript
+if (parsed.type === "DELETE") {
+  next = previous.filter((item) => item.id !== parsed.entityId);
+  const result = preservePinnedRowIndex(previous, next, pinnedRowIdRef.current);
+  currentIdsRef.current = result.map((r) => r.id); // Update tracking
+  return result;
+}
+```
+
+### Table Integration Pattern
+
+```typescript
+// Step 1: Get filtered visible rows
+const filteredUsers = useMemo(
+  () => sortedUsers.filter(matchesFilter),
+  [matchesFilter, sortedUsers],
+);
+
+// Step 2: Subscribe to realtime updates for ALL rows
+useRealtimeUpdates({
+  entity: "users",
+  items: sortedUsers, // Full sorted list (not filtered)
+  setItems: setSortedUsers,
+  sortFn,
+  sortOrder,
+  pinnedRowId,
+  matchesFilter,
+});
+
+// Step 3: Watch locks only for visible rows
+const rowIds = useMemo(
+  () => filteredUsers.map((user) => user.id), // Only visible
+  [filteredUsers],
+);
+
+const rowLock = useRowLock({
+  entity: "users",
+  rowIds,
+  currentAdminId: currentAdmin.id,
+});
+```
+
+**Pattern explanation**:
+
+- Realtime updates track all rows so UI stays consistent when filters change
+- Lock subscriptions only monitor visible rows to reduce network load
+
 ## Hook: useRowLock
 
 Manages row-level optimistic locks for editing.
@@ -478,6 +556,91 @@ setItemsRef.current((previous) => {
   return preservePinnedRowIndex(previous, next, pinnedRowIdRef.current);
 });
 ```
+
+## Lock Error Handling
+
+### LockOwnershipError in API Routes
+
+When calling admin endpoints that acquire locks, handle the specific error:
+
+```typescript
+try {
+  await acquireRowLock(bookId);
+} catch (error) {
+  // Error handling in components
+  if (error instanceof LockOwnershipError) {
+    if (error.code === "lock_conflict") {
+      showErrorToast(error.message); // "Currently being edited by Jane"
+    } else if (error.code === "lock_expired") {
+      showErrorToast("Session expired. Please try again.");
+    }
+  }
+}
+```
+
+### HTTP 409 Conflict Responses
+
+All endpoints that validate lock ownership return `409 Conflict` on lock errors:
+
+```typescript
+// Response example
+{
+  "error": "Currently being edited by Jane Admin"
+}
+```
+
+**Codes**:
+
+- `lock_conflict` – Another admin holds the lock
+- `lock_expired` – Lock doesn't exist or token expired
+
+### 3. Active Lock Detection
+
+The hook detects when a lock expires or is stolen:
+
+```typescript
+// Uses == for loose equality to catch both null and undefined
+useEffect(() => {
+  if (activeRowId && locks[activeRowId] == null) {
+    setActiveRowId(null);
+    activeTokenRef.current = null;
+    heartbeatRowIdRef.current = null;
+  }
+}, [locks, activeRowId]);
+```
+
+When this triggers, the component should reset edit state and notify the user.
+
+## Accessibility Improvements
+
+### RowLockIndicator Component
+
+Enhanced with ARIA attributes for screen readers:
+
+```typescript
+<div
+  className="row-lock_badge"
+  tabIndex={0}
+  role="img"
+  aria-label={`Currently being edited by ${lock.adminName}`}
+  title={`Currently being edited by ${lock.adminName}`}
+>
+  <span className="row-lock_icon-wrapper">
+    <LoaderPinwheel className="size-3.5 animate-spin" />
+  </span>
+  <div className="row-lock_tooltip">
+    Currently being edited by {lock.adminName}
+  </div>
+</div>
+```
+
+**Accessibility**:
+
+- `tabIndex={0}` – Keyboard accessible
+- `role="img"` – Indicates visual element
+- `aria-label` – Screen reader text
+- `title` – Hover tooltip
+- Tooltip text matches aria-label for consistency
 
 ## Hook: useOptimisticUpdate
 

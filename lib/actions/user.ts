@@ -165,13 +165,20 @@ export const updateUserImage = async (userId: string, imageUrl: string) => {
       .set({ userAvatar: imageUrl, updatedAt: new Date() })
       .where(eq(users.id, userId));
 
-    const approvedUser = await getApprovedUserById(userId);
-    if (approvedUser) {
-      await publishEvent("users", {
-        type: "UPDATE",
-        entityId: userId,
-        data: approvedUser,
-      });
+    try {
+      const approvedUser = await getApprovedUserById(userId);
+      if (approvedUser) {
+        await publishEvent("users", {
+          type: "UPDATE",
+          entityId: userId,
+          data: approvedUser,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime update for user ${userId}:`,
+        realtimeError,
+      );
     }
 
     return {

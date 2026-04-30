@@ -13,6 +13,7 @@ import { CACHE_TAGS } from "@/lib/performance/cache";
 import { NextResponse } from "next/server";
 import {
   CONFLICT_ERROR_MESSAGE,
+  LockOwnershipError,
   assertLockOwnership,
   publishEvent,
   releaseLock,
@@ -45,12 +46,22 @@ export async function PATCH(
       );
     }
 
-    await assertLockOwnership(
-      "borrow_requests",
-      recordId,
-      session.user.id,
-      body.lockToken,
-    );
+    try {
+      await assertLockOwnership(
+        "borrow_requests",
+        recordId,
+        session.user.id,
+        body.lockToken,
+      );
+    } catch (error) {
+      if (error instanceof LockOwnershipError) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
 
     try {
       const [current] = await db
@@ -149,13 +160,21 @@ export async function PATCH(
         console.error("broadcastAdminDashboardUpdate failed", err),
       );
 
-      const realtimeRecord = await getBorrowRecordById(recordId);
-      if (realtimeRecord) {
-        await publishEvent("borrow_requests", {
-          type: "UPDATE",
-          entityId: recordId,
-          data: realtimeRecord,
-        });
+      let realtimeRecord: BorrowRecord | null = null;
+      try {
+        realtimeRecord = await getBorrowRecordById(recordId);
+        if (realtimeRecord) {
+          await publishEvent("borrow_requests", {
+            type: "UPDATE",
+            entityId: recordId,
+            data: realtimeRecord,
+          });
+        }
+      } catch (realtimeError) {
+        console.error(
+          `[PATCH /api/requests/:id/approve] Best-effort realtime publish failed for record ${recordId}:`,
+          realtimeError,
+        );
       }
 
       return NextResponse.json({
@@ -163,12 +182,20 @@ export async function PATCH(
         data: realtimeRecord,
       });
     } finally {
-      await releaseLock(
-        "borrow_requests",
-        recordId,
-        session.user.id,
-        body.lockToken,
-      );
+      try {
+        await releaseLock(
+          "borrow_requests",
+          recordId,
+          session.user.id,
+          body.lockToken,
+        );
+      } catch (lockError) {
+        console.error("releaseLock failed best-effort cleanup", {
+          recordId,
+          lockToken: body.lockToken,
+          error: lockError,
+        });
+      }
     }
   } catch (error) {
     console.error("[PATCH /api/requests/:id/approve]", error);

@@ -4,6 +4,7 @@ import { useMemo, memo, useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
 import Image from "next/image";
 import Link from "next/link";
+import router from "next/router";
 import DeleteBook from "../DeleteBook";
 import TableRow from "../shared/TableRow";
 import { useSortedData } from "@/lib/admin/essentials/useSortedData";
@@ -72,9 +73,10 @@ const BookRowComponent = memo(
           <Link
             href={`/admin/books/${book.id}/edit`}
             onClick={async (event) => {
+              event.preventDefault();
               const acquired = await onAcquireLock(book);
-              if (!acquired) {
-                event.preventDefault();
+              if (acquired) {
+                router.push(`/admin/books/${book.id}/edit`);
               }
             }}
             className={isLocked ? "pointer-events-none opacity-50" : undefined}
@@ -136,6 +138,7 @@ const BookTable = ({ books, currentAdmin }: Props) => {
 
   useRealtimeUpdates({
     entity: "books",
+    items: sortedData,
     setItems: setSortedData,
     sortFn,
     sortOrder,
@@ -143,17 +146,18 @@ const BookTable = ({ books, currentAdmin }: Props) => {
     matchesFilter,
   });
 
-  const rowIds = useMemo(() => sortedData.map((book) => book.id), [sortedData]);
+  const filteredBooks = useMemo(
+    () => sortedData.filter(matchesFilter),
+    [matchesFilter, sortedData],
+  );
+
+  const rowIds = useMemo(() => filteredBooks.map((book) => book.id), [filteredBooks]);
+
   const rowLock = useRowLock({
     entity: "books",
     rowIds,
     currentAdminId: currentAdmin.id,
   });
-
-  const filteredBooks = useMemo(
-    () => sortedData.filter(matchesFilter),
-    [matchesFilter, sortedData],
-  );
 
   const handleDelete = useCallback(
     (id: string) => {

@@ -256,13 +256,20 @@ export const updateBorrowStatus = async ({
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
-    const realtimeRecord = await getBorrowRecordById(borrowRecordId);
-    if (realtimeRecord) {
-      await publishEvent("borrow_requests", {
-        type: "UPDATE",
-        entityId: borrowRecordId,
-        data: realtimeRecord,
-      });
+    try {
+      const realtimeRecord = await getBorrowRecordById(borrowRecordId);
+      if (realtimeRecord) {
+        await publishEvent("borrow_requests", {
+          type: "UPDATE",
+          entityId: borrowRecordId,
+          data: realtimeRecord,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime update for borrow status ${borrowRecordId}:`,
+        realtimeError,
+      );
     }
 
     return {
@@ -326,15 +333,22 @@ export const clearBorrowRecords = async ({
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
-    await Promise.all(
-      deletedRecords.map((record) =>
-        publishEvent("borrow_requests", {
-          type: "DELETE",
-          entityId: record.id,
-          data: null,
-        }),
-      ),
-    );
+    try {
+      await Promise.all(
+        deletedRecords.map((record) =>
+          publishEvent("borrow_requests", {
+            type: "DELETE",
+            entityId: record.id,
+            data: null,
+          }),
+        ),
+      );
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime delete events for cleared borrow records:`,
+        realtimeError,
+      );
+    }
 
     return {
       success: true,

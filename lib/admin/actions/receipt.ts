@@ -77,13 +77,20 @@ export const generateReceipt = async (borrowRecordId: string) => {
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
-    const realtimeRecord = await getBorrowRecordById(borrowRecordId);
-    if (realtimeRecord) {
-      await publishEvent("borrow_requests", {
-        type: "UPDATE",
-        entityId: borrowRecordId,
-        data: realtimeRecord,
-      });
+    try {
+      const realtimeRecord = await getBorrowRecordById(borrowRecordId);
+      if (realtimeRecord) {
+        await publishEvent("borrow_requests", {
+          type: "UPDATE",
+          entityId: borrowRecordId,
+          data: realtimeRecord,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime update for borrow record ${borrowRecordId}:`,
+        realtimeError,
+      );
     }
 
     // Format dates for receipt

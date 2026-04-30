@@ -53,6 +53,7 @@ export async function PUT(request: Request) {
     );
   }
 }
+
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -106,35 +107,40 @@ export async function POST(request: Request) {
       }
     }
 
-    await db
+    const [updatedUser] = await db
       .update(users)
       .set({
         userAvatar: imageUrl,
         userAvatarFileId: fileId,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, session.user.id));
+      .where(eq(users.id, session.user.id))
+      .returning({ status: users.status });
 
     revalidateTag(CACHE_TAGS.users, "max");
 
-    if (existingUser[0]?.status === "APPROVED") {
-      const approvedUser = await getApprovedUserById(session.user.id);
-      if (approvedUser) {
-        await publishEvent("users", {
-          type: "UPDATE",
-          entityId: session.user.id,
-          data: approvedUser,
-        });
+    try {
+      if (updatedUser?.status === "APPROVED") {
+        const approvedUser = await getApprovedUserById(session.user.id);
+        if (approvedUser) {
+          await publishEvent("users", {
+            type: "UPDATE",
+            entityId: session.user.id,
+            data: approvedUser,
+          });
+        }
+      } else if (updatedUser?.status === "PENDING") {
+        const pendingUser = await getPendingUserById(session.user.id);
+        if (pendingUser) {
+          await publishEvent("account_requests", {
+            type: "UPDATE",
+            entityId: session.user.id,
+            data: pendingUser,
+          });
+        }
       }
-    } else if (existingUser[0]?.status === "PENDING") {
-      const pendingUser = await getPendingUserById(session.user.id);
-      if (pendingUser) {
-        await publishEvent("account_requests", {
-          type: "UPDATE",
-          entityId: session.user.id,
-          data: pendingUser,
-        });
-      }
+    } catch (publishError) {
+      console.error("Failed to publish avatar update event:", publishError);
     }
 
     return NextResponse.json({ success: true });

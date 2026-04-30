@@ -111,14 +111,24 @@ export const signUp = async (credentials: AuthCredentials) => {
       console.error("Admin dashboard realtime broadcast failed:", error);
     });
 
-    const pendingUser = await getPendingUserById(createdUser.id);
-    if (pendingUser) {
-      await publishEvent("account_requests", {
-        type: "CREATE",
-        entityId: pendingUser.id,
-        data: pendingUser,
-      });
-    }
+    // Non-blocking account-request publication
+    (async () => {
+      try {
+        const pendingUser = await getPendingUserById(createdUser.id);
+        if (pendingUser) {
+          await publishEvent("account_requests", {
+            type: "CREATE",
+            entityId: pendingUser.id,
+            data: pendingUser,
+          });
+        }
+      } catch (realtimeError) {
+        console.error(
+          `Failed to publish realtime update for new account request ${createdUser.id}:`,
+          realtimeError,
+        );
+      }
+    })();
 
     // Fire-and-forget workflow trigger - don't block user signup
     // User creation/sign-in should succeed regardless of workflow outcome

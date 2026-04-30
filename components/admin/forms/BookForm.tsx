@@ -87,7 +87,7 @@ const BookForm = ({ type, currentAdmin, ...book }: Props) => {
   const { acquireRowLock, releaseRowLock } = useRowLock({
     entity: "books",
     rowIds,
-    currentAdminId: currentAdmin?.id || "",
+    currentAdminId: currentAdmin?.id as string,
   });
 
   useEffect(() => {

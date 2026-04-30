@@ -77,9 +77,26 @@ const publishBorrowBookRealtimeMessage = async (
     ],
   );
 
-  return (
-    typeof eventJson === "string" ? JSON.parse(eventJson) : eventJson
-  ) as BorrowBookRealtimeEvent;
+  try {
+    const parsed =
+      typeof eventJson === "string" ? JSON.parse(eventJson) : eventJson;
+
+    if (isBorrowBookRealtimeEvent(parsed)) {
+      return parsed;
+    }
+
+    console.error(
+      "Invalid book realtime event shape returned from redis.eval:",
+      parsed,
+    );
+    throw new Error("Invalid book realtime event shape returned from Redis");
+  } catch (error) {
+    console.error(
+      "Failed to parse or validate book realtime event from redis.eval:",
+      error,
+    );
+    throw error;
+  }
 };
 
 export const publishBookAvailabilityUpdate = async (

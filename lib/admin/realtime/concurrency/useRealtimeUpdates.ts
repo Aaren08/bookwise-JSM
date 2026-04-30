@@ -49,6 +49,7 @@ type UseRealtimeUpdatesOptions<T extends IdentifiableRow> = {
    * The parent can use it to re-fetch the current page of rows.
    */
   onResync?: () => void | Promise<void>;
+  items: T[];
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,7 @@ export const useRealtimeUpdates = <T extends IdentifiableRow>({
   pinnedRowId,
   matchesFilter,
   onResync,
+  items,
 }: UseRealtimeUpdatesOptions<T>) => {
   // Stable refs — avoid re-registering the listener on every render
   const setItemsRef = useRef(setItems);
@@ -126,6 +128,11 @@ export const useRealtimeUpdates = <T extends IdentifiableRow>({
   const currentIdsRef = useRef<string[]>([]);
   const onResyncRef = useRef(onResync);
   useEffect(() => { onResyncRef.current = onResync; }, [onResync]);
+
+  // Seed and maintain currentIdsRef whenever the items prop changes
+  useEffect(() => {
+    currentIdsRef.current = items.map((item) => item.id);
+  }, [items]);
 
   // ---------------------------------------------------------------------------
   // Full State Resync — fetch latest rows + locks after reconnect
@@ -241,7 +248,9 @@ export const useRealtimeUpdates = <T extends IdentifiableRow>({
 
           if (parsed.type === "DELETE") {
             next = previous.filter((item) => item.id !== parsed.entityId);
-            return preservePinnedRowIndex(previous, next, pinnedRowIdRef.current);
+            const result = preservePinnedRowIndex(previous, next, pinnedRowIdRef.current);
+            currentIdsRef.current = result.map((r) => r.id);
+            return result;
           }
 
           if (!parsed.data) return previous;

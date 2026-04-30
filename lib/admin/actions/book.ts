@@ -49,11 +49,18 @@ export const createBook = async (params: BookParams) => {
     );
 
     const payload = JSON.parse(JSON.stringify(newBook[0])) as Book;
-    await publishEvent("books", {
-      type: "CREATE",
-      entityId: payload.id,
-      data: payload,
-    });
+    try {
+      await publishEvent("books", {
+        type: "CREATE",
+        entityId: payload.id,
+        data: payload,
+      });
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime CREATE event for book ${payload.id}:`,
+        realtimeError,
+      );
+    }
 
     return {
       success: true,
@@ -117,11 +124,18 @@ export const updateBook = async (params: UpdateBookParams) => {
     );
 
     if (updatedBook) {
-      await publishEvent("books", {
-        type: "UPDATE",
-        entityId: id,
-        data: updatedBook,
-      });
+      try {
+        await publishEvent("books", {
+          type: "UPDATE",
+          entityId: id,
+          data: updatedBook,
+        });
+      } catch (realtimeError) {
+        console.error(
+          `Failed to publish realtime UPDATE event for book ${id}:`,
+          realtimeError,
+        );
+      }
     }
 
     await releaseLock("books", id, admin.id, lockToken);
@@ -234,11 +248,18 @@ export const deleteBook = async ({
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
-    await publishEvent("books", {
-      type: "DELETE",
-      entityId: id,
-      data: null,
-    });
+    try {
+      await publishEvent("books", {
+        type: "DELETE",
+        entityId: id,
+        data: null,
+      });
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime DELETE event for book ${id}:`,
+        realtimeError,
+      );
+    }
 
     await releaseLock("books", id, admin.id, lockToken);
 

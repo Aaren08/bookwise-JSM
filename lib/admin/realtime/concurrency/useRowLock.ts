@@ -403,7 +403,7 @@ export const useRowLock = ({
 
   // Auto-clear activeRowId if the lock disappears (e.g. TTL sweep or stolen)
   useEffect(() => {
-    if (activeRowId && locks[activeRowId] === null) {
+    if (activeRowId && locks[activeRowId] == null) {
       startTransition(() => setActiveRowId(null));
       activeTokenRef.current = null;
       heartbeatRowIdRef.current = null;

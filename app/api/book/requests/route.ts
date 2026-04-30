@@ -160,13 +160,20 @@ export async function POST(request: Request) {
       console.error("broadcastBookAvailabilityUpdate failed", err),
     );
 
-    const realtimeRecord = await getBorrowRecordById(record.id);
-    if (realtimeRecord) {
-      await publishEvent("borrow_requests", {
-        type: "CREATE",
-        entityId: record.id,
-        data: realtimeRecord,
-      });
+    try {
+      const realtimeRecord = await getBorrowRecordById(record.id);
+      if (realtimeRecord) {
+        await publishEvent("borrow_requests", {
+          type: "CREATE",
+          entityId: record.id,
+          data: realtimeRecord,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `[POST /api/requests] Best-effort realtime publish failed for record ${record.id}:`,
+        realtimeError,
+      );
     }
 
     return NextResponse.json(

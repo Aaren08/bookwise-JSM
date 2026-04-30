@@ -64,6 +64,7 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
 
   useRealtimeUpdates({
     entity: "account_requests",
+    items: sortedUsers,
     setItems: setSortedUsers,
     sortFn,
     sortOrder,
@@ -71,20 +72,21 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
     matchesFilter,
   });
 
-  const rowIds = useMemo(
-    () => sortedUsers.map((user) => user.id),
-    [sortedUsers],
+  const filteredUsers = useMemo(
+    () => sortedUsers.filter(matchesFilter),
+    [matchesFilter, sortedUsers],
   );
+
+  const rowIds = useMemo(
+    () => filteredUsers.map((user) => user.id),
+    [filteredUsers],
+  );
+
   const rowLock = useRowLock({
     entity: "account_requests",
     rowIds,
     currentAdminId: currentAdmin.id,
   });
-
-  const filteredUsers = useMemo(
-    () => sortedUsers.filter(matchesFilter),
-    [matchesFilter, sortedUsers],
-  );
 
   const handleViewCard = (user: PendingUser) => {
     setSelectedUser(user);

@@ -170,6 +170,7 @@ const UserTable = ({ users, currentAdmin }: Props) => {
 
   useRealtimeUpdates({
     entity: "users",
+    items: sortedUsers,
     setItems: setSortedUsers,
     sortFn,
     sortOrder,
@@ -177,20 +178,21 @@ const UserTable = ({ users, currentAdmin }: Props) => {
     matchesFilter,
   });
 
-  const rowIds = useMemo(
-    () => sortedUsers.map((user) => user.id),
-    [sortedUsers],
+  const filteredUsers = useMemo(
+    () => sortedUsers.filter(matchesFilter),
+    [matchesFilter, sortedUsers],
   );
+
+  const rowIds = useMemo(
+    () => filteredUsers.map((user) => user.id),
+    [filteredUsers],
+  );
+
   const rowLock = useRowLock({
     entity: "users",
     rowIds,
     currentAdminId: currentAdmin.id,
   });
-
-  const filteredUsers = useMemo(
-    () => sortedUsers.filter(matchesFilter),
-    [matchesFilter, sortedUsers],
-  );
 
   const handleOpenChange = useCallback(
     async (user: User, open: boolean) => {
@@ -227,12 +229,15 @@ const UserTable = ({ users, currentAdmin }: Props) => {
     async (user: User, newRole: "USER" | "ADMIN") => {
       if (pendingIdsRef.current.has(user.id)) return;
 
+      let lockToken = rowLock.lockForRow(user.id)?.token;
+
       if (!rowLock.isLockedByCurrentAdmin(user.id)) {
         const result = await rowLock.acquireRowLock(user.id);
         if (!result.success) {
           showErrorToast(result.message || "Unable to lock row");
           return;
         }
+        lockToken = result.lock?.token;
       }
 
       pendingIdsRef.current.add(user.id);
@@ -248,7 +253,7 @@ const UserTable = ({ users, currentAdmin }: Props) => {
           userId: user.id,
           role: newRole,
           expectedVersion: user.version,
-          lockToken: rowLock.lockForRow(user.id)?.token,
+          lockToken,
         });
         if (res.success && res.data) {
           showSuccessToast("User role updated successfully");

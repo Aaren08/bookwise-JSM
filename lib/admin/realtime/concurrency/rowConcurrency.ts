@@ -220,6 +220,15 @@ export const releaseLock = async (
   };
 };
 
+export class LockOwnershipError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "LockOwnershipError";
+    this.code = code;
+  }
+}
+
 export const assertLockOwnership = async (
   entity: AdminRealtimeEntity,
   entityId: string,
@@ -229,12 +238,22 @@ export const assertLockOwnership = async (
   const lock = await getRowLock(entity, entityId);
 
   if (!lock || lock.adminId !== adminId || (token && lock.token !== token)) {
-    throw new Error(
-      lock
-        ? lock.adminId !== adminId
-          ? `Currently being edited by ${lock.adminName}`
-          : "Your editing session expired. Please reopen and try again."
-        : "This session expired. Please reopen the action.",
+    if (!lock) {
+      throw new LockOwnershipError(
+        "This session expired. Please reopen the action.",
+        "lock_expired",
+      );
+    }
+    if (lock.adminId !== adminId) {
+      throw new LockOwnershipError(
+        `Currently being edited by ${lock.adminName}`,
+        "lock_conflict",
+      );
+    }
+    // Token mismatch usually means the lock was re-acquired or expired/refreshed
+    throw new LockOwnershipError(
+      "Your editing session expired. Please reopen and try again.",
+      "lock_expired",
     );
   }
   return lock;

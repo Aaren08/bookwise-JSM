@@ -133,13 +133,20 @@ export const borrowBook = async (params: BorrowBookParams) => {
       console.error("Failed to broadcast dashboard update:", err),
     );
 
-    const realtimeRecord = await getBorrowRecordById(record.id);
-    if (realtimeRecord) {
-      await publishEvent("borrow_requests", {
-        type: "CREATE",
-        entityId: record.id,
-        data: realtimeRecord,
-      });
+    try {
+      const realtimeRecord = await getBorrowRecordById(record.id);
+      if (realtimeRecord) {
+        await publishEvent("borrow_requests", {
+          type: "CREATE",
+          entityId: record.id,
+          data: realtimeRecord,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime update for borrow request ${record.id}:`,
+        realtimeError,
+      );
     }
 
     return {

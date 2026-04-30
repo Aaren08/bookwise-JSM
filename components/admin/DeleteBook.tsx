@@ -51,16 +51,22 @@ const DeleteBook = ({
   };
 
   const handleDelete = async () => {
-    const res = await deleteBook({ id, expectedVersion, lockToken });
-    if (res.success) {
-      setOpen(false);
-      showSuccessToast("Book deleted successfully");
-      onDelete?.();
-    } else {
-      showErrorToast(res.message || "Failed to delete book");
+    try {
+      const res = await deleteBook({ id, expectedVersion, lockToken });
+      if (res.success) {
+        setOpen(false);
+        showSuccessToast("Book deleted successfully");
+        onDelete?.();
+      } else {
+        showErrorToast(res.message || "Failed to delete book");
+      }
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Failed to delete book",
+      );
+    } finally {
+      await onReleaseLock();
     }
-
-    await onReleaseLock();
   };
 
   return (

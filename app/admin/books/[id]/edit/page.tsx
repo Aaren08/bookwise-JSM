@@ -10,13 +10,16 @@ import { z } from "zod";
 import { auth } from "@/auth";
 
 const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
+  const session = await auth();
+  if (!session || session.user?.role !== "ADMIN") return notFound();
+
   const id = (await params).id;
 
   const validId = z.uuid().safeParse(id);
   if (!validId.success) return notFound();
 
   const [book] = await db.select().from(books).where(eq(books.id, id)).limit(1);
-  const session = await auth();
+  if (!book) return notFound();
 
   return (
     <>
@@ -31,8 +34,8 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
         <BookForm
           type="update"
           currentAdmin={{
-            id: session?.user?.id || "",
-            name: session?.user?.name || "Admin",
+            id: session.user.id as string,
+            name: session.user.name as string,
           }}
           {...book}
         />

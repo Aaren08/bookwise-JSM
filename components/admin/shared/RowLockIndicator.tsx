@@ -12,7 +12,13 @@ const RowLockIndicator = ({ lock }: RowLockIndicatorProps) => {
 
   return (
     <div className="row-lock_container">
-      <div className="row-lock_badge">
+      <div
+        className="row-lock_badge"
+        tabIndex={0}
+        role="img"
+        aria-label={`Currently being edited by ${lock.adminName}`}
+        title={`Currently being edited by ${lock.adminName}`}
+      >
         <span className="row-lock_icon-wrapper">
           <LoaderPinwheel className="size-3.5 animate-spin" />
         </span>
