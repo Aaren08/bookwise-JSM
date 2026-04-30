@@ -36,6 +36,20 @@
       "when": 1776755034816,
       "tag": "0004_shocking_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777066200000,
+      "tag": "0006_admin_realtime_concurrency",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777374000000,
+      "tag": "0007_admin_realtime_versions",
+      "breakpoints": true
     }
   ]
 }

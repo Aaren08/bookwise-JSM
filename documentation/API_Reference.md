@@ -4,6 +4,13 @@
 
 BookWise exposes authenticated Next.js route handlers for user, admin, and internal library workflows. The current uncommitted changes introduce a dedicated `/api/book/*` surface for borrow requests, realtime availability, and reservation expiry.
 
+## Related Documentation
+
+For realtime admin features, see:
+
+- [Admin Realtime API Routes](Admin_Realtime_API_Routes.md) – `/api/admin/realtime/rows`, `/api/admin/sync`, `/api/admin/locks`
+- [Book Availability Realtime](Book_Availability_Realtime.md) – `/api/book/stream` (public SSE for inventory updates)
+
 ## Response Shape
 
 Most handlers return JSON in one of these forms:

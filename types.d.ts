@@ -12,11 +12,18 @@ interface Book {
   videoUrl: string;
   summary: string;
   createdAt: Date | null;
+  updatedAt: string | Date;
+  version: number;
   isLoanedBook?: boolean;
   borrowDate?: Date | string;
   dueDate?: Date | string;
   borrowRecordId?: string;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
+  borrowStatus?:
+    | "PENDING"
+    | "BORROWED"
+    | "RETURNED"
+    | "LATE_RETURN"
+    | "REJECTED";
   returnDate?: Date | string | null;
 }
 
@@ -68,6 +75,8 @@ interface BorrowRecord {
   userEmail: string;
   userAvatar?: string;
   createdAt?: string;
+  updatedAt: string;
+  version: number;
 }
 
 interface User {
@@ -81,6 +90,8 @@ interface User {
   universityId: string;
   universityCard: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  updatedAt: string;
+  version: number;
 }
 
 interface PendingUser {
@@ -88,10 +99,17 @@ interface PendingUser {
   fullName: string;
   email: string;
   userAvatar?: string;
-  createdAt: Date;
+  createdAt: string | Date;
   universityId: string;
   universityCard: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  updatedAt: string;
+  version: number;
+}
+
+interface AdminActor {
+  id: string;
+  name: string;
 }
 
 interface SearchPageProps {
@@ -116,7 +134,12 @@ interface FileUploadProps {
 
 interface ReceiptButtonProps {
   borrowRecordId?: string;
-  borrowStatus: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
+  borrowStatus:
+    | "PENDING"
+    | "BORROWED"
+    | "RETURNED"
+    | "LATE_RETURN"
+    | "REJECTED";
   showOverdueWarning: boolean;
   userRole?: "USER" | "ADMIN";
 }
@@ -125,7 +148,12 @@ interface BorrowedBookCardProps extends Book {
   borrowDate: Date | string;
   dueDate: Date | string;
   borrowRecordId?: string;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
+  borrowStatus?:
+    | "PENDING"
+    | "BORROWED"
+    | "RETURNED"
+    | "LATE_RETURN"
+    | "REJECTED";
   returnDate?: Date | string | null;
 }
 

@@ -5,6 +5,8 @@ import { db } from "@/database/drizzle";
 import { users, borrowRecords, books } from "@/database/schema";
 import { auth } from "@/auth";
 import { and, count } from "drizzle-orm";
+import { getApprovedUserById } from "@/lib/admin/actions/user";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 
 export const getUserBorrowedBooks = async (
   userId: string,
@@ -160,8 +162,24 @@ export const updateUserImage = async (userId: string, imageUrl: string) => {
 
     await db
       .update(users)
-      .set({ userAvatar: imageUrl })
+      .set({ userAvatar: imageUrl, updatedAt: new Date() })
       .where(eq(users.id, userId));
+
+    try {
+      const approvedUser = await getApprovedUserById(userId);
+      if (approvedUser) {
+        await publishEvent("users", {
+          type: "UPDATE",
+          entityId: userId,
+          data: approvedUser,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime update for user ${userId}:`,
+        realtimeError,
+      );
+    }
 
     return {
       success: true,

@@ -16,7 +16,8 @@
 export const runtime = "nodejs";
 
 import { db } from "@/database/drizzle";
-import { books, borrowRecords } from "@/database/schema";
+import { books, borrowRecords, users } from "@/database/schema";
+
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
@@ -25,6 +26,8 @@ import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+
 
 const RESERVATION_EXPIRY_MINUTES = 15;
 
@@ -63,11 +66,15 @@ export async function GET(request: Request) {
 
     const expiredIds = expiredRecords.map((r) => r.id);
 
-    // ── 2. Bulk-transition PENDING → REJECTED ─────────────────────────────────
     await db
       .update(borrowRecords)
-      .set({ borrowStatus: "REJECTED" })
+      .set({
+        borrowStatus: "REJECTED",
+        updatedAt: new Date(),
+        version: sql`${borrowRecords.version} + 1`,
+      })
       .where(inArray(borrowRecords.id, expiredIds));
+
 
     // ── 3. Group by bookId and decrement each book's reserved_count ──────────
     const bookIdToExpiredCount = expiredRecords.reduce<Record<string, number>>(
@@ -85,6 +92,7 @@ export async function GET(request: Request) {
         .update(books)
         .set({
           reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredCount})`,
+          updatedAt: new Date(),
         })
         .where(eq(books.id, bookId))
         .returning({
@@ -111,12 +119,47 @@ export async function GET(request: Request) {
     revalidateTag(CACHE_TAGS.books, "max");
     revalidateTag(CACHE_TAGS.users, "max");
 
+    // ── 5. Batch-fetch full records for realtime fan-out ──────────────────────
+    const fullUpdatedRecords = await db
+      .select({
+        id: borrowRecords.id,
+        borrowDate: borrowRecords.borrowDate,
+        dueDate: borrowRecords.dueDate,
+        returnDate: borrowRecords.returnDate,
+        status: borrowRecords.borrowStatus,
+        updatedAt: borrowRecords.updatedAt,
+        version: borrowRecords.version,
+        bookTitle: books.title,
+        bookCover: books.coverUrl,
+        bookGenre: books.genre,
+        userFullName: users.fullName,
+        userEmail: users.email,
+        userAvatar: users.userAvatar,
+      })
+      .from(borrowRecords)
+      .innerJoin(books, eq(borrowRecords.bookId, books.id))
+      .innerJoin(users, eq(borrowRecords.userId, users.id))
+      .where(inArray(borrowRecords.id, expiredIds));
+
+    // Convert to JSON-friendly objects if necessary (mirroring getBorrowRecordById)
+    const recordsToPublish = JSON.parse(JSON.stringify(fullUpdatedRecords));
+
     await Promise.allSettled([
       ...broadcastPromises,
       broadcastAdminDashboardUpdate().catch((err) =>
         console.error("broadcastAdminDashboardUpdate failed", err),
       ),
+      ...recordsToPublish.map((record: BorrowRecord) =>
+        publishEvent("borrow_requests", {
+          type: "UPDATE",
+          entityId: record.id,
+          data: record,
+        }).catch((err) =>
+          console.error(`Failed to publish event for ${record.id}`, err),
+        ),
+      ),
     ]);
+
 
     console.log(
       `[expire-reservations] Expired ${expiredIds.length} reservations across ${Object.keys(bookIdToExpiredCount).length} book(s).`,

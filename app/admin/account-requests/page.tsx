@@ -5,6 +5,7 @@ import NavigatePage from "@/components/NavigatePage";
 import { getPendingUsers } from "@/lib/admin/actions/user";
 import { Suspense } from "react";
 import { PartialTableWrapper } from "@/components/admin/PartialTableWrapper";
+import { auth } from "@/auth";
 
 // Unified data fetching - called ONCE
 async function getAccountRequestsData(page: number) {
@@ -20,7 +21,17 @@ async function AccountRequestsTableBody({ searchParams }: { searchParams: Promis
   const { page: pageParam } = await searchParams;
   const page = Number(pageParam) || 1;
   const data = await getAccountRequestsData(page);
-  return <AccountTable users={data?.users || []} />;
+  const session = await auth();
+
+  return (
+    <AccountTable
+      users={data?.users || []}
+      currentAdmin={{
+        id: session?.user?.id || "",
+        name: session?.user?.name || "Admin",
+      }}
+    />
+  );
 }
 
 // Pagination component

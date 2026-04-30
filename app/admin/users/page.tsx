@@ -4,6 +4,7 @@ import UserTable from "@/components/admin/tables/UserTable";
 import { UserTableHeader } from "@/components/admin/tables/table-header/UserTableHeader";
 import { getApprovedUsers } from "@/lib/admin/actions/user";
 import { PartialTableWrapper } from "@/components/admin/PartialTableWrapper";
+import { auth } from "@/auth";
 
 // Unified data fetching - called ONCE
 async function getUsersData(page: number) {
@@ -15,8 +16,18 @@ async function getUsersData(page: number) {
 }
 
 // Table body component
-function UsersTableBody({ users }: { users: User[] }) {
-  return <UserTable users={users} />;
+async function UsersTableBody({ users }: { users: User[] }) {
+  const session = await auth();
+
+  return (
+    <UserTable
+      users={users}
+      currentAdmin={{
+        id: session?.user?.id || "",
+        name: session?.user?.name || "Admin",
+      }}
+    />
+  );
 }
 
 // Pagination component

@@ -3,7 +3,8 @@ export const ADMIN_DASHBOARD_REALTIME_CHANNEL =
 
 export const ADMIN_DASHBOARD_SSE_ENDPOINT = "/api/admin/dashboard/realtime";
 export const ADMIN_DASHBOARD_SSE_RETRY_MS = 2000;
-export const ADMIN_DASHBOARD_SSE_KEEPALIVE_MS = 25_000;
+export const ADMIN_DASHBOARD_SSE_KEEPALIVE_MS = 15_000;
+export const ADMIN_DASHBOARD_SSE_MAX_LIFETIME_MS = 5 * 60 * 1000;
 
 export type AdminDashboardRealtimeMessage =
   | {
