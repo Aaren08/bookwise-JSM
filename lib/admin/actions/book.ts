@@ -152,7 +152,7 @@ export const updateBook = async (params: UpdateBookParams) => {
         console.error("Failed to release lock for updateBook", {
           id,
           adminId: admin.id,
-          lockToken,
+          hasLock: !!lockToken,
           error,
         });
       }
@@ -286,7 +286,7 @@ export const deleteBook = async ({
         console.error("Failed to release lock for deleteBook", {
           id,
           adminId: admin.id,
-          lockToken,
+          hasLock: !!lockToken,
           error,
         });
       }

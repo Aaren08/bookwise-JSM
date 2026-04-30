@@ -235,6 +235,13 @@ export const assertLockOwnership = async (
   adminId: string,
   token?: string,
 ) => {
+  if (!token) {
+    throw new LockOwnershipError(
+      "Your editing session expired. Please reopen and try again.",
+      "lock_expired",
+    );
+  }
+
   const lock = await getRowLock(entity, entityId);
 
   if (!lock || lock.adminId !== adminId || (token && lock.token !== token)) {
