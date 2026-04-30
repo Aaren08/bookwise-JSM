@@ -99,14 +99,6 @@ export async function POST(request: Request) {
       .where(eq(users.id, session.user.id))
       .limit(1);
 
-    if (existingUser.length > 0 && existingUser[0].userAvatarFileId) {
-      try {
-        await imagekit.deleteFile(existingUser[0].userAvatarFileId);
-      } catch (error) {
-        console.error("Failed to delete old avatar:", error);
-      }
-    }
-
     const [updatedUser] = await db
       .update(users)
       .set({
@@ -116,6 +108,21 @@ export async function POST(request: Request) {
       })
       .where(eq(users.id, session.user.id))
       .returning({ status: users.status });
+
+    if (!updatedUser) {
+      return NextResponse.json(
+        { error: "Failed to update user avatar" },
+        { status: 500 },
+      );
+    }
+
+    if (existingUser.length > 0 && existingUser[0].userAvatarFileId) {
+      try {
+        await imagekit.deleteFile(existingUser[0].userAvatarFileId);
+      } catch (error) {
+        console.error("Failed to delete old avatar:", error);
+      }
+    }
 
     revalidateTag(CACHE_TAGS.users, "max");
 

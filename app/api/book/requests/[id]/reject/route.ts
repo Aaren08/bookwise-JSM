@@ -55,10 +55,7 @@ export async function PATCH(
       );
     } catch (error) {
       if (error instanceof LockOwnershipError) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: error.message }, { status: 409 });
       }
       throw error;
     }
@@ -195,7 +192,7 @@ export async function PATCH(
       } catch (lockError) {
         console.error("releaseLock failed best-effort cleanup", {
           recordId,
-          lockToken: body.lockToken,
+          lockToken: "REDACTED",
           error: lockError,
         });
       }

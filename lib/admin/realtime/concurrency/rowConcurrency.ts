@@ -293,20 +293,17 @@ export const updateWithVersionCheck = async <TTable>({
   id,
   expectedVersion,
   values,
-}: UpdateWithVersionCheckArgs<TTable>) => {
-  const result = await db
+  trx,
+}: UpdateWithVersionCheckArgs<TTable> & { trx?: unknown }) => {
+  const dbInstance = trx ? (trx as typeof db) : db;
+  const result = await dbInstance
     .update(table as never)
     .set({
       ...values,
       updatedAt: new Date(),
       version: sql`${versionColumn} + 1`,
     } as never)
-    .where(
-      and(
-        eq(idColumn, id),
-        eq(versionColumn, expectedVersion),
-      ),
-    )
+    .where(and(eq(idColumn, id), eq(versionColumn, expectedVersion)))
     .returning();
 
   const updatedRow = result[0];

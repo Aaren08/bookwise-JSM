@@ -4,7 +4,7 @@ import { useMemo, memo, useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
 import Image from "next/image";
 import Link from "next/link";
-import router from "next/router";
+import { useRouter } from "next/navigation";
 import DeleteBook from "../DeleteBook";
 import TableRow from "../shared/TableRow";
 import { useSortedData } from "@/lib/admin/essentials/useSortedData";
@@ -37,71 +37,77 @@ const BookRowComponent = memo(
     onDelete: (id: string) => void;
     onAcquireLock: (book: Book) => Promise<boolean>;
     onReleaseLock: (book: Book) => Promise<void>;
-  }) => (
-    <TableRow>
-      <td className="py-4 pr-4 max-sm:pr-6">
-        <div className="flex items-center gap-3">
-          {book.coverUrl ? (
-            <Image
-              src={book.coverUrl}
-              alt={book.title}
-              width={40}
-              height={60}
-              style={{ width: "auto", height: "auto" }}
-              className="rounded-sm object-cover"
-            />
-          ) : (
-            <div className="h-[60px] w-[40px] rounded-sm bg-gray-200" />
-          )}
-          <p className="line-clamp-1 max-w-[200px] font-semibold text-dark-400">
-            {book.title}
-          </p>
-        </div>
-      </td>
-      <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
-        {book.author}
-      </td>
-      <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
-        {book.genre}
-      </td>
-      <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
-        {dayjs(book.createdAt).format("MMM DD YYYY")}
-      </td>
-      <td className="relative py-4 pr-4 max-sm:pr-6">
-        <RowLockIndicator lock={lock} />
-        <div className="flex items-center gap-2.5">
-          <Link
-            href={`/admin/books/${book.id}/edit`}
-            onClick={async (event) => {
-              event.preventDefault();
-              const acquired = await onAcquireLock(book);
-              if (acquired) {
-                router.push(`/admin/books/${book.id}/edit`);
+  }) => {
+    const router = useRouter();
+
+    return (
+      <TableRow>
+        <td className="py-4 pr-4 max-sm:pr-6">
+          <div className="flex items-center gap-3">
+            {book.coverUrl ? (
+              <Image
+                src={book.coverUrl}
+                alt={book.title}
+                width={40}
+                height={60}
+                style={{ width: "auto", height: "auto" }}
+                className="rounded-sm object-cover"
+              />
+            ) : (
+              <div className="h-[60px] w-[40px] rounded-sm bg-gray-200" />
+            )}
+            <p className="line-clamp-1 max-w-[200px] font-semibold text-dark-400">
+              {book.title}
+            </p>
+          </div>
+        </td>
+        <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
+          {book.author}
+        </td>
+        <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
+          {book.genre}
+        </td>
+        <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
+          {dayjs(book.createdAt).format("MMM DD YYYY")}
+        </td>
+        <td className="relative py-4 pr-4 max-sm:pr-6">
+          <RowLockIndicator lock={lock} />
+          <div className="flex items-center gap-2.5">
+            <Link
+              href={`/admin/books/${book.id}/edit`}
+              onClick={async (event) => {
+                event.preventDefault();
+                const acquired = await onAcquireLock(book);
+                if (acquired) {
+                  router.push(`/admin/books/${book.id}/edit`);
+                }
+              }}
+              className={
+                isLocked ? "pointer-events-none opacity-50" : undefined
               }
-            }}
-            className={isLocked ? "pointer-events-none opacity-50" : undefined}
-          >
-            <Image
-              src="/icons/admin/edit.svg"
-              alt="edit"
-              width={24}
-              height={24}
-              style={{ width: "auto", height: "auto" }}
+            >
+              <Image
+                src="/icons/admin/edit.svg"
+                alt="edit"
+                width={24}
+                height={24}
+                style={{ width: "auto", height: "auto" }}
+              />
+            </Link>
+            <DeleteBook
+              id={book.id}
+              expectedVersion={book.version}
+              onDelete={() => onDelete(book.id)}
+              onAcquireLock={() => onAcquireLock(book)}
+              onReleaseLock={() => onReleaseLock(book)}
+              lockToken={lock?.token}
+              disabled={isLocked}
             />
-          </Link>
-          <DeleteBook
-            id={book.id}
-            expectedVersion={book.version}
-            onDelete={() => onDelete(book.id)}
-            onAcquireLock={() => onAcquireLock(book)}
-            onReleaseLock={() => onReleaseLock(book)}
-            lockToken={lock?.token}
-            disabled={isLocked}
-          />
-        </div>
-      </td>
-    </TableRow>
-  ),
+          </div>
+        </td>
+      </TableRow>
+    );
+  },
 );
 
 BookRowComponent.displayName = "BookRow";
@@ -151,7 +157,10 @@ const BookTable = ({ books, currentAdmin }: Props) => {
     [matchesFilter, sortedData],
   );
 
-  const rowIds = useMemo(() => filteredBooks.map((book) => book.id), [filteredBooks]);
+  const rowIds = useMemo(
+    () => filteredBooks.map((book) => book.id),
+    [filteredBooks],
+  );
 
   const rowLock = useRowLock({
     entity: "books",

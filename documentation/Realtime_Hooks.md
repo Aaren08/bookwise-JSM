@@ -362,10 +362,7 @@ useEffect(() => {
   if (!activeRowId) return;
 
   const heartbeat = setInterval(async () => {
-    const { acquired, lock } = await acquireLock(entity, activeRowId, {
-      acquired: true,
-      lock,
-    });
+    const { acquired, lock } = await acquireLock(entity, activeRowId);
     // Server broadcasts LOCK_ACQUIRED event
     // Local listeners update lock state
   }, ROW_LOCK_HEARTBEAT_MS);

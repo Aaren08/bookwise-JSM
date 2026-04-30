@@ -47,7 +47,11 @@ const DeleteBook = ({
     }
 
     setOpen(false);
-    await onReleaseLock();
+    try {
+      await onReleaseLock();
+    } catch (error) {
+      console.error("Failed to release lock on modal close:", error);
+    }
   };
 
   const handleDelete = async () => {
@@ -65,7 +69,11 @@ const DeleteBook = ({
         error instanceof Error ? error.message : "Failed to delete book",
       );
     } finally {
-      await onReleaseLock();
+      try {
+        await onReleaseLock();
+      } catch (error) {
+        console.error("Failed to release lock on delete:", error);
+      }
     }
   };
 

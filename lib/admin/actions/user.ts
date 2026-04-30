@@ -235,7 +235,16 @@ export const approveAccount = async ({
         data: approvedUser,
       };
     } finally {
-      await releaseLock("account_requests", userId, admin.id, lockToken);
+      try {
+        await releaseLock("account_requests", userId, admin.id, lockToken);
+      } catch (error) {
+        console.error("Failed to release lock for approveAccount", {
+          userId,
+          adminId: admin.id,
+          lockToken,
+          error,
+        });
+      }
     }
   } catch (error) {
     console.error(error);
@@ -299,7 +308,16 @@ export const rejectAccount = async ({
         message: "Account rejected successfully",
       };
     } finally {
-      await releaseLock("account_requests", userId, admin.id, lockToken);
+      try {
+        await releaseLock("account_requests", userId, admin.id, lockToken);
+      } catch (error) {
+        console.error("Failed to release lock for rejectAccount", {
+          userId,
+          adminId: admin.id,
+          lockToken,
+          error,
+        });
+      }
     }
   } catch (error) {
     console.error(error);
@@ -403,7 +421,16 @@ export const deleteUser = async ({
         data: JSON.parse(JSON.stringify(deletedUser[0])) as User,
       };
     } finally {
-      await releaseLock("users", userId, admin.id, lockToken);
+      try {
+        await releaseLock("users", userId, admin.id, lockToken);
+      } catch (error) {
+        console.error("Failed to release lock for deleteUser", {
+          userId,
+          adminId: admin.id,
+          lockToken,
+          error,
+        });
+      }
     }
   } catch (error) {
     console.error(error);
@@ -469,7 +496,16 @@ export const updateUserRole = async ({
         data: updatedUser,
       };
     } finally {
-      await releaseLock("users", userId, admin.id, lockToken);
+      try {
+        await releaseLock("users", userId, admin.id, lockToken);
+      } catch (error) {
+        console.error("Failed to release lock for updateUserRole", {
+          userId,
+          adminId: admin.id,
+          lockToken,
+          error,
+        });
+      }
     }
   } catch (error) {
     console.log(error);

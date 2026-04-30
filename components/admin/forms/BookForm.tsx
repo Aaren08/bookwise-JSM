@@ -25,6 +25,7 @@ import { useEffect, useState, useMemo } from "react";
 interface Props extends Partial<Book> {
   type: "create" | "update";
   currentAdmin?: AdminActor;
+  lockToken?: string;
 }
 
 type BookFormValues = z.infer<typeof bookSchema>;
@@ -42,7 +43,7 @@ const zodFormResolver = <T extends z.ZodType>(schema: T) => {
       if (error instanceof z.ZodError) {
         const fieldErrors: FieldErrors = {};
 
-        error.issues.forEach((err: z.core.$ZodIssue) => {
+        error.issues.forEach((err) => {
           const path = err.path.join(".");
           if (path) {
             fieldErrors[path] = {
@@ -129,6 +130,7 @@ const BookForm = ({ type, currentAdmin, ...book }: Props) => {
             ...values,
             id: book.id as string,
             expectedVersion: book.version as number,
+            lockToken: book.lockToken as string,
           });
 
     if (result.success) {

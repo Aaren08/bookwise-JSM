@@ -190,49 +190,56 @@ export const updateBorrowStatus = async ({
     if (status === "PENDING") reservedChange++;
     else if (status === "BORROWED") borrowedChange++;
 
-    const updatedRecord = await updateWithVersionCheck({
-      table: borrowRecords,
-      idColumn: borrowRecords.id,
-      versionColumn: borrowRecords.version,
-      id: borrowRecordId,
-      expectedVersion,
-      values: updateData,
+    const result = await db.transaction(async (trx) => {
+      const updatedRecord = await updateWithVersionCheck({
+        table: borrowRecords,
+        idColumn: borrowRecords.id,
+        versionColumn: borrowRecords.version,
+        id: borrowRecordId,
+        expectedVersion,
+        values: updateData,
+        trx,
+      });
+
+      let updatedBook:
+        | {
+            availableCopies: number;
+            reservedCount: number;
+            borrowedCount: number;
+          }
+        | undefined;
+
+      if (reservedChange !== 0 || borrowedChange !== 0) {
+        [updatedBook] = await trx
+          .update(books)
+          .set({
+            reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
+            borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+          });
+      } else {
+        [updatedBook] = await trx
+          .select({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+          })
+          .from(books)
+          .where(eq(books.id, bookId))
+          .limit(1);
+      }
+
+      return { updatedRecord, updatedBook };
     });
 
-    let updatedBook:
-      | {
-          availableCopies: number;
-          reservedCount: number;
-          borrowedCount: number;
-        }
-      | undefined;
-
-    if (reservedChange !== 0 || borrowedChange !== 0) {
-      [updatedBook] = await db
-        .update(books)
-        .set({
-          reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
-          borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
-          updatedAt: new Date(),
-          version: sql`${books.version} + 1`,
-        })
-        .where(eq(books.id, bookId))
-        .returning({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-        });
-    } else {
-      [updatedBook] = await db
-        .select({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-        })
-        .from(books)
-        .where(eq(books.id, bookId))
-        .limit(1);
-    }
+    const { updatedRecord, updatedBook } = result;
 
     if (updatedBook) {
       broadcastBookAvailabilityUpdate(

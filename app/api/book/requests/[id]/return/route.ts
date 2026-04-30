@@ -40,7 +40,9 @@ export async function PATCH(
       lockToken?: string;
     };
 
-    if (typeof body.expectedVersion !== "number") {
+    const { expectedVersion, lockToken } = body;
+
+    if (typeof expectedVersion !== "number") {
       return NextResponse.json(
         { error: "Missing expectedVersion" },
         { status: 400 },
@@ -87,14 +89,11 @@ export async function PATCH(
           "borrow_requests",
           recordId,
           session.user.id,
-          body.lockToken,
+          lockToken,
         );
       } catch (error) {
         if (error instanceof LockOwnershipError) {
-          return NextResponse.json(
-            { error: error.message },
-            { status: 409 },
-          );
+          return NextResponse.json({ error: error.message }, { status: 409 });
         }
         throw error;
       }
@@ -106,43 +105,46 @@ export async function PATCH(
         ? "LATE_RETURN"
         : "RETURNED";
 
-      const [updatedRecord] = await db
-        .update(borrowRecords)
-        .set({
-          borrowStatus: resolvedStatus,
-          returnDate: today,
-          updatedAt: new Date(),
-          version: sql`${borrowRecords.version} + 1`,
-        })
-        .where(
-          and(
-            eq(borrowRecords.id, recordId),
-            eq(borrowRecords.borrowStatus, "BORROWED"),
-            eq(borrowRecords.version, body.expectedVersion),
-          ),
-        )
-        .returning({ id: borrowRecords.id });
+      const result = await db.transaction(async (trx) => {
+        const [updatedRecord] = await trx
+          .update(borrowRecords)
+          .set({
+            borrowStatus: resolvedStatus,
+            returnDate: today,
+            updatedAt: new Date(),
+            version: sql`${borrowRecords.version} + 1`,
+          })
+          .where(
+            and(
+              eq(borrowRecords.id, recordId),
+              eq(borrowRecords.borrowStatus, "BORROWED"),
+              eq(borrowRecords.version, expectedVersion),
+            ),
+          )
+          .returning({ id: borrowRecords.id });
 
-      if (!updatedRecord) {
-        return NextResponse.json(
-          { error: CONFLICT_ERROR_MESSAGE },
-          { status: 409 },
-        );
-      }
+        if (!updatedRecord) {
+          throw new Error(CONFLICT_ERROR_MESSAGE);
+        }
 
-      const [updatedBook] = await db
-        .update(books)
-        .set({
-          borrowedCount: sql`GREATEST(0, ${books.borrowedCount} - 1)`,
-          updatedAt: new Date(),
-          version: sql`${books.version} + 1`,
-        })
-        .where(eq(books.id, current.bookId))
-        .returning({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-        });
+        const [updatedBook] = await trx
+          .update(books)
+          .set({
+            borrowedCount: sql`GREATEST(0, ${books.borrowedCount} - 1)`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, current.bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+          });
+
+        return { updatedRecord, updatedBook };
+      });
+
+      const { updatedBook } = result;
 
       revalidatePath("/admin/borrow-records");
       revalidatePath("/my-profile");
@@ -194,12 +196,12 @@ export async function PATCH(
             "borrow_requests",
             recordId,
             session.user.id,
-            body.lockToken,
+            lockToken,
           );
         } catch (lockError) {
           console.error("releaseLock failed best-effort cleanup", {
             recordId,
-            lockToken: body.lockToken,
+            lockToken: "REDACTED",
             error: lockError,
           });
         }
@@ -207,12 +209,11 @@ export async function PATCH(
     }
   } catch (error) {
     console.error("[PATCH /api/requests/:id/return]", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to process return.",
-      },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Failed to process return.";
+    if (message === CONFLICT_ERROR_MESSAGE) {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
