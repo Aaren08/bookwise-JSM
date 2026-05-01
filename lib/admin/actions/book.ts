@@ -106,6 +106,9 @@ export const updateBook = async (params: UpdateBookParams) => {
             message: `Cannot reduce total copies below ${borrowedCount} (currently borrowed)`,
           };
         }
+
+        // Update the payload with the new availableCopies value
+        data.availableCopies = newAvailableCopies;
       }
 
       await updateWithVersionCheck({

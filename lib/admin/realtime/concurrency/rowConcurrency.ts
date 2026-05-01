@@ -170,13 +170,16 @@ export const acquireLock = async (
   const acquired = resolvedLock?.adminId === admin.id;
 
   if (acquired) {
-    await publishLockEvent(entity, entityId, resolvedLock);
+    try {
+      await publishLockEvent(entity, entityId, resolvedLock);
+    } catch (error) {
+      console.error("Error publishing lock event:", error);
+    }
+    return {
+      acquired,
+      lock: resolvedLock,
+    };
   }
-
-  return {
-    acquired,
-    lock: resolvedLock,
-  };
 };
 
 export const releaseLock = async (
@@ -210,7 +213,13 @@ export const releaseLock = async (
   )) as string | null;
 
   if (result === "__deleted__") {
-    await publishLockEvent(entity, entityId, null);
+    try {
+      await publishLockEvent(entity, entityId, null);
+    } catch (error) {
+      console.error("Failed to publish lock release event", {
+        error,
+      });
+    }
     return { released: true, lock: null };
   }
 
