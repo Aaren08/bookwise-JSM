@@ -179,6 +179,11 @@ export const acquireLock = async (
       acquired,
       lock: resolvedLock,
     };
+  } else {
+    return {
+      acquired: false,
+      lock: null,
+    };
   }
 };
 
