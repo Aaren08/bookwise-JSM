@@ -4,19 +4,21 @@
  * Creates a new borrow request with PENDING status.
  *
  * Concurrency safety:
- *   Uses an atomic conditional UPDATE: increments reserved_count only when
- *   (reserved_count + borrowed_count) < total_copies.
- *   If 0 rows are affected the book is at capacity — no race conditions possible
- *   because PostgreSQL UPDATE is always atomic.
+ *   Uses a single atomic CTE chain instead of a transaction (required by the
+ *   Neon HTTP driver). The chain:
+ *     1. Expires stale PENDING reservations for the book.
+ *     2. Reclaims reserved slots from those expired rows.
+ *     3. Atomically increments reserved_count only when capacity exists.
+ *     4. Inserts the PENDING borrow record — gated on step 3 succeeding.
  *
- * Reservation expiry:
- *   Sets reserved_at so the background cron can expire stale PENDING records.
+ *   If step 3 matches 0 rows (book at capacity), step 4 is skipped via
+ *   WHERE EXISTS, giving all-or-nothing semantics without BEGIN/COMMIT.
  */
 export const runtime = "nodejs";
 
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
-import { books, borrowRecords, users } from "@/database/schema";
+import { borrowRecords, users } from "@/database/schema";
 import { broadcastBookAvailabilityUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
@@ -77,83 +79,100 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await db.transaction(async (trx) => {
-      // ── 3. Lazy expiry check: release stale PENDING reservations ────────────
-      const expiredReservations = await trx
-        .update(borrowRecords)
-        .set({
-          borrowStatus: "REJECTED",
-          updatedAt: new Date(),
-          version: sql`${borrowRecords.version} + 1`,
-        })
-        .where(
-          and(
-            eq(borrowRecords.bookId, bookId),
-            eq(borrowRecords.borrowStatus, "PENDING"),
-            sql`${borrowRecords.reservedAt} < NOW() - INTERVAL '15 minutes'`,
-          ),
-        )
-        .returning({ id: borrowRecords.id });
+    const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
 
-      // Reclaim reserved slots for any newly-expired reservations
-      if (expiredReservations.length > 0) {
-        await trx
-          .update(books)
-          .set({
-            reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredReservations.length})`,
-            updatedAt: new Date(),
-            version: sql`${books.version} + 1`,
-          })
-          .where(eq(books.id, bookId));
-      }
+    /**
+     * Single atomic CTE — replaces the db.transaction() block.
+     *
+     * expired:        marks stale PENDING reservations as REJECTED.
+     * reclaimed_book: subtracts their slots from reserved_count.
+     * reserved_book:  increments reserved_count only when capacity exists
+     *                 (reserved + borrowed < total_copies). Returns 0 rows
+     *                 if the book is full — which cascades to skip step 4.
+     * new_record:     inserts the PENDING row, gated on reserved_book.
+     */
+    const rows = await db.execute(sql`
+      WITH
+      expired AS (
+        UPDATE borrow_records
+        SET
+          borrow_status = 'REJECTED',
+          updated_at    = NOW(),
+          version       = version + 1
+        WHERE
+          book_id       = ${bookId}
+          AND borrow_status = 'PENDING'
+          AND reserved_at   < NOW() - INTERVAL '15 minutes'
+        RETURNING id
+      ),
+      reclaimed_book AS (
+        UPDATE books
+        SET
+          reserved_count = GREATEST(0, reserved_count - (SELECT COUNT(*) FROM expired)),
+          updated_at     = NOW(),
+          version        = version + 1
+        WHERE
+          id = ${bookId}
+          AND (SELECT COUNT(*) FROM expired) > 0
+        RETURNING reserved_count
+      ),
+      reserved_book AS (
+        UPDATE books
+        SET
+          reserved_count = reserved_count + 1,
+          updated_at     = NOW(),
+          version        = version + 1
+        WHERE
+          id = ${bookId}
+          AND reserved_count + borrowed_count < total_copies
+        RETURNING available_copies, reserved_count, borrowed_count
+      ),
+      new_record AS (
+        INSERT INTO borrow_records
+          (user_id, book_id, due_date, borrow_status, reserved_at, borrow_date)
+        SELECT
+          ${userId},
+          ${bookId},
+          ${dueDate}::date,
+          'PENDING',
+          NOW(),
+          NOW()
+        WHERE EXISTS (SELECT 1 FROM reserved_book)
+        RETURNING id
+      )
+      SELECT
+        (SELECT id FROM new_record)  AS record_id,
+        rb.available_copies,
+        rb.reserved_count,
+        rb.borrowed_count
+      FROM reserved_book rb
+    `);
 
-      // ── 4. Atomic reservation: increment reserved_count only if capacity exists
-      const [updatedBook] = await trx
-        .update(books)
-        .set({
-          reservedCount: sql`${books.reservedCount} + 1`,
-          updatedAt: new Date(),
-          version: sql`${books.version} + 1`,
-        })
-        .where(
-          and(
-            eq(books.id, bookId),
-            // The CHECK: reserved + borrowed must be < total (capacity guard)
-            sql`${books.reservedCount} + ${books.borrowedCount} < ${books.totalCopies}`,
-          ),
-        )
-        .returning({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-        });
+    const result = rows.rows?.[0] as
+      | {
+          record_id: string | null;
+          available_copies: number;
+          reserved_count: number;
+          borrowed_count: number;
+        }
+      | undefined;
 
-      if (!updatedBook) {
-        throw new Error("Book is not available for borrowing at this time.");
-      }
+    // No row → reserved_book matched 0 rows → book is at capacity
+    if (!result?.record_id) {
+      return NextResponse.json(
+        { error: "Book is not available for borrowing at this time." },
+        { status: 409 },
+      );
+    }
 
-      // ── 5. Insert the PENDING borrow record ──────────────────────────────────
-      const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
-      const now = new Date();
+    const updatedBook = {
+      availableCopies: result.available_copies,
+      reservedCount: result.reserved_count,
+      borrowedCount: result.borrowed_count,
+    };
+    const record = { id: result.record_id };
 
-      const [record] = await trx
-        .insert(borrowRecords)
-        .values({
-          userId,
-          bookId,
-          dueDate,
-          borrowStatus: "PENDING",
-          reservedAt: now,
-          borrowDate: now,
-        })
-        .returning({ id: borrowRecords.id });
-
-      return { updatedBook, record };
-    });
-
-    const { updatedBook, record } = result;
-
-    // ── 6. Revalidate + broadcast ─────────────────────────────────────────────
+    // ── 3. Revalidate + broadcast ─────────────────────────────────────────────
     revalidateTag(CACHE_TAGS.books, "max");
     revalidateTag(CACHE_TAGS.users, "max");
 
@@ -199,9 +218,6 @@ export async function POST(request: Request) {
       error instanceof Error
         ? error.message
         : "Failed to create borrow request.";
-    if (message === "Book is not available for borrowing at this time.") {
-      return NextResponse.json({ error: message }, { status: 409 });
-    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
