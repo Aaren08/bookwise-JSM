@@ -1,15 +1,14 @@
 "use server";
 
+import { cache } from "react";
 import { db } from "@/database/drizzle";
 import { books, users, borrowRecords } from "@/database/schema";
 import { eq, desc } from "drizzle-orm";
 
-export const getDashboardData = async () => {
+export const getDashboardData = cache(async () => {
   try {
-    // Execute all 3 queries in PARALLEL instead of sequentially
     const [latestBorrowRequests, latestAccountRequests, recentBooks] =
       await Promise.all([
-        // Query 1: Latest borrow requests
         db
           .select({
             id: borrowRecords.id,
@@ -30,7 +29,6 @@ export const getDashboardData = async () => {
           .orderBy(desc(borrowRecords.borrowDate))
           .limit(5),
 
-        // Query 2: Latest account requests
         db
           .select({
             id: users.id,
@@ -43,7 +41,6 @@ export const getDashboardData = async () => {
           .orderBy(desc(users.createdAt))
           .limit(9),
 
-        // Query 3: Recent books added
         db
           .select({
             id: books.id,
@@ -81,4 +78,4 @@ export const getDashboardData = async () => {
       },
     };
   }
-};
+});

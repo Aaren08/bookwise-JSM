@@ -1,24 +1,22 @@
 "use server";
 
+import { cache } from "react";
 import { db } from "@/database/drizzle";
 import { books, users, borrowRecords } from "@/database/schema";
 import { count, eq } from "drizzle-orm";
 import { getDashboardData } from "@/lib/admin/dashboard";
 
-export const getDashboardStats = async () => {
+export const getDashboardStats = cache(async () => {
   try {
-    // Get total books count
     const [{ value: totalBooks }] = await db
       .select({ value: count() })
       .from(books);
 
-    // Get total approved users count
     const [{ value: totalUsers }] = await db
       .select({ value: count() })
       .from(users)
       .where(eq(users.status, "APPROVED"));
 
-    // Get currently borrowed books count
     const [{ value: borrowedBooks }] = await db
       .select({ value: count() })
       .from(borrowRecords)
@@ -37,16 +35,12 @@ export const getDashboardStats = async () => {
     return {
       success: false,
       message: "Failed to fetch dashboard statistics",
-      data: {
-        totalBooks: 0,
-        totalUsers: 0,
-        borrowedBooks: 0,
-      },
+      data: { totalBooks: 0, totalUsers: 0, borrowedBooks: 0 },
     };
   }
-};
+});
 
-export const getAdminDashboardSnapshot = async () => {
+export const getAdminDashboardSnapshot = cache(async () => {
   const [statsResult, dashboardResult] = await Promise.all([
     getDashboardStats(),
     getDashboardData(),
@@ -61,4 +55,4 @@ export const getAdminDashboardSnapshot = async () => {
       recentBooks: dashboardResult.data.recentBooks,
     },
   };
-};
+});

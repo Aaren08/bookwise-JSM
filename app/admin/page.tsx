@@ -1,10 +1,10 @@
 import DashboardLayout from "@/components/admin/dashboard/DashboardLayout";
-import { Suspense } from "react";
 import { StatisticsSection } from "@/components/admin/dashboard/StatisticsSection";
 import { RequestsSection } from "@/components/admin/dashboard/RequestsSection";
 import { RecentBooksSection } from "@/components/admin/dashboard/RecentBooksSection";
+import { getAdminDashboardSnapshot } from "@/lib/admin/stats";
+import { Suspense } from "react";
 
-// Skeleton loaders for each section
 const StatisticsSkeleton = () => (
   <div className="grid gap-5 md:grid-cols-3">
     {Array.from({ length: 3 }).map((_, i) => (
@@ -24,22 +24,22 @@ const RecentBooksSkeleton = () => (
   <div className="h-[470px] rounded-2xl bg-slate-200 animate-pulse" />
 );
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  // Single fetch — all three sections below will hit React.cache and get
+  // the same result without additional DB round-trips.
+  await getAdminDashboardSnapshot();
+
   return (
     <DashboardLayout>
-      {/* Section 1: Statistics - Fetches stats only (fast - ~50ms) */}
       <Suspense fallback={<StatisticsSkeleton />}>
         <StatisticsSection />
       </Suspense>
 
-      {/* Section 2: Requests Grid - Renders immediately after stats load */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-10">
-        {/* Left column: Borrow + Account Requests (parallel fetch) */}
         <Suspense fallback={<RequestsSkeleton />}>
           <RequestsSection />
         </Suspense>
 
-        {/* Right column: Recent Books (independent fetch) */}
         <Suspense fallback={<RecentBooksSkeleton />}>
           <RecentBooksSection />
         </Suspense>
