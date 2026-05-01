@@ -481,6 +481,10 @@
     @apply relative max-h-[350px] overflow-y-auto pr-1;
   }
 
+  .table-scroll-container {
+    @apply relative w-full overflow-x-auto;
+  }
+
   .box-body-scroll-wrapper::after {
     content: "";
     @apply pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-20;
@@ -493,42 +497,71 @@
   }
 
   .box-body-scroll-container::-webkit-scrollbar,
-  .recent-books-scroll-container::-webkit-scrollbar {
+  .recent-books-scroll-container::-webkit-scrollbar,
+  .table-scroll-container::-webkit-scrollbar {
     width: 6px;
+    height: 6px; /* For horizontal scrollbar */
   }
 
   .box-body-scroll-container::-webkit-scrollbar-track,
-  .recent-books-scroll-container::-webkit-scrollbar-track {
+  .recent-books-scroll-container::-webkit-scrollbar-track,
+  .table-scroll-container::-webkit-scrollbar-track {
     background: transparent;
     border-radius: 3px;
   }
 
   .box-body-scroll-container::-webkit-scrollbar-thumb,
-  .recent-books-scroll-container::-webkit-scrollbar-thumb {
+  .recent-books-scroll-container::-webkit-scrollbar-thumb,
+  .table-scroll-container::-webkit-scrollbar-thumb {
     background: transparent;
     border-radius: 3px;
     transition: background 0.2s ease;
   }
 
   .box-body-scroll-container:hover::-webkit-scrollbar-thumb,
-  .recent-books-scroll-container:hover::-webkit-scrollbar-thumb {
+  .recent-books-scroll-container:hover::-webkit-scrollbar-thumb,
+  .table-scroll-container:hover::-webkit-scrollbar-thumb {
     background: #d1d5db;
   }
 
   .box-body-scroll-container::-webkit-scrollbar-thumb:hover,
-  .recent-books-scroll-container::-webkit-scrollbar-thumb:hover {
+  .recent-books-scroll-container::-webkit-scrollbar-thumb:hover,
+  .table-scroll-container::-webkit-scrollbar-thumb:hover {
     background: #9ca3af;
   }
 
   .box-body-scroll-container,
-  .recent-books-scroll-container {
+  .recent-books-scroll-container,
+  .table-scroll-container {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
     transition: scrollbar-color 0.2s ease;
   }
 
   .box-body-scroll-container:hover,
-  .recent-books-scroll-container:hover {
+  .recent-books-scroll-container:hover,
+  .table-scroll-container:hover {
     scrollbar-color: #d1d5db #f3f4f6;
+  }
+
+  /* Row Lock Indicator */
+  .row-lock_container {
+    @apply pointer-events-none absolute right-[26px] top-[4px] z-10;
+  }
+
+  .row-lock_badge {
+    @apply pointer-events-auto relative inline-flex;
+  }
+
+  .row-lock_icon-wrapper {
+    @apply inline-flex size-6 items-center justify-center rounded-full bg-amber-100 text-amber-600 shadow-sm;
+  }
+
+  .row-lock_tooltip {
+    @apply pointer-events-none absolute right-0 top-full mt-2 hidden whitespace-nowrap rounded-md bg-dark-400 px-2 py-1 text-xs text-white shadow-md;
+  }
+
+  .row-lock_badge:hover .row-lock_tooltip {
+    @apply block;
   }
 }

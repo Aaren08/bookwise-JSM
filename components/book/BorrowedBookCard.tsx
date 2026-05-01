@@ -85,7 +85,9 @@ const BorrowedBookCard = ({
   }
 
   const isResolved =
-    borrowStatus === "RETURNED" || borrowStatus === "LATE_RETURN";
+    borrowStatus === "RETURNED" ||
+    borrowStatus === "LATE_RETURN" ||
+    borrowStatus === "REJECTED";
   const showOverdueWarning = borrowStatus === "BORROWED" && status.isOverdue;
 
   return (
@@ -214,6 +216,21 @@ const BorrowedBookCard = ({
                 />
                 <p className="text-sm max-sm:text-xs font-medium text-light-100">
                   Not borrowed yet
+                </p>
+              </>
+            )}
+
+            {borrowStatus === "REJECTED" && (
+              <>
+                <Image
+                  src="/icons/warning.svg"
+                  alt="rejected"
+                  width={18}
+                  height={18}
+                  className="object-contain"
+                />
+                <p className="text-sm max-sm:text-xs font-medium text-red-500">
+                  Rejected
                 </p>
               </>
             )}

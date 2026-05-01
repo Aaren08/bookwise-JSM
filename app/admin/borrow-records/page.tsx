@@ -6,6 +6,7 @@ import ClearRecordMenu from "@/components/admin/shared/ClearRecordMenu";
 import { Suspense } from "react";
 import FilterData from "@/components/admin/FilterData";
 import { PartialTableWrapper } from "@/components/admin/PartialTableWrapper";
+import { auth } from "@/auth";
 
 // Unified data fetching - called ONCE
 async function getBorrowRecordsData(page: number) {
@@ -21,7 +22,17 @@ async function BorrowRecordsTableBody({ searchParams }: { searchParams: Promise<
   const { page: pageParam } = await searchParams;
   const page = Number(pageParam) || 1;
   const data = await getBorrowRecordsData(page);
-  return <BorrowTable borrowRecords={data?.records || []} />;
+  const session = await auth();
+
+  return (
+    <BorrowTable
+      borrowRecords={data?.records || []}
+      currentAdmin={{
+        id: session?.user?.id || "",
+        name: session?.user?.name || "Admin",
+      }}
+    />
+  );
 }
 
 // Pagination component

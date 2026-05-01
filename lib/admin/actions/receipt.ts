@@ -7,6 +7,8 @@ import dayjs from "dayjs";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { broadcastAdminDashboardUpdate } from "../realtime/dashboardSocketServer";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
 
 export const generateReceipt = async (borrowRecordId: string) => {
   try {
@@ -66,6 +68,7 @@ export const generateReceipt = async (borrowRecordId: string) => {
         borrowStatus: "BORROWED",
         borrowDate: now,
         dueDate: dayjs(dueDateObj).format("YYYY-MM-DD"),
+        updatedAt: new Date(),
       })
       .where(eq(borrowRecords.id, borrowRecordId));
 
@@ -73,6 +76,22 @@ export const generateReceipt = async (borrowRecordId: string) => {
     broadcastAdminDashboardUpdate().catch((err) =>
       console.error("broadcastAdminDashboardUpdate failed", err),
     );
+
+    try {
+      const realtimeRecord = await getBorrowRecordById(borrowRecordId);
+      if (realtimeRecord) {
+        await publishEvent("borrow_requests", {
+          type: "UPDATE",
+          entityId: borrowRecordId,
+          data: realtimeRecord,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `Failed to publish realtime update for borrow record ${borrowRecordId}:`,
+        realtimeError,
+      );
+    }
 
     // Format dates for receipt
     const issuedAt = dayjs(now).format("DD/MM/YYYY, hh:mm A");

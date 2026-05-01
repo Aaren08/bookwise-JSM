@@ -11,6 +11,8 @@ import { redirect } from "next/navigation";
 import config from "../config";
 import { workflowClient } from "../workflow";
 import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { getPendingUserById } from "@/lib/admin/actions/user";
 
 export const signInWithCredentials = async (
   credentials: Pick<AuthCredentials, "email" | "password">,
@@ -93,17 +95,40 @@ export const signUp = async (credentials: AuthCredentials) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
-    await db.insert(users).values({
-      fullName,
-      email,
-      universityId,
-      password: hashedPassword,
-      universityCard,
-    });
+    const [createdUser] = await db
+      .insert(users)
+      .values({
+        fullName,
+        email,
+        universityId,
+        password: hashedPassword,
+        universityCard,
+        updatedAt: new Date(),
+      })
+      .returning({ id: users.id });
 
     void broadcastAdminDashboardUpdate().catch((error) => {
       console.error("Admin dashboard realtime broadcast failed:", error);
     });
+
+    // Non-blocking account-request publication
+    (async () => {
+      try {
+        const pendingUser = await getPendingUserById(createdUser.id);
+        if (pendingUser) {
+          await publishEvent("account_requests", {
+            type: "CREATE",
+            entityId: pendingUser.id,
+            data: pendingUser,
+          });
+        }
+      } catch (realtimeError) {
+        console.error(
+          `Failed to publish realtime update for new account request ${createdUser.id}:`,
+          realtimeError,
+        );
+      }
+    })();
 
     // Fire-and-forget workflow trigger - don't block user signup
     // User creation/sign-in should succeed regardless of workflow outcome

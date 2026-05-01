@@ -7,14 +7,19 @@ import { books } from "@/database/schema";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { z } from "zod";
+import { auth } from "@/auth";
 
 const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
+  const session = await auth();
+  if (!session || session.user?.role !== "ADMIN") return notFound();
+
   const id = (await params).id;
 
   const validId = z.uuid().safeParse(id);
   if (!validId.success) return notFound();
 
   const [book] = await db.select().from(books).where(eq(books.id, id)).limit(1);
+  if (!book) return notFound();
 
   return (
     <>
@@ -26,7 +31,14 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
       </Button>
 
       <section className="w-full max-w-2xl">
-        <BookForm type="update" {...book} />
+        <BookForm
+          type="update"
+          currentAdmin={{
+            id: session.user.id as string,
+            name: session.user.name as string,
+          }}
+          {...book}
+        />
       </section>
     </>
   );

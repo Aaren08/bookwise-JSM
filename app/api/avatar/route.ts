@@ -12,6 +12,11 @@ import ImageKit from "imagekit";
 import config from "@/lib/config";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
+import {
+  getApprovedUserById,
+  getPendingUserById,
+} from "@/lib/admin/actions/user";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 
 export async function PUT(request: Request) {
   const { image } = await request.json();
@@ -48,6 +53,7 @@ export async function PUT(request: Request) {
     );
   }
 }
+
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -85,10 +91,30 @@ export async function POST(request: Request) {
     });
 
     const existingUser = await db
-      .select({ userAvatarFileId: users.userAvatarFileId })
+      .select({
+        userAvatarFileId: users.userAvatarFileId,
+        status: users.status,
+      })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
+
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        userAvatar: imageUrl,
+        userAvatarFileId: fileId,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, session.user.id))
+      .returning({ status: users.status });
+
+    if (!updatedUser) {
+      return NextResponse.json(
+        { error: "Failed to update user avatar" },
+        { status: 500 },
+      );
+    }
 
     if (existingUser.length > 0 && existingUser[0].userAvatarFileId) {
       try {
@@ -98,12 +124,31 @@ export async function POST(request: Request) {
       }
     }
 
-    await db
-      .update(users)
-      .set({ userAvatar: imageUrl, userAvatarFileId: fileId })
-      .where(eq(users.id, session.user.id));
-
     revalidateTag(CACHE_TAGS.users, "max");
+
+    try {
+      if (updatedUser?.status === "APPROVED") {
+        const approvedUser = await getApprovedUserById(session.user.id);
+        if (approvedUser) {
+          await publishEvent("users", {
+            type: "UPDATE",
+            entityId: session.user.id,
+            data: approvedUser,
+          });
+        }
+      } else if (updatedUser?.status === "PENDING") {
+        const pendingUser = await getPendingUserById(session.user.id);
+        if (pendingUser) {
+          await publishEvent("account_requests", {
+            type: "UPDATE",
+            entityId: session.user.id,
+            data: pendingUser,
+          });
+        }
+      }
+    } catch (publishError) {
+      console.error("Failed to publish avatar update event:", publishError);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

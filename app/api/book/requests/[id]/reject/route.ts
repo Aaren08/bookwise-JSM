@@ -1,115 +1,209 @@
-/**
- * PATCH /api/requests/:id/reject
- *
- * Transitions a PENDING request to REJECTED.
- * Uses a single SQL statement so the record update and reserved counter release
- * stay atomic on the Neon HTTP driver.
- */
 export const runtime = "nodejs";
 
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
+import { books, borrowRecords } from "@/database/schema";
+import { and, eq, sql } from "drizzle-orm";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
 } from "@/lib/admin/realtime/dashboardSocketServer";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
-import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
-
-type RejectRow = {
-  request_id: string;
-  book_id: string;
-  user_id: string;
-  available_copies: number | null;
-  reserved_count: number | null;
-  borrowed_count: number | null;
-};
+import {
+  CONFLICT_ERROR_MESSAGE,
+  LockOwnershipError,
+  assertLockOwnership,
+  publishEvent,
+  releaseLock,
+} from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import {
+  getBorrowRecordById,
+  validateBorrowStatusTransition,
+} from "@/lib/admin/actions/borrow";
 
 export async function PATCH(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await auth();
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user?.id || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id: recordId } = await params;
+    const body = (await request.json()) as {
+      expectedVersion?: number;
+      lockToken?: string;
+    };
 
-    const result = await db.execute(sql`
-      WITH updated_record AS (
-        UPDATE borrow_records
-        SET borrow_status = 'REJECTED'::borrow_status
-        WHERE id = ${recordId}
-          AND borrow_status = 'PENDING'::borrow_status
-        RETURNING id, book_id, user_id
-      ),
-      updated_book AS (
-        UPDATE books
-        SET reserved_count = GREATEST(0, reserved_count - 1)
-        WHERE id = (SELECT book_id FROM updated_record)
-        RETURNING id, available_copies, reserved_count, borrowed_count
-      )
-      SELECT
-        ur.id AS request_id,
-        ur.book_id,
-        ur.user_id,
-        ub.available_copies,
-        ub.reserved_count,
-        ub.borrowed_count
-      FROM updated_record ur
-      LEFT JOIN updated_book ub ON TRUE;
-    `);
-
-    const row = (result.rows[0] as RejectRow | undefined) ?? null;
-
-    if (!row) {
+    if (typeof body.expectedVersion !== "number") {
       return NextResponse.json(
-        { error: "Request not found or no longer pending." },
-        { status: 409 },
+        { error: "Missing expectedVersion" },
+        { status: 400 },
       );
     }
 
-    revalidatePath("/admin/borrow-records");
-    revalidatePath("/my-profile");
-    revalidatePath(`/admin/books/${row.book_id}`);
-    revalidateTag(CACHE_TAGS.books, "max");
-    revalidateTag(CACHE_TAGS.users, "max");
-
-    if (
-      row.available_copies !== null &&
-      row.reserved_count !== null &&
-      row.borrowed_count !== null
-    ) {
-      broadcastBookAvailabilityUpdate(
-        row.book_id,
-        row.available_copies,
-        row.reserved_count,
-        row.borrowed_count,
-      ).catch((err) =>
-        console.error("broadcastBookAvailabilityUpdate failed", err),
+    try {
+      await assertLockOwnership(
+        "borrow_requests",
+        recordId,
+        session.user.id,
+        body.lockToken,
       );
+    } catch (error) {
+      if (error instanceof LockOwnershipError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+      throw error;
     }
 
-    broadcastAdminDashboardUpdate().catch((err) =>
-      console.error("broadcastAdminDashboardUpdate failed", err),
-    );
+    try {
+      const [current] = await db
+        .select({
+          id: borrowRecords.id,
+          bookId: borrowRecords.bookId,
+          borrowStatus: borrowRecords.borrowStatus,
+        })
+        .from(borrowRecords)
+        .where(eq(borrowRecords.id, recordId))
+        .limit(1);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        requestId: row.request_id,
-        status: "REJECTED",
-        availableCount: row.available_copies,
-      },
-    });
+      if (!current) {
+        return NextResponse.json(
+          { error: "Borrow record not found." },
+          { status: 404 },
+        );
+      }
+
+      if (
+        !(await validateBorrowStatusTransition(
+          current.borrowStatus,
+          "REJECTED",
+        ))
+      ) {
+        return NextResponse.json(
+          { error: "Invalid status transition" },
+          { status: 409 },
+        );
+      }
+
+      const updatedBorrowRecord = db.$with("updatedBorrowRecord").as(
+        db
+          .update(borrowRecords)
+          .set({
+            borrowStatus: "REJECTED",
+            updatedAt: new Date(),
+            version: sql`${borrowRecords.version} + 1`,
+          })
+          .where(
+            and(
+              eq(borrowRecords.id, recordId),
+              eq(borrowRecords.borrowStatus, "PENDING"),
+              eq(borrowRecords.version, body.expectedVersion),
+            ),
+          )
+          .returning({
+            id: borrowRecords.id,
+            bookId: borrowRecords.bookId,
+          }),
+      );
+
+      const [result] = await db
+        .with(updatedBorrowRecord)
+        .update(books)
+        .set({
+          reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
+          updatedAt: new Date(),
+          version: sql`${books.version} + 1`,
+        })
+        .from(updatedBorrowRecord)
+        .where(eq(books.id, updatedBorrowRecord.bookId))
+        .returning({
+          availableCopies: books.availableCopies,
+          reservedCount: books.reservedCount,
+          borrowedCount: books.borrowedCount,
+          recordId: updatedBorrowRecord.id,
+        });
+
+      const updatedRecord = result ? { id: result.recordId } : null;
+      const updatedBook = result;
+
+      if (!updatedRecord) {
+        return NextResponse.json(
+          { error: CONFLICT_ERROR_MESSAGE },
+          { status: 409 },
+        );
+      }
+
+      revalidatePath("/admin/borrow-records");
+      revalidatePath("/my-profile");
+      revalidatePath(`/admin/books/${current.bookId}`);
+      revalidatePath("/admin/users");
+      revalidateTag(CACHE_TAGS.books, "max");
+      revalidateTag(CACHE_TAGS.users, "max");
+
+      if (updatedBook) {
+        broadcastBookAvailabilityUpdate(
+          current.bookId,
+          updatedBook.availableCopies,
+          updatedBook.reservedCount,
+          updatedBook.borrowedCount,
+        ).catch((err) =>
+          console.error("broadcastBookAvailabilityUpdate failed", err),
+        );
+      }
+
+      broadcastAdminDashboardUpdate().catch((err) =>
+        console.error("broadcastAdminDashboardUpdate failed", err),
+      );
+
+      let realtimeRecord: BorrowRecord | null = null;
+      try {
+        realtimeRecord = await getBorrowRecordById(recordId);
+        if (realtimeRecord) {
+          await publishEvent("borrow_requests", {
+            type: "UPDATE",
+            entityId: recordId,
+            data: realtimeRecord,
+          });
+        }
+      } catch (realtimeError) {
+        console.error(
+          `[PATCH /api/requests/:id/reject] Best-effort realtime publish failed for record ${recordId}:`,
+          realtimeError,
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: realtimeRecord,
+      });
+    } finally {
+      try {
+        await releaseLock(
+          "borrow_requests",
+          recordId,
+          session.user.id,
+          body.lockToken,
+        );
+      } catch (lockError) {
+        console.error("releaseLock failed best-effort cleanup", {
+          recordId,
+          lockToken: "REDACTED",
+          error: lockError,
+        });
+      }
+    }
   } catch (error) {
     console.error("[PATCH /api/requests/:id/reject]", error);
     return NextResponse.json(
-      { error: "Failed to reject request." },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to reject request.",
+      },
       { status: 500 },
     );
   }

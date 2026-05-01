@@ -4,9 +4,10 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import {
   ADMIN_DASHBOARD_SSE_KEEPALIVE_MS,
+  ADMIN_DASHBOARD_SSE_MAX_LIFETIME_MS,
   ADMIN_DASHBOARD_SSE_RETRY_MS,
 } from "@/lib/admin/realtime/dashboardRealtimeEvents";
-import { encodeBorrowBookSseEvent } from "@/lib/admin/realtime/borrowBookRealtimeEvents";
+import { encodeBorrowBookSseEvent } from "@/lib/admin/realtime/concurrency/borrowBookRealtimeEvents";
 import {
   getBorrowBookRealtimeReplay,
   subscribeToBorrowBookUpdates,
@@ -23,7 +24,8 @@ import {
   safeRateLimit,
 } from "@/lib/essentials/rateLimit";
 
-const CLOSE_EVENT = "event: stream.close\ndata: {\"reason\":\"server_disconnect\"}\n\n";
+const CLOSE_EVENT =
+  'event: stream.close\ndata: {"reason":"server_disconnect"}\n\n';
 
 const parseLastEventId = (request: Request) => {
   const rawValue = request.headers.get("last-event-id");
@@ -70,6 +72,7 @@ export async function GET(request: Request) {
 
   let isClosed = false;
   let keepAlive: NodeJS.Timeout | undefined;
+  let connectionLifetime: NodeJS.Timeout | undefined;
   let subscription: BorrowBookRealtimeSubscription | undefined;
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
 
@@ -78,6 +81,7 @@ export async function GET(request: Request) {
     isClosed = true;
 
     if (keepAlive) clearInterval(keepAlive);
+    if (connectionLifetime) clearTimeout(connectionLifetime);
     request.signal.removeEventListener("abort", cleanup);
 
     if (subscription) {
@@ -135,10 +139,17 @@ export async function GET(request: Request) {
         bufferedLiveEvents.push(event);
       });
 
+      connectionLifetime = setTimeout(() => {
+        enqueue(CLOSE_EVENT);
+        cleanup();
+      }, ADMIN_DASHBOARD_SSE_MAX_LIFETIME_MS);
+
       keepAlive = setInterval(() => {
         enqueue(": keepalive\n\n");
         if (lease.leaseId) {
-          void refreshSseConnectionLease(lease.key, lease.leaseId);
+          refreshSseConnectionLease(lease.key, lease.leaseId).catch((error) => {
+            console.error("Failed to refresh SSE connection lease:", error);
+          });
         }
       }, ADMIN_DASHBOARD_SSE_KEEPALIVE_MS);
 
@@ -153,7 +164,10 @@ export async function GET(request: Request) {
           sendEvent(event);
         }
       } catch (error) {
-        console.error("Failed while bootstrapping book realtime stream:", error);
+        console.error(
+          "Failed while bootstrapping book realtime stream:",
+          error,
+        );
       } finally {
         replayFinished = true;
 
@@ -178,6 +192,7 @@ export async function GET(request: Request) {
     headers: {
       ...createRateLimitHeaders(rateLimitResult),
       "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
       Connection: "keep-alive",
       "Content-Type": "text/event-stream; charset=utf-8",
     },

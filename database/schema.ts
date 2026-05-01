@@ -40,7 +40,11 @@ export const users = pgTable("users", {
   status: STATUS_ENUM("status").default("PENDING"),
   role: ROLE_ENUM("role").default("USER"),
   lastActivityDate: date("last_activity_date").defaultNow(),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 export const books = pgTable("books", {
@@ -65,7 +69,11 @@ export const books = pgTable("books", {
   coverUrl: text("cover_url").notNull(),
   videoUrl: text("video_url").notNull(),
   summary: text("summary").notNull(),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 }, (table) => {
   return {
     availableCopiesIdx: index("available_copies_idx").on(table.availableCopies),
@@ -91,7 +99,11 @@ export const borrowRecords = pgTable("borrow_records", {
   // Timestamp set when status = PENDING; used by expiration cron to detect stale reservations.
   reservedAt: timestamp("reserved_at", { withTimezone: true }),
   dismissed: integer("dismissed").default(0).notNull(),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 }, (table) => {
   return {
     bookStatusIdx: index("book_status_idx").on(table.bookId, table.borrowStatus),

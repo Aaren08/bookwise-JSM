@@ -1,0 +1,8 @@
+ALTER TABLE "users"
+ADD COLUMN IF NOT EXISTS "version" integer DEFAULT 1 NOT NULL;
+
+ALTER TABLE "books"
+ADD COLUMN IF NOT EXISTS "version" integer DEFAULT 1 NOT NULL;
+
+ALTER TABLE "borrow_records"
+ADD COLUMN IF NOT EXISTS "version" integer DEFAULT 1 NOT NULL;

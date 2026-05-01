@@ -23,6 +23,8 @@ import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql } from "drizzle-orm";
 import dayjs from "dayjs";
 import { NextResponse } from "next/server";
+import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
 
 export async function POST(request: Request) {
   try {
@@ -75,70 +77,81 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── 3. Lazy expiry check: release stale PENDING reservations ────────────
-    const expiredReservations = await db
-      .update(borrowRecords)
-      .set({
-        borrowStatus: "REJECTED",
-      })
-      .where(
-        and(
-          eq(borrowRecords.bookId, bookId),
-          eq(borrowRecords.borrowStatus, "PENDING"),
-          sql`${borrowRecords.reservedAt} < NOW() - INTERVAL '15 minutes'`,
-        ),
-      )
-      .returning({ id: borrowRecords.id });
+    const result = await db.transaction(async (trx) => {
+      // ── 3. Lazy expiry check: release stale PENDING reservations ────────────
+      const expiredReservations = await trx
+        .update(borrowRecords)
+        .set({
+          borrowStatus: "REJECTED",
+          updatedAt: new Date(),
+          version: sql`${borrowRecords.version} + 1`,
+        })
+        .where(
+          and(
+            eq(borrowRecords.bookId, bookId),
+            eq(borrowRecords.borrowStatus, "PENDING"),
+            sql`${borrowRecords.reservedAt} < NOW() - INTERVAL '15 minutes'`,
+          ),
+        )
+        .returning({ id: borrowRecords.id });
 
-    // Reclaim reserved slots for any newly-expired reservations
-    if (expiredReservations.length > 0) {
-      await db
+      // Reclaim reserved slots for any newly-expired reservations
+      if (expiredReservations.length > 0) {
+        await trx
+          .update(books)
+          .set({
+            reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredReservations.length})`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, bookId));
+      }
+
+      // ── 4. Atomic reservation: increment reserved_count only if capacity exists
+      const [updatedBook] = await trx
         .update(books)
         .set({
-          reservedCount: sql`GREATEST(0, ${books.reservedCount} - ${expiredReservations.length})`,
+          reservedCount: sql`${books.reservedCount} + 1`,
+          updatedAt: new Date(),
+          version: sql`${books.version} + 1`,
         })
-        .where(eq(books.id, bookId));
-    }
+        .where(
+          and(
+            eq(books.id, bookId),
+            // The CHECK: reserved + borrowed must be < total (capacity guard)
+            sql`${books.reservedCount} + ${books.borrowedCount} < ${books.totalCopies}`,
+          ),
+        )
+        .returning({
+          availableCopies: books.availableCopies,
+          reservedCount: books.reservedCount,
+          borrowedCount: books.borrowedCount,
+        });
 
-    // ── 4. Atomic reservation: increment reserved_count only if capacity exists
-    const [updatedBook] = await db
-      .update(books)
-      .set({ reservedCount: sql`${books.reservedCount} + 1` })
-      .where(
-        and(
-          eq(books.id, bookId),
-          // The CHECK: reserved + borrowed must be < total (capacity guard)
-          sql`${books.reservedCount} + ${books.borrowedCount} < ${books.totalCopies}`,
-        ),
-      )
-      .returning({
-        availableCopies: books.availableCopies,
-        reservedCount: books.reservedCount,
-        borrowedCount: books.borrowedCount,
-      });
+      if (!updatedBook) {
+        throw new Error("Book is not available for borrowing at this time.");
+      }
 
-    if (!updatedBook) {
-      return NextResponse.json(
-        { error: "Book is not available for borrowing at this time." },
-        { status: 409 },
-      );
-    }
+      // ── 5. Insert the PENDING borrow record ──────────────────────────────────
+      const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
+      const now = new Date();
 
-    // ── 5. Insert the PENDING borrow record ──────────────────────────────────
-    const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
-    const now = new Date();
+      const [record] = await trx
+        .insert(borrowRecords)
+        .values({
+          userId,
+          bookId,
+          dueDate,
+          borrowStatus: "PENDING",
+          reservedAt: now,
+          borrowDate: now,
+        })
+        .returning({ id: borrowRecords.id });
 
-    const [record] = await db
-      .insert(borrowRecords)
-      .values({
-        userId,
-        bookId,
-        dueDate,
-        borrowStatus: "PENDING",
-        reservedAt: now,
-        borrowDate: now,
-      })
-      .returning({ id: borrowRecords.id });
+      return { updatedBook, record };
+    });
+
+    const { updatedBook, record } = result;
 
     // ── 6. Revalidate + broadcast ─────────────────────────────────────────────
     revalidateTag(CACHE_TAGS.books, "max");
@@ -153,6 +166,22 @@ export async function POST(request: Request) {
       console.error("broadcastBookAvailabilityUpdate failed", err),
     );
 
+    try {
+      const realtimeRecord = await getBorrowRecordById(record.id);
+      if (realtimeRecord) {
+        await publishEvent("borrow_requests", {
+          type: "CREATE",
+          entityId: record.id,
+          data: realtimeRecord,
+        });
+      }
+    } catch (realtimeError) {
+      console.error(
+        `[POST /api/requests] Best-effort realtime publish failed for record ${record.id}:`,
+        realtimeError,
+      );
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -166,9 +195,13 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("[POST /api/requests]", error);
-    return NextResponse.json(
-      { error: "Failed to create borrow request." },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to create borrow request.";
+    if (message === "Book is not available for borrowing at this time.") {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

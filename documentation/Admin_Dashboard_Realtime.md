@@ -12,6 +12,16 @@ This implementation provides:
 - a shared `3000ms` delayed refresh window so the dashboard remains visually stable
 - a signal-and-refresh model where the snapshot API remains the source of truth
 
+## Related Documentation
+
+For admin row-level realtime features (row locking, CREATE/UPDATE/DELETE events), see:
+
+- [Realtime Client SSE](Realtime_Client_SSE.md) – Singleton EventSource connection lifecycle
+- [Admin Row Concurrency](Admin_Row_Concurrency.md) – Optimistic row locking with version conflict detection
+- [Admin Realtime Events](Admin_Realtime_Events.md) – Event types, channels, and encoding
+- [Admin Realtime API Routes](Admin_Realtime_API_Routes.md) – SSE stream and sync endpoints
+- [Realtime Hooks](Realtime_Hooks.md) – `useRealtimeCore`, `useRowLock`, `useRealtimeUpdates`, `useOptimisticUpdate`
+
 ## Goals
 
 The realtime layer is designed to:
