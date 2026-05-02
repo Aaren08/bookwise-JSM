@@ -31,6 +31,7 @@ export type AdminRowLock = {
   adminName: string;
   expiresAt: string;
   token: string;
+  version: number;
 };
 
 export type AdminRealtimeLockEvent = {
@@ -55,9 +56,8 @@ export type AdminRealtimeEvent<TData = unknown> =
   | AdminRealtimeLockEvent
   | AdminRealtimeHeartbeatEvent;
 
-export const encodeAdminRealtimeEvent = (
-  message: AdminRealtimeEvent,
-) => `data: ${JSON.stringify(message)}\n\n`;
+export const encodeAdminRealtimeEvent = (message: AdminRealtimeEvent) =>
+  `data: ${JSON.stringify(message)}\n\n`;
 
 /** Emits a proper named SSE heartbeat frame (not a comment). */
 export const encodeHeartbeatEvent = (): string =>
@@ -75,7 +75,8 @@ export const isAdminRowLock = (value: unknown): value is AdminRowLock => {
     typeof value.adminId === "string" &&
     typeof value.adminName === "string" &&
     typeof value.expiresAt === "string" &&
-    typeof value.token === "string"
+    typeof value.token === "string" &&
+    typeof value.version === "number"
   );
 };
 

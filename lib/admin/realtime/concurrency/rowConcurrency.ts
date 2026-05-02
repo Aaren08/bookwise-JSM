@@ -22,6 +22,87 @@ type AdminActor = {
   name: string;
 };
 
+// ─── Lua Scripts ────────────────────────────────────────────────────────────
+
+const ACQUIRE_SCRIPT = `
+  local key     = KEYS[1]
+  local payload = ARGV[1]
+  local ttl     = tonumber(ARGV[2])
+  local adminId = ARGV[3]
+  local newExpiry = ARGV[4]
+
+  local current = redis.call('GET', key)
+
+  if not current then
+    redis.call('SET', key, payload, 'PX', ttl)
+    return payload
+  end
+
+  local ok, decoded = pcall(cjson.decode, current)
+  if not ok then
+    redis.call('SET', key, payload, 'PX', ttl)
+    return payload
+  end
+
+  if decoded.adminId == adminId then
+    -- Re-entrant: refresh TTL, keep same token, bump version
+    decoded.expiresAt = newExpiry
+    decoded.version   = (decoded.version or 0) + 1
+    local updated = cjson.encode(decoded)
+    redis.call('SET', key, updated, 'PX', ttl)
+    return updated
+  end
+
+  return current
+`;
+
+const HEARTBEAT_SCRIPT = `
+  local key     = KEYS[1]
+  local adminId = ARGV[1]
+  local token   = ARGV[2]
+  local ttl     = tonumber(ARGV[3])
+  local newExpiry = ARGV[4]
+
+  local current = redis.call('GET', key)
+  if not current then return 0 end
+
+  local ok, decoded = pcall(cjson.decode, current)
+  if not ok then return 0 end
+
+  if decoded.adminId ~= adminId or decoded.token ~= token then return 0 end
+
+  decoded.expiresAt = newExpiry
+  decoded.version   = (decoded.version or 0) + 1
+  redis.call('SET', key, cjson.encode(decoded), 'PX', ttl)
+  return 1
+`;
+
+// compare-and-delete: requires BOTH adminId AND token, rejects empty guards
+const RELEASE_SCRIPT = `
+  local key     = KEYS[1]
+  local adminId = ARGV[1]
+  local token   = ARGV[2]
+
+  if adminId == '' or token == '' then
+    return {'ERR', 'missing_identity'}
+  end
+
+  local current = redis.call('GET', key)
+  if not current then return {'OK', 'already_gone'} end
+
+  local ok, decoded = pcall(cjson.decode, current)
+  if not ok then
+    redis.call('DEL', key)
+    return {'OK', 'corrupt_deleted'}
+  end
+
+  if decoded.adminId ~= adminId then return {'ERR', 'wrong_owner'} end
+  if decoded.token   ~= token   then return {'ERR', 'token_mismatch'} end
+
+  redis.call('DEL', key)
+  return {'OK', 'released'}
+`;
+
 const getLockKey = (entity: AdminRealtimeEntity, entityId: string) =>
   `lock:${entity}:${entityId}`;
 
@@ -48,7 +129,8 @@ const parseLock = (
     typeof parsed.adminId !== "string" ||
     typeof parsed.adminName !== "string" ||
     typeof parsed.expiresAt !== "string" ||
-    typeof parsed.token !== "string"
+    typeof parsed.token !== "string" ||
+    typeof parsed.version !== "number"
   ) {
     return null;
   }
@@ -60,6 +142,7 @@ const parseLock = (
     adminName: parsed.adminName,
     expiresAt: parsed.expiresAt,
     token: parsed.token,
+    version: parsed.version,
   } satisfies AdminRowLock;
 };
 
@@ -112,126 +195,132 @@ export const getRowLock = async (
 export const listRowLocks = async (
   entity: AdminRealtimeEntity,
   entityIds: string[],
-) => {
-  const entries = await Promise.all(
-    entityIds.map(async (entityId) => ({
-      entityId,
-      lock: await getRowLock(entity, entityId),
-    })),
-  );
+): Promise<Record<string, AdminRowLock | null>> => {
+  if (entityIds.length === 0) return {};
 
-  return entries.reduce<Record<string, AdminRowLock | null>>((acc, entry) => {
-    acc[entry.entityId] = entry.lock;
-    return acc;
-  }, {});
+  const keys = entityIds.map((id) => getLockKey(entity, id));
+
+  // Single round-trip instead of N
+  const values = await redis.mget<string[]>(...keys);
+
+  return entityIds.reduce<Record<string, AdminRowLock | null>>(
+    (acc, entityId, index) => {
+      acc[entityId] = parseLock(values[index], entity, entityId);
+      return acc;
+    },
+    {},
+  );
 };
 
 export const acquireLock = async (
   entity: AdminRealtimeEntity,
   entityId: string,
   admin: AdminActor,
-  token?: string,
+  existingToken?: string,
 ) => {
-  const nextToken = token || Math.random().toString(36).slice(2);
-  const lock = {
+  const now = Date.now();
+  const expiresAt = new Date(now + ROW_LOCK_TTL_MS).toISOString();
+
+  // Only generate a fresh token if we don't already own the lock
+  // The script will reuse the existing token if re-entrant
+  const token = existingToken ?? Math.random().toString(36).slice(2);
+
+  const lock: AdminRowLock = {
     entity,
     entityId,
     adminId: admin.id,
     adminName: admin.name,
-    expiresAt: new Date(Date.now() + ROW_LOCK_TTL_MS).toISOString(),
-    token: nextToken,
-  } satisfies AdminRowLock;
+    expiresAt,
+    token,
+    version: 1,
+  };
 
   const result = (await redis.eval(
-    `
-    local current = redis.call('GET', KEYS[1])
-    local next = ARGV[1]
-    local ttl = tonumber(ARGV[2])
-    local adminId = ARGV[3]
-
-    if not current then
-      redis.call('SET', KEYS[1], next, 'PX', ttl)
-      return next
-    end
-
-    local decoded = cjson.decode(current)
-    if decoded.adminId == adminId then
-      redis.call('SET', KEYS[1], next, 'PX', ttl)
-      return next
-    end
-
-    return current
-    `,
+    ACQUIRE_SCRIPT,
     [getLockKey(entity, entityId)],
-    [JSON.stringify(lock), String(ROW_LOCK_TTL_MS), admin.id],
+    [JSON.stringify(lock), String(ROW_LOCK_TTL_MS), admin.id, expiresAt],
   )) as string | null;
 
   const resolvedLock = parseLock(result, entity, entityId);
   const acquired = resolvedLock?.adminId === admin.id;
 
   if (acquired) {
-    try {
-      await publishLockEvent(entity, entityId, resolvedLock);
-    } catch (error) {
-      console.error("Error publishing lock event:", error);
-    }
-    return {
-      acquired,
-      lock: resolvedLock,
-    };
-  } else {
-    return {
-      acquired: false,
-      lock: null,
-    };
+    await publishLockEvent(entity, entityId, resolvedLock).catch((err) =>
+      console.error("[acquireLock] publishLockEvent failed:", err),
+    );
+    return { acquired: true, lock: resolvedLock };
   }
+
+  return { acquired: false, lock: null, blockedBy: resolvedLock };
+};
+
+// Heartbeat (TTL refresh only, no token rotation)
+export const refreshLock = async (
+  entity: AdminRealtimeEntity,
+  entityId: string,
+  adminId: string,
+  token: string,
+): Promise<boolean> => {
+  if (!adminId || !token) {
+    console.warn("[refreshLock] Called with empty adminId or token — skipped");
+    return false;
+  }
+
+  const newExpiry = new Date(Date.now() + ROW_LOCK_TTL_MS).toISOString();
+
+  const result = (await redis.eval(
+    HEARTBEAT_SCRIPT,
+    [getLockKey(entity, entityId)],
+    [adminId, token, String(ROW_LOCK_TTL_MS), newExpiry],
+  )) as 0 | 1;
+
+  return result === 1;
 };
 
 export const releaseLock = async (
   entity: AdminRealtimeEntity,
   entityId: string,
-  adminId?: string,
-  token?: string,
-) => {
-  const result = (await redis.eval(
-    `
-    local current = redis.call('GET', KEYS[1])
-    if not current then
-      return ''
-    end
-
-    local decoded = cjson.decode(current)
-
-    if ARGV[1] ~= '' and decoded.adminId ~= ARGV[1] then
-      return current
-    end
-
-    if ARGV[2] ~= '' and decoded.token ~= ARGV[2] then
-      return current
-    end
-
-    redis.call('DEL', KEYS[1])
-    return '__deleted__'
-    `,
-    [getLockKey(entity, entityId)],
-    [adminId ?? "", token ?? ""],
-  )) as string | null;
-
-  if (result === "__deleted__") {
-    try {
-      await publishLockEvent(entity, entityId, null);
-    } catch (error) {
-      console.error("Failed to publish lock release event", {
-        error,
-      });
-    }
-    return { released: true, lock: null };
+  adminId: string, // required — not optional
+  token: string, // required — not optional
+): Promise<{ released: boolean; reason: string }> => {
+  if (!adminId || !token) {
+    console.error(
+      "[releaseLock] Attempted release with empty adminId or token",
+      {
+        entity,
+        entityId,
+        hasAdminId: !!adminId,
+        hasToken: !!token,
+      },
+    );
+    return { released: false, reason: "missing_identity" };
   }
 
-  return {
-    released: false,
-    lock: parseLock(result, entity, entityId),
-  };
+  const result = (await redis.eval(
+    RELEASE_SCRIPT,
+    [getLockKey(entity, entityId)],
+    [adminId, token],
+  )) as [string, string];
+
+  const [status, reason] = result;
+  const released = status === "OK";
+
+  if (released) {
+    await publishLockEvent(entity, entityId, null).catch((err) =>
+      console.error("[releaseLock] publishLockEvent failed:", err),
+    );
+  } else {
+    console.warn("[releaseLock] Release rejected", {
+      entity,
+      entityId,
+      adminId,
+      reason,
+      // Log partial token for tracing without exposing full secret
+      tokenPrefix: token.slice(0, 6),
+    });
+  }
+
+  return { released, reason };
 };
 
 export class LockOwnershipError extends Error {

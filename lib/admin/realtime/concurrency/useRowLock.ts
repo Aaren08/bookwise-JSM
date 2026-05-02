@@ -40,7 +40,7 @@ const LOCK_TTL_SWEEP_MS = 10_000; // how often to sweep for expired locks
 const isDevelopment = process.env.NODE_ENV === "development";
 
 const devLog = (
-  level: "debug" | "info" | "error",
+  level: "debug" | "info" | "error" | "warn",
   message?: unknown,
   ...optionalParams: unknown[]
 ) => {
@@ -88,7 +88,9 @@ export const useRowLock = ({
 
   // Stable ref so the resync callback always has the latest rowIds
   const rowIdsRef = useRef(rowIds);
-  useEffect(() => { rowIdsRef.current = rowIds; }, [rowIds]);
+  useEffect(() => {
+    rowIdsRef.current = rowIds;
+  }, [rowIds]);
 
   const rowIdsString = rowIds.join(",");
 
@@ -213,7 +215,11 @@ export const useRowLock = ({
           }));
         }
       } catch (error) {
-        devLog("error", `[useRowLock:${entity}] Failed to process lock event:`, error);
+        devLog(
+          "error",
+          `[useRowLock:${entity}] Failed to process lock event:`,
+          error,
+        );
       }
     };
 
@@ -231,7 +237,8 @@ export const useRowLock = ({
       const now = Date.now();
       setLocks((current) => {
         const expired = Object.entries(current).filter(
-          ([, lock]) => lock !== null && new Date(lock!.expiresAt).getTime() < now,
+          ([, lock]) =>
+            lock !== null && new Date(lock!.expiresAt).getTime() < now,
         );
 
         if (expired.length === 0) return current;
@@ -274,7 +281,8 @@ export const useRowLock = ({
         body: JSON.stringify({
           entity,
           entityId,
-          token: method === "DELETE" ? (token ?? activeTokenRef.current) : undefined,
+          token:
+            method === "DELETE" ? (token ?? activeTokenRef.current) : undefined,
         }),
       });
 
@@ -302,11 +310,17 @@ export const useRowLock = ({
 
   const acquireRowLock = useCallback(
     async (entityId: string) => {
-      devLog("debug", `[useRowLock:${entity}] Acquiring lock for id: ${entityId}`);
+      devLog(
+        "debug",
+        `[useRowLock:${entity}] Acquiring lock for id: ${entityId}`,
+      );
       const result = await syncLock("POST", entityId);
 
       if (result.success) {
-        devLog("debug", `[useRowLock:${entity}] Lock acquired for: ${entityId}`);
+        devLog(
+          "debug",
+          `[useRowLock:${entity}] Lock acquired for: ${entityId}`,
+        );
         setActiveRowId(entityId);
         activeTokenRef.current = result.lock?.token ?? null;
         heartbeatRowIdRef.current = entityId;
@@ -319,68 +333,135 @@ export const useRowLock = ({
   );
 
   const refreshRowLock = useCallback(
-    async (entityId: string) => syncLock("PATCH", entityId),
-    [syncLock],
+    async (entityId: string) => {
+      const token = activeTokenRef.current;
+      if (!token) {
+        devLog(
+          "warn",
+          `[useRowLock:${entity}] Heartbeat skipped — no active token`,
+        );
+        return;
+      }
+
+      const response = await fetch("/api/admin/locks", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity, entityId, token }),
+      });
+
+      if (!response.ok) {
+        devLog(
+          "warn",
+          `[useRowLock:${entity}] Heartbeat failed for ${entityId}`,
+        );
+        // Lock may have expired — clear local state
+        setLocks((current) => {
+          const c = { ...current };
+          delete c[entityId];
+          return c;
+        });
+        setActiveRowId((current) => (current === entityId ? null : current));
+        activeTokenRef.current = null;
+        heartbeatRowIdRef.current = null;
+        activeRowIdRef.current = null;
+      }
+      // No state update on success — token unchanged, no re-render needed
+    },
+    [entity],
   );
 
   const releaseRowLock = useCallback(
     async (entityId: string) => {
-      devLog("debug", `[useRowLock:${entity}] Releasing lock for id: ${entityId}`);
+      // 1. Capture token FIRST — before any state mutations
+      const tokenToRelease = activeTokenRef.current;
+      const adminIdToRelease = currentAdminId;
 
-      const previousLock = locks[entityId];
-
-      // Immediately clear from local state for instant UI feedback
-      setLocks((current) => {
-        const copy = { ...current };
-        delete copy[entityId];
-        return copy;
+      devLog("debug", `[useRowLock:${entity}] Releasing lock`, {
+        entityId,
+        hasToken: !!tokenToRelease,
+        isActive: activeRowId === entityId,
       });
 
-      const token = activeTokenRef.current;
+      if (!tokenToRelease) {
+        devLog(
+          "warn",
+          `[useRowLock:${entity}] No token to release for ${entityId}`,
+        );
+        // Still clear local state — lock may have already expired
+        setLocks((current) => {
+          const c = { ...current };
+          delete c[entityId];
+          return c;
+        });
+        return { success: true, reason: "no_token_noop" };
+      }
 
+      // 2. Clear heartbeat refs to stop renewal loop
       if (heartbeatRowIdRef.current === entityId) {
         heartbeatRowIdRef.current = null;
-        activeTokenRef.current = null;
         activeRowIdRef.current = null;
+        // DO NOT clear activeTokenRef yet — we still need it for the DELETE call
       }
 
       if (activeRowId === entityId) {
         setActiveRowId((current) => (current === entityId ? null : current));
       }
 
+      // 3. Optimistic local clear
+      const previousLock = locks[entityId];
+      setLocks((current) => {
+        const c = { ...current };
+        delete c[entityId];
+        return c;
+      });
+
+      // 4. Server DELETE with the captured token
       try {
-        const result = await syncLock("DELETE", entityId, token);
+        const response = await fetch("/api/admin/locks", {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entity, entityId, token: tokenToRelease }),
+        });
 
-        if (!result.success) {
-          throw new Error(result.message || "Failed to release lock");
+        const payload = (await response.json()) as {
+          success?: boolean;
+          reason?: string;
+          message?: string;
+        };
+
+        if (!response.ok && payload.reason !== "already_gone") {
+          devLog(
+            "warn",
+            `[useRowLock:${entity}] Server release failed, rolling back`,
+            payload,
+          );
+          // Rollback
+          setLocks((current) => ({ ...current, [entityId]: previousLock }));
+          if (previousLock?.adminId === adminIdToRelease) {
+            setActiveRowId(entityId);
+            activeTokenRef.current = tokenToRelease;
+            heartbeatRowIdRef.current = entityId;
+            activeRowIdRef.current = entityId;
+          }
+          return { success: false, reason: payload.reason ?? "server_error" };
         }
 
-        return result;
+        // 5. Now safe to clear token ref
+        if (activeTokenRef.current === tokenToRelease) {
+          activeTokenRef.current = null;
+        }
+
+        return { success: true, reason: payload.reason ?? "released" };
       } catch (error) {
-        devLog(
-          "error",
-          `[useRowLock:${entity}] Release failed — restoring lock:`,
-          error,
-        );
-
-        // Rollback: restore the previous lock state
-        setLocks((current) => ({
-          ...current,
-          [entityId]: previousLock,
-        }));
-
-        // If it was our lock, restore the active state too
-        if (previousLock?.adminId === currentAdminId) {
-          setActiveRowId(entityId);
-          activeTokenRef.current = previousLock.token;
-          heartbeatRowIdRef.current = entityId;
-          activeRowIdRef.current = entityId;
-        }
-
-        return { success: false, message: "Failed to release lock" };
+        devLog("error", `[useRowLock:${entity}] Release request threw`, error);
+        // Rollback on network error
+        setLocks((current) => ({ ...current, [entityId]: previousLock }));
+        return { success: false, reason: "network_error" };
       }
     },
-    [activeRowId, currentAdminId, entity, locks, syncLock],
+    [activeRowId, currentAdminId, entity, locks],
   );
 
   // ---------------------------------------------------------------------------

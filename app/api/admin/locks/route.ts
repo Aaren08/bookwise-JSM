@@ -4,6 +4,7 @@ import {
   listRowLocks,
   releaseLock,
   requireAdminActor,
+  refreshLock,
 } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 import {
   ADMIN_ROW_REALTIME_CHANNELS,
@@ -105,7 +106,36 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  return POST(request);
+  try {
+    const admin = await requireAdminActor();
+    const body = await parseBody(request); // must include token
+
+    if (!body?.token) {
+      return NextResponse.json(
+        { message: "token required for heartbeat" },
+        { status: 400 },
+      );
+    }
+
+    const refreshed = await refreshLock(
+      body.entity,
+      body.entityId,
+      admin.id,
+      body.token,
+    );
+
+    if (!refreshed) {
+      return NextResponse.json(
+        { success: false, message: "Lock not owned or expired" },
+        { status: 409 },
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unauthorized";
+    return NextResponse.json({ success: false, message }, { status: 401 });
+  }
 }
 
 export async function DELETE(request: Request) {
@@ -117,16 +147,25 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
+    // Fix 1: guard against missing token before calling releaseLock
+    if (!body.token) {
+      return NextResponse.json(
+        { message: "token is required to release a lock" },
+        { status: 400 },
+      );
+    }
+
     const result = await releaseLock(
       body.entity,
       body.entityId,
       admin.id,
-      body.token,
+      body.token, // now guaranteed string
     );
 
+    // Fix 2: result has `reason`, not `lock`
     return NextResponse.json({
       success: result.released,
-      lock: result.lock,
+      reason: result.reason,
       message: result.released
         ? "Lock released"
         : "Lock not owned by current admin",
