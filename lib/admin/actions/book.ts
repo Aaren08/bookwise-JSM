@@ -149,15 +149,17 @@ export const updateBook = async (params: UpdateBookParams) => {
         data: updatedBook,
       };
     } finally {
-      try {
-        await releaseLock("books", id, admin.id, lockToken);
-      } catch (error) {
-        console.error("Failed to release lock for updateBook", {
-          id,
-          adminId: admin.id,
-          hasLock: !!lockToken,
-          error,
-        });
+      if (lockToken) {
+        try {
+          await releaseLock("books", id, admin.id, lockToken);
+        } catch (error) {
+          console.error("Failed to release lock for updateBook", {
+            id,
+            adminId: admin.id,
+            hasLock: !!lockToken,
+            error,
+          });
+        }
       }
     }
   } catch (error) {
@@ -283,15 +285,17 @@ export const deleteBook = async ({
         data: JSON.parse(JSON.stringify(deletedBook[0])) as Book,
       };
     } finally {
-      try {
-        await releaseLock("books", id, admin.id, lockToken);
-      } catch (error) {
-        console.error("Failed to release lock for deleteBook", {
-          id,
-          adminId: admin.id,
-          hasLock: !!lockToken,
-          error,
-        });
+      if (lockToken) {
+        try {
+          await releaseLock("books", id, admin.id, lockToken);
+        } catch (error) {
+          console.error("Failed to release lock for deleteBook", {
+            id,
+            adminId: admin.id,
+            hasLock: !!lockToken,
+            error,
+          });
+        }
       }
     }
   } catch (error) {

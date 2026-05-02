@@ -5,6 +5,10 @@ import { users } from "./database/schema";
 import { eq } from "drizzle-orm";
 import { compare } from "bcryptjs";
 
+interface UserWithSessionVersion extends User {
+  sessionVersion?: number;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: {
     strategy: "jwt",
@@ -39,6 +43,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             name: user[0].fullName,
             image: user[0].userAvatar,
             role: user[0].role,
+            sessionVersion: user[0].sessionVersion,
           } as User;
         } catch (error) {
           console.error("Authentication error:", error);
@@ -57,6 +62,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.name = user.name;
         token.picture = user.image;
         token.role = user.role;
+        token.sessionVersion =
+          (user as UserWithSessionVersion).sessionVersion ?? 1;
       }
       if (trigger === "update" && session?.user?.image) {
         token.picture = session.user.image;
@@ -69,6 +76,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.name = token.name as string;
         session.user.image = token.picture as string;
         session.user.role = token.role as string;
+        session.user.sessionVersion = token.sessionVersion as number;
       }
       return session;
     },

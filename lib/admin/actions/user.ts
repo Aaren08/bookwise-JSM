@@ -14,6 +14,7 @@ import {
   requireAdminActor,
   updateWithVersionCheck,
 } from "@/lib/admin/realtime/concurrency/rowConcurrency";
+import { publishRoleChangeEvent } from "@/lib/admin/realtime/session/roleChangePublisher";
 
 const approvedUserSelect = {
   id: users.id,
@@ -236,7 +237,7 @@ export const approveAccount = async ({
       };
     } finally {
       try {
-        await releaseLock("account_requests", userId, admin.id, lockToken);
+        await releaseLock("account_requests", userId, admin.id, lockToken || "");
       } catch (error) {
         console.error("Failed to release lock for approveAccount", {
           userId,
@@ -309,7 +310,7 @@ export const rejectAccount = async ({
       };
     } finally {
       try {
-        await releaseLock("account_requests", userId, admin.id, lockToken);
+        await releaseLock("account_requests", userId, admin.id, lockToken || "");
       } catch (error) {
         console.error("Failed to release lock for rejectAccount", {
           userId,
@@ -422,7 +423,7 @@ export const deleteUser = async ({
       };
     } finally {
       try {
-        await releaseLock("users", userId, admin.id, lockToken);
+        await releaseLock("users", userId, admin.id, lockToken || "");
       } catch (error) {
         console.error("Failed to release lock for deleteUser", {
           userId,
@@ -457,66 +458,67 @@ export const updateUserRole = async ({
     await assertLockOwnership("users", userId, admin.id, lockToken);
 
     try {
-      await updateWithVersionCheck({
-        table: users,
-        idColumn: users.id,
-        versionColumn: users.version,
-        id: userId,
-        expectedVersion,
-        values: { role },
-      });
+      // Bump BOTH record version AND session version atomically
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          role,
+          updatedAt: new Date(),
+          version: sql`${users.version} + 1`,
+          // Only bump sessionVersion on downgrade (ADMIN → USER).
+          // An upgrade doesn't require invalidation — the user gains access,
+          // they don't lose it. This avoids unnecessary token churn.
+          sessionVersion: sql`CASE
+            WHEN ${users.role} = 'ADMIN' AND ${role} = 'USER'
+            THEN ${users.sessionVersion} + 1
+            ELSE ${users.sessionVersion}
+          END`,
+        })
+        .where(and(eq(users.id, userId), eq(users.version, expectedVersion)))
+        .returning();
+
+      if (!updatedUser) {
+        throw new Error(CONFLICT_ERROR_MESSAGE);
+      }
 
       revalidatePath("/admin/users");
       revalidateTag(CACHE_TAGS.users, "max");
-      broadcastAdminDashboardUpdate().catch((err) =>
-        console.error("broadcastAdminDashboardUpdate failed", err),
-      );
+      broadcastAdminDashboardUpdate().catch(console.error);
 
-      let updatedUser: User | null = null;
-      try {
-        updatedUser = await getApprovedUserById(userId);
+      // Fire role-change event ONLY when a downgrade actually occurred
+      if (role === "USER" && updatedUser.sessionVersion > 1) {
+        await publishRoleChangeEvent({
+          userId,
+          newRole: role,
+          sessionVersion: updatedUser.sessionVersion,
+        });
+      }
 
-        if (updatedUser) {
-          await publishEvent("users", {
-            type: "UPDATE",
-            entityId: userId,
-            data: updatedUser,
-          });
-        }
-      } catch (realtimeError) {
-        console.error(
-          `Failed to publish realtime update for user role ${userId}:`,
-          realtimeError,
-        );
+      const freshUser = await getApprovedUserById(userId);
+      if (freshUser) {
+        await publishEvent("users", {
+          type: "UPDATE",
+          entityId: userId,
+          data: freshUser,
+        });
       }
 
       return {
         success: true,
         message: "User role updated successfully",
-        data: updatedUser,
+        data: freshUser,
       };
     } finally {
-      try {
-        await releaseLock("users", userId, admin.id, lockToken);
-      } catch (error) {
-        console.error("Failed to release lock for updateUserRole", {
-          userId,
-          adminId: admin.id,
-          lockToken,
-          error,
-        });
-      }
+      await releaseLock("users", userId, admin.id, lockToken || "").catch(
+        console.error,
+      );
     }
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return {
       success: false,
       error:
-        error instanceof Error
-          ? error.message === CONFLICT_ERROR_MESSAGE
-            ? CONFLICT_ERROR_MESSAGE
-            : error.message
-          : "Failed to update user role",
+        error instanceof Error ? error.message : "Failed to update user role",
     };
   }
 };
