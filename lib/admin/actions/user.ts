@@ -236,15 +236,17 @@ export const approveAccount = async ({
         data: approvedUser,
       };
     } finally {
-      try {
-        await releaseLock("account_requests", userId, admin.id, lockToken || "");
-      } catch (error) {
-        console.error("Failed to release lock for approveAccount", {
-          userId,
-          adminId: admin.id,
-          lockToken,
-          error,
-        });
+      if (lockToken) {
+        try {
+          await releaseLock("account_requests", userId, admin.id, lockToken);
+        } catch (error) {
+          console.error("Failed to release lock for approveAccount", {
+            userId,
+            adminId: admin.id,
+            lockToken,
+            error,
+          });
+        }
       }
     }
   } catch (error) {
@@ -309,15 +311,17 @@ export const rejectAccount = async ({
         message: "Account rejected successfully",
       };
     } finally {
-      try {
-        await releaseLock("account_requests", userId, admin.id, lockToken || "");
-      } catch (error) {
-        console.error("Failed to release lock for rejectAccount", {
-          userId,
-          adminId: admin.id,
-          lockToken,
-          error,
-        });
+      if (lockToken) {
+        try {
+          await releaseLock("account_requests", userId, admin.id, lockToken);
+        } catch (error) {
+          console.error("Failed to release lock for rejectAccount", {
+            userId,
+            adminId: admin.id,
+            lockToken,
+            error,
+          });
+        }
       }
     }
   } catch (error) {
@@ -422,15 +426,17 @@ export const deleteUser = async ({
         data: JSON.parse(JSON.stringify(deletedUser[0])) as User,
       };
     } finally {
-      try {
-        await releaseLock("users", userId, admin.id, lockToken || "");
-      } catch (error) {
-        console.error("Failed to release lock for deleteUser", {
-          userId,
-          adminId: admin.id,
-          lockToken,
-          error,
-        });
+      if (lockToken) {
+        try {
+          await releaseLock("users", userId, admin.id, lockToken);
+        } catch (error) {
+          console.error("Failed to release lock for deleteUser", {
+            userId,
+            adminId: admin.id,
+            lockToken,
+            error,
+          });
+        }
       }
     }
   } catch (error) {
@@ -509,9 +515,11 @@ export const updateUserRole = async ({
         data: freshUser,
       };
     } finally {
-      await releaseLock("users", userId, admin.id, lockToken || "").catch(
-        console.error,
-      );
+      if (lockToken) {
+        await releaseLock("users", userId, admin.id, lockToken).catch(
+          console.error,
+        );
+      }
     }
   } catch (error) {
     console.error(error);
