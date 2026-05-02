@@ -5,9 +5,11 @@
 Four React hooks manage the client-side realtime admin dashboard experience:
 
 1. **`useRealtimeCore`** – Connection lifecycle and reference counting
-2. **`useRowLock`** – Row lock subscription and display
+2. **`useRowLock`** – Row lock subscription, heartbeat, and full lock CRUD
 3. **`useRealtimeUpdates`** – Row-level CREATE/UPDATE/DELETE events
 4. **`useOptimisticUpdate`** – Helper for optimistic state mutations
+
+---
 
 ## Hook: useRealtimeCore
 
@@ -16,7 +18,7 @@ Connection lifecycle management with reference counting.
 ### Purpose
 
 - Opens/closes the singleton EventSource based on mount count
-- Allows multiple tables (BorrowTable, UserTable, AccountTable) to coexist
+- Allows multiple tables (BorrowTable, UserTable, AccountTable) to coexist with one connection
 - Detects reconnects and triggers state resync
 - Exposes connection status to consumers
 
@@ -30,10 +32,7 @@ function useRealtimeCore({ onResync }: UseRealtimeCoreOptions = {}): {
 
 ### Parameters
 
-- **`onResync`**: Callback invoked after every reconnect or on periodic 60s resync
-  - Called when status transitions from `"reconnecting"` → `"connected"`
-  - Can be async; the hook debounces it (5s minimum between calls)
-  - Should re-fetch rows, locks, or other state
+- **`onResync`**: Async callback invoked after every reconnect or on periodic 60s resync. Debounced to at most once per 5 seconds to prevent hammering the server.
 
 ### Return Value
 
@@ -46,7 +45,6 @@ export function BorrowTable() {
   const [rows, setRows] = useState<BorrowRecord[]>([]);
 
   const handleResync = async () => {
-    // Re-fetch first page of borrow records
     const res = await fetch("/api/admin/sync?entity=borrow_requests&includeRows=true");
     const data = await res.json();
     setRows(data.rows);
@@ -56,9 +54,7 @@ export function BorrowTable() {
 
   return (
     <div>
-      <div className="connection-badge">
-        Status: {status}
-      </div>
+      <div className="connection-badge">Status: {status}</div>
       {/* table content */}
     </div>
   );
@@ -67,27 +63,7 @@ export function BorrowTable() {
 
 ### How Reference Counting Works
 
-```typescript
-let mountCount = 0;
-
-export function useRealtimeCore({ onResync }: UseRealtimeCoreOptions = {}) {
-  useEffect(() => {
-    // Mount: increment count
-    mountCount += 1;
-    connect();
-
-    return () => {
-      // Unmount: decrement count
-      mountCount -= 1;
-      if (mountCount <= 0) {
-        disconnect();
-      }
-    };
-  }, []);
-}
-```
-
-**Scenario**: Three tables mounted simultaneously
+A module-level `mountCount` is shared across all instances:
 
 ```
 BorrowTable mounts      → mountCount = 1 → EventSource opens
@@ -99,55 +75,228 @@ UserTable unmounts      → mountCount = 1 → (no-op, BorrowTable still mounted
 BorrowTable unmounts    → mountCount = 0 → EventSource closes
 ```
 
-### Resync Debouncing
+### Resync Triggers
 
-The hook debounces `onResync` to prevent duplicate calls:
+`onResync` is called in two situations:
+
+1. **On reconnect**: When status transitions from `"reconnecting"` → `"connected"`
+2. **Periodic safety**: Every 60 seconds via `onPeriodicResync` listener
+
+Both paths go through `safeResync`, which enforces the 5s debounce.
+
+---
+
+## Hook: useRowLock
+
+Manages row-level optimistic locks for editing, including heartbeat, TTL sweep, and post-reconnect resync.
+
+### Signature
 
 ```typescript
-const RESYNC_DEBOUNCE_MS = 5_000;
-
-const safeResync = async () => {
-  const now = Date.now();
-  if (
-    isResyncingRef.current ||
-    now - lastResyncRef.current < RESYNC_DEBOUNCE_MS
-  ) {
-    return; // Skip if already resyncing or last resync was <5s ago
-  }
-
-  isResyncingRef.current = true;
-  lastResyncRef.current = now;
-
-  try {
-    await onResyncRef.current?.();
-  } finally {
-    isResyncingRef.current = false;
-  }
+function useRowLock({
+  entity,
+  rowIds,
+  currentAdminId,
+}: UseRowLockOptions): {
+  locks: Record<string, AdminRowLock | null>;
+  activeRowId: string | null;
+  setActiveRowId: Dispatch<SetStateAction<string | null>>;
+  acquireRowLock: (entityId: string) => Promise<{ success: boolean; lock?: AdminRowLock | null; message?: string }>;
+  refreshRowLock: (entityId: string) => Promise<void>;
+  releaseRowLock: (entityId: string) => Promise<{ success: boolean; reason: string }>;
+  lockForRow: (entityId: string) => AdminRowLock | null;
+  isLockedByOther: (entityId: string) => boolean;
+  isLockedByCurrentAdmin: (entityId: string) => boolean;
 };
 ```
 
-**Why?**
+### Parameters
 
-- Multiple events might fire during reconnect (heartbeat + periodic resync)
-- Debouncing prevents hammering the server with duplicate sync requests
+| Param | Type | Description |
+|-------|------|-------------|
+| `entity` | `AdminRealtimeEntity` | Entity table to manage locks for |
+| `rowIds` | `string[]` | IDs of rows currently visible (drives lock fetching scope) |
+| `currentAdminId` | `string` | The current admin's `user.id` |
 
-### Resync Triggers
+### Return Value
 
-`onResync` is called:
+| Field | Description |
+|-------|-------------|
+| `locks` | Map of row ID → `AdminRowLock \| null` |
+| `activeRowId` | Row currently being edited by this admin (or `null`) |
+| `setActiveRowId` | Manual setter — rarely needed; prefer `acquireRowLock` |
+| `acquireRowLock(id)` | POSTs to `/api/admin/locks`, sets `activeRowId` and stores token internally |
+| `refreshRowLock(id)` | PATCHes `/api/admin/locks` with the current token (used internally by heartbeat) |
+| `releaseRowLock(id)` | DELETEs from `/api/admin/locks` with optimistic local clear + rollback on failure |
+| `lockForRow(id)` | Convenience selector — returns `locks[id] ?? null` |
+| `isLockedByOther(id)` | `true` if lock exists and `adminId !== currentAdminId` |
+| `isLockedByCurrentAdmin(id)` | `true` if lock exists and `adminId === currentAdminId` |
 
-1. **On reconnect**: When status changes from `"reconnecting"` → `"connected"`
-2. **Periodic safety**: Every 60 seconds (via `onPeriodicResync` listener)
+### Lifecycle
+
+#### 1. Initial Lock Fetch
+
+Fetches current lock state whenever `rowIds` changes:
+
+```typescript
+useEffect(() => {
+  // GET /api/admin/locks?entity=X&ids=id1,id2,...
+  const fetchLocks = async () => { ... };
+  fetchLocks();
+}, [entity, rowIdsString]);
+```
+
+#### 2. SSE Lock Event Listener
+
+Handles `LOCK_ACQUIRED` and `LOCK_RELEASED` events for the relevant entity:
+
+```typescript
+onMessage((event: MessageEvent<string>) => {
+  const parsed = JSON.parse(event.data) as AdminRealtimeEvent;
+  if (parsed.kind !== "lock" || parsed.entity !== entity) return;
+
+  if (parsed.type === "LOCK_RELEASED") {
+    setLocks(prev => { const c = {...prev}; delete c[eventId]; return c; });
+  } else {
+    setLocks(prev => ({ ...prev, [eventId]: parsed.lock ?? null }));
+  }
+});
+```
+
+#### 3. TTL Sweep (every 10s)
+
+Removes expired locks from local state to prevent ghost locks when `LOCK_RELEASED` events are missed during disconnects:
+
+```typescript
+setInterval(() => {
+  setLocks(current => {
+    const now = Date.now();
+    const next = {...current};
+    for (const [id, lock] of Object.entries(next)) {
+      if (lock && new Date(lock.expiresAt).getTime() < now) {
+        delete next[id];
+      }
+    }
+    return next;
+  });
+}, LOCK_TTL_SWEEP_MS); // 10,000ms
+```
+
+#### 4. Heartbeat (every 20s while editing)
+
+Keeps the active lock's Redis TTL alive while an edit form is open:
+
+```typescript
+useEffect(() => {
+  if (!activeRowId) return;
+  const interval = setInterval(() => {
+    void refreshRowLock(heartbeatRowIdRef.current!);
+  }, ROW_LOCK_HEARTBEAT_MS); // 20,000ms
+  return () => clearInterval(interval);
+}, [activeRowId, refreshRowLock]);
+```
+
+If the heartbeat PATCH fails (lock expired or stolen), the hook clears `activeRowId` and all token refs automatically.
+
+#### 5. Post-Reconnect Resync
+
+After SSE reconnects, re-fetches all locks via `GET /api/admin/sync`. Also validates the current active lock — if the server lock is gone or owned by a different token, local active state is cleared:
+
+```typescript
+onResync: async () => {
+  const response = await fetch(`/api/admin/sync?entity=${entity}&ids=...`);
+  const payload = await response.json();
+  setLocks(payload.locks);
+
+  // Verify active lock is still valid
+  const serverLock = activeRowId ? payload.locks[activeRowId] : null;
+  if (activeRowId && (!serverLock || serverLock.token !== activeTokenRef.current)) {
+    setActiveRowId(null);
+    activeTokenRef.current = null;
+    // ...clear heartbeat refs
+  }
+}
+```
+
+#### 6. Auto-Clear on Lock Disappearance
+
+Watches `locks[activeRowId]` — if it becomes `null` (due to TTL sweep, stolen lock, or SSE event), automatically clears `activeRowId`:
+
+```typescript
+useEffect(() => {
+  if (activeRowId && locks[activeRowId] == null) {
+    setActiveRowId(null);
+    activeTokenRef.current = null;
+    heartbeatRowIdRef.current = null;
+    activeRowIdRef.current = null;
+  }
+}, [activeRowId, locks]);
+```
+
+### Optimistic Release with Rollback
+
+`releaseRowLock` uses an optimistic-first strategy:
+
+1. Capture the token ref before any state mutations
+2. Stop the heartbeat loop immediately (clear `heartbeatRowIdRef`)
+3. Optimistically clear the lock from local `locks` state
+4. Send the DELETE to the server with the captured token
+5. On failure (unless `reason === "already_gone"`): restore the lock, restore `activeRowId`, restore token refs
+6. On success: clear the token ref (step deferred until after confirmed)
+
+This ensures the UI feels instant while providing a safe rollback path.
+
+### Usage Example
+
+```typescript
+export function BookTable({ books, session }: Props) {
+  const visibleIds = useMemo(() => filteredBooks.map(b => b.id), [filteredBooks]);
+
+  const {
+    locks,
+    acquireRowLock,
+    releaseRowLock,
+    isLockedByOther,
+    isLockedByCurrentAdmin,
+  } = useRowLock({
+    entity: "books",
+    rowIds: visibleIds,
+    currentAdminId: session.user.id,
+  });
+
+  const handleEdit = async (bookId: string) => {
+    const result = await acquireRowLock(bookId);
+    if (!result.success) {
+      toast.error(result.message ?? "Could not acquire lock");
+    }
+  };
+
+  return filteredBooks.map(book => (
+    <BookRow
+      key={book.id}
+      book={book}
+      lock={locks[book.id]}
+      isLockedByOther={isLockedByOther(book.id)}
+      isLockedByCurrentAdmin={isLockedByCurrentAdmin(book.id)}
+      onEdit={() => handleEdit(book.id)}
+      onClose={() => releaseRowLock(book.id)}
+    />
+  ));
+}
+```
+
+---
 
 ## Hook: useRealtimeUpdates
 
-Subscribes to and applies row-level CREATE/UPDATE/DELETE events with local optimistic state management.
+Subscribes to row-level CREATE/UPDATE/DELETE events from the singleton SSE client.
 
-### Updated Signature (v2.0)
+### Signature (current)
 
 ```typescript
 type UseRealtimeUpdatesOptions<T extends IdentifiableRow> = {
   entity: AdminRealtimeEntity;
-  items: T[]; // NEW REQUIRED: Current list for tracking
+  items: T[];                             // REQUIRED — current list for ID tracking
   setItems: Dispatch<SetStateAction<T[]>>;
   sortFn?: (a: T, b: T, order: SortOrder) => number;
   sortOrder?: SortOrder;
@@ -157,9 +306,9 @@ type UseRealtimeUpdatesOptions<T extends IdentifiableRow> = {
 };
 ```
 
-### Why items is Required
+### Why `items` Is Required
 
-The hook maintains an internal `currentIdsRef` that tracks which row IDs are currently visible. This is seeded from the `items` prop:
+The hook maintains a `currentIdsRef` that tracks which row IDs are currently visible. This ref is used during reconnect resync to know which rows to re-fetch, and is updated after every event. It is seeded from `items` on each render:
 
 ```typescript
 useEffect(() => {
@@ -167,452 +316,146 @@ useEffect(() => {
 }, [items]);
 ```
 
-When DELETE events arrive, this tracking ensures proper cleanup:
-
-```typescript
-if (parsed.type === "DELETE") {
-  next = previous.filter((item) => item.id !== parsed.entityId);
-  const result = preservePinnedRowIndex(previous, next, pinnedRowIdRef.current);
-  currentIdsRef.current = result.map((r) => r.id); // Update tracking
-  return result;
-}
-```
+Without this, the resync would fetch an empty list and fail to re-hydrate rows after reconnect.
 
 ### Table Integration Pattern
 
 ```typescript
-// Step 1: Get filtered visible rows
-const filteredUsers = useMemo(
-  () => sortedUsers.filter(matchesFilter),
-  [matchesFilter, sortedUsers],
+// Full sorted list drives realtimeUpdates (tracks ALL rows including off-screen)
+const [sortedData, setSortedData] = useState<Book[]>(initialBooks);
+
+// Filtered subset drives lock subscriptions (only visible rows)
+const filteredData = useMemo(
+  () => sortedData.filter(matchesFilter),
+  [sortedData, matchesFilter],
 );
 
-// Step 2: Subscribe to realtime updates for ALL rows
 useRealtimeUpdates({
-  entity: "users",
-  items: sortedUsers, // Full sorted list (not filtered)
-  setItems: setSortedUsers,
+  entity: "books",
+  items: sortedData,          // full list — so resync re-fetches everything
+  setItems: setSortedData,
   sortFn,
   sortOrder,
   pinnedRowId,
   matchesFilter,
+  onResync: handleResync,
 });
 
-// Step 3: Watch locks only for visible rows
-const rowIds = useMemo(
-  () => filteredUsers.map((user) => user.id), // Only visible
-  [filteredUsers],
-);
-
-const rowLock = useRowLock({
-  entity: "users",
-  rowIds,
-  currentAdminId: currentAdmin.id,
+const { locks } = useRowLock({
+  entity: "books",
+  rowIds: filteredData.map(b => b.id),   // filtered list — reduces lock fetch scope
+  currentAdminId: session.user.id,
 });
-```
-
-**Pattern explanation**:
-
-- Realtime updates track all rows so UI stays consistent when filters change
-- Lock subscriptions only monitor visible rows to reduce network load
-
-## Hook: useRowLock
-
-Manages row-level optimistic locks for editing.
-
-### Purpose
-
-- Fetches current locks for visible rows
-- Listens for lock acquisition/release events
-- Refreshes locks every 20s while editing (heartbeat)
-- Cleans up expired locks every 10s (TTL sweep)
-- Displays lock indicator UI
-
-### Signature
-
-```typescript
-function useRowLock({
-  entity: AdminRealtimeEntity;
-  rowIds: string[];
-  currentAdminId: string;
-}): {
-  locks: Record<string, AdminRowLock | null>;
-  activeRowId: string | null;
-  setActiveRowId: (id: string | null) => void;
-}
-```
-
-### Parameters
-
-- **`entity`**: One of `"books"`, `"users"`, `"borrow_requests"`, `"account_requests"`
-- **`rowIds`**: IDs of rows currently visible on page (for lock fetching)
-- **`currentAdminId`**: Admin's user ID (for lock ownership checks)
-
-### Return Value
-
-- **`locks`**: Map of row IDs to lock info (or null if unlocked)
-- **`activeRowId`**: Currently editing row (or null)
-- **`setActiveRowId`**: Set which row is being edited (triggers heartbeat)
-
-### Usage Example
-
-```typescript
-export function BookRow({ book }: { book: Book }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const { locks, activeRowId, setActiveRowId } = useRowLock({
-    entity: "books",
-    rowIds: [book.id],
-    currentAdminId: session!.user.id,
-  });
-
-  const handleEdit = async () => {
-    const { acquired } = await acquireLock("books", book.id);
-    if (!acquired) {
-      alert("Row is locked by another admin");
-      return;
-    }
-    setIsEditing(true);
-    setActiveRowId(book.id);
-  };
-
-  const lock = locks[book.id];
-
-  return (
-    <div>
-      <RowLockIndicator lock={lock} />
-      {!lock && (
-        <button onClick={handleEdit}>Edit</button>
-      )}
-    </div>
-  );
-}
-```
-
-### Lifecycle
-
-#### 1. Initial Fetch
-
-On mount or when `rowIds` changes:
-
-```typescript
-useEffect(() => {
-  const fetchLocks = async () => {
-    const params = new URLSearchParams({ entity });
-    if (rowIds.length > 0) {
-      params.set("ids", rowIds.join(","));
-    }
-    const res = await fetch(`/api/admin/locks?${params}`);
-    const data = await res.json();
-    setLocks(data.locks);
-  };
-
-  fetchLocks();
-}, [rowIds]);
-```
-
-#### 2. Event Listening
-
-Listens for lock events via SSE:
-
-```typescript
-useEffect(() => {
-  const unsubscribe = onMessage((event: MessageEvent) => {
-    const parsed = JSON.parse(event.data) as AdminRealtimeEvent;
-
-    if (parsed.kind === "lock" && parsed.entity === entity) {
-      setLocks((prev) => ({
-        ...prev,
-        [parsed.entityId]: parsed.lock,
-      }));
-    }
-  });
-
-  return () => unsubscribe();
-}, [entity]);
-```
-
-#### 3. TTL Sweep (every 10s)
-
-Removes expired locks from local state:
-
-```typescript
-useEffect(() => {
-  const sweep = setInterval(() => {
-    setLocks((prev) => {
-      const cleaned = { ...prev };
-      for (const [id, lock] of Object.entries(cleaned)) {
-        if (lock && new Date(lock.expiresAt) < new Date()) {
-          delete cleaned[id]; // lock expired
-        }
-      }
-      return cleaned;
-    });
-  }, LOCK_TTL_SWEEP_MS);
-
-  return () => clearInterval(sweep);
-}, []);
-```
-
-#### 4. Heartbeat (every 20s while editing)
-
-Keeps active lock fresh:
-
-```typescript
-useEffect(() => {
-  if (!activeRowId) return;
-
-  const heartbeat = setInterval(async () => {
-    const { acquired, lock } = await acquireLock(entity, activeRowId);
-    // Server broadcasts LOCK_ACQUIRED event
-    // Local listeners update lock state
-  }, ROW_LOCK_HEARTBEAT_MS);
-
-  return () => clearInterval(heartbeat);
-}, [activeRowId]);
-```
-
-#### 5. Resync After Reconnect
-
-Re-fetches locks for currently tracked rows:
-
-```typescript
-useEffect(() => {
-  const unsubscribe = useRealtimeCore({
-    onResync: async () => {
-      // Re-fetch locks after SSE reconnect
-      const locks = await listRowLocks(entity, rowIds);
-      setLocks(locks);
-    },
-  });
-
-  return () => unsubscribe();
-}, [entity, rowIds]);
-```
-
-## Hook: useRealtimeUpdates
-
-Subscribes to row-level CREATE/UPDATE/DELETE events.
-
-### Purpose
-
-- Listens for row mutations (create, update, delete)
-- Applies changes optimistically to local state
-- Handles version conflicts (newer server data wins)
-- Preserves row position when currently editing
-- Removes rows that don't match filter
-
-### Signature
-
-```typescript
-function useRealtimeUpdates<T extends IdentifiableRow>({
-  entity: AdminRealtimeEntity;
-  setItems: Dispatch<SetStateAction<T[]>>;
-  sortFn?: (a: T, b: T, order: SortOrder) => number;
-  sortOrder?: SortOrder;
-  pinnedRowId?: string | null;
-  matchesFilter?: (item: T) => boolean;
-  onResync?: () => void | Promise<void>;
-}): void
-```
-
-### Parameters
-
-- **`entity`**: Entity channel to subscribe to
-- **`setItems`**: State setter for the rows array
-- **`sortFn`**: Custom sort comparator
-- **`sortOrder`**: `"asc"` or `"desc"`
-- **`pinnedRowId`**: Row ID to keep in its current position (being edited)
-- **`matchesFilter`**: Predicate to check if row matches current filter
-- **`onResync`**: Called after SSE reconnect
-
-### Usage Example
-
-```typescript
-export function BorrowTable() {
-  const [records, setRecords] = useState<BorrowRecord[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const handleResync = async () => {
-    const res = await fetch("/api/admin/sync?entity=borrow_requests&includeRows=true");
-    const data = await res.json();
-    setRecords(data.rows);
-  };
-
-  useRealtimeUpdates({
-    entity: "borrow_requests",
-    setItems: setRecords,
-    sortFn: (a, b) => {
-      // Sort by borrowDate descending
-      return new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime();
-    },
-    sortOrder: "desc",
-    pinnedRowId: editingId,
-    matchesFilter: (row) => row.status === "PENDING", // show only pending
-    onResync: handleResync,
-  });
-
-  return (
-    // table rendering
-  );
-}
 ```
 
 ### Event Handling
 
-#### CREATE Event
-
-```typescript
-if (event.type === "CREATE") {
-  // Check filter
-  if (matchesFilterRef.current?.(eventData)) {
-    // Add to items, sort
-    setItemsRef.current((prev) => {
-      const next = [...prev, eventData];
-      if (sortFnRef.current) {
-        next.sort((a, b) => sortFnRef.current(a, b, sortOrderRef.current));
-      }
-      return next;
-    });
-  }
-}
-```
-
-#### UPDATE Event
-
-```typescript
-if (event.type === "UPDATE") {
-  setItemsRef.current((prev) => {
-    const index = prev.findIndex((item) => item.id === eventData.id);
-    if (index === -1) return prev;
-
-    const existing = prev[index];
-
-    // Version conflict: server data is newer
-    if (isServerRowNewer(eventData, existing)) {
-      const next = [...prev];
-      next[index] = eventData;
-      return next;
-    }
-
-    // Local data is newer (being edited) — preserve local
-    return prev;
-  });
-}
-```
-
 #### DELETE Event
 
 ```typescript
-if (event.type === "DELETE") {
-  setItemsRef.current((prev) =>
-    prev.filter((item) => item.id !== eventData.id),
-  );
+if (parsed.type === "DELETE") {
+  next = previous.filter((item) => item.id !== parsed.entityId);
+  const result = preservePinnedRowIndex(previous, next, pinnedRowId);
+  currentIdsRef.current = result.map((r) => r.id);
+  return result;
 }
 ```
+
+#### UPDATE / CREATE Event
+
+1. If `data` is missing → skip
+2. If existing row found and it is newer (locally) → skip (local wins)
+3. If `matchesFilter` rejects the new data → remove row from list
+4. If row exists and passes filter → replace in place
+5. If row is new → append
+6. Re-sort using `sortFn`
+7. Preserve `pinnedRowId` position
+8. Update `currentIdsRef`
 
 ### Smart Merge on Resync
 
-When resync fetches fresh data:
+After reconnect, `useRealtimeUpdates` calls `GET /api/admin/sync?entity=X&ids=...&includeRows=true` for currently tracked IDs and merges:
 
 ```typescript
-setItemsRef.current((previous) => {
-  const incoming = payload.rows!;
-  const incomingMap = new Map(incoming.map((r) => [r.id, r]));
-  const previousIds = new Set(previous.map((r) => r.id));
+const next = previous.map((existing) => {
+  const updated = incomingMap.get(existing.id);
+  if (!updated) return null;                          // row deleted → drop it
+  if (isServerRowNewer(updated, existing)) return updated; // server newer → apply
+  return existing;                                    // local newer → keep (being edited)
+}).filter(Boolean);
 
-  const next = previous
-    .map((existing) => {
-      const updated = incomingMap.get(existing.id);
-      if (!updated) {
-        // Was in our list, but not in sync → it's deleted
-        return null;
-      }
-
-      if (isServerRowNewer(updated, existing)) {
-        // Server is newer
-        return updated;
-      }
-      // Local is newer (being edited)
-      return existing;
-    })
-    .filter((item): item is T => item !== null);
-
-  // Add any completely new rows
-  for (const row of incoming) {
-    if (!previousIds.has(row.id)) {
-      next.push(row);
-    }
-  }
-
-  // Re-sort
-  if (sortFnRef.current) {
-    next.sort((a, b) => sortFnRef.current(a, b, sortOrderRef.current));
-  }
-
-  // Preserve pinned row position
-  return preservePinnedRowIndex(previous, next, pinnedRowIdRef.current);
-});
-```
-
-## Lock Error Handling
-
-### LockOwnershipError in API Routes
-
-When calling admin endpoints that acquire locks, handle the specific error:
-
-```typescript
-try {
-  await acquireRowLock(bookId);
-} catch (error) {
-  // Error handling in components
-  if (error instanceof LockOwnershipError) {
-    if (error.code === "lock_conflict") {
-      showErrorToast(error.message); // "Currently being edited by Jane"
-    } else if (error.code === "lock_expired") {
-      showErrorToast("Session expired. Please try again.");
-    }
-  }
+// Add brand-new rows not in previous list
+for (const row of incoming) {
+  if (!previousIds.has(row.id)) next.push(row);
 }
+
+// Re-sort and preserve pinned row position
 ```
 
-### HTTP 409 Conflict Responses
+### Resync Coordination
 
-All endpoints that validate lock ownership return `409 Conflict` on lock errors:
+`useRealtimeUpdates` calls `useRealtimeCore` internally with `handleResync` as the `onResync` callback. This means:
+
+- The hook participates in reference counting (one more `mountCount` increment)
+- Resync fires both when SSE reconnects and on the periodic 60s timer
+- If both `useRealtimeUpdates` and `useRowLock` are used in the same component, `mountCount` will be 2, but only one `EventSource` is ever open
+
+---
+
+## Hook: useOptimisticUpdate
+
+Helper for optimistic mutations with rollback.
+
+### Signature
 
 ```typescript
-// Response example
-{
-  "error": "Currently being edited by Jane Admin"
-}
+function useOptimisticUpdate<T extends Identifiable>(
+  setItems: Dispatch<SetStateAction<T[]>>,
+): {
+  updateItem: (id: string, updater: (item: T) => T) => T | null;
+  removeItem: (id: string) => T | null;
+  restoreItem: (item: T, index?: number) => void;
+};
 ```
 
-**Codes**:
-
-- `lock_conflict` – Another admin holds the lock
-- `lock_expired` – Lock doesn't exist or token expired
-
-### 3. Active Lock Detection
-
-The hook detects when a lock expires or is stolen:
+### Usage Pattern
 
 ```typescript
-// Uses == for loose equality to catch both null and undefined
-useEffect(() => {
-  if (activeRowId && locks[activeRowId] == null) {
-    setActiveRowId(null);
-    activeTokenRef.current = null;
-    heartbeatRowIdRef.current = null;
+const { removeItem, restoreItem } = useOptimisticUpdate(setRecords);
+
+const handleDelete = async () => {
+  const previous = removeItem(record.id);  // returns previous state
+
+  try {
+    await fetch(`/api/admin/records/${record.id}`, { method: "DELETE" });
+  } catch {
+    if (previous) restoreItem(previous);   // rollback on error
+    alert("Delete failed");
   }
-}, [locks, activeRowId]);
+};
 ```
 
-When this triggers, the component should reset edit state and notify the user.
+### Methods
+
+#### `updateItem(id, updater)`
+
+Applies `updater` to the item with matching `id`. Returns the previous item (for rollback), or `null` if not found.
+
+#### `removeItem(id)`
+
+Removes the item with matching `id` from the list. Returns the removed item (for rollback), or `null` if not found.
+
+#### `restoreItem(item, index?)`
+
+Re-inserts an item. If `index` is provided and valid, inserts at that position; otherwise appends. First removes any existing item with the same `id` to avoid duplicates.
+
+---
 
 ## Accessibility Improvements
 
-### RowLockIndicator Component
+### RowLockIndicator
 
-Enhanced with ARIA attributes for screen readers:
+The lock indicator is keyboard accessible and screen-reader friendly:
 
 ```typescript
 <div
@@ -631,220 +474,102 @@ Enhanced with ARIA attributes for screen readers:
 </div>
 ```
 
-**Accessibility**:
+- `tabIndex={0}` – keyboard focusable
+- `role="img"` – conveys visual status meaning
+- `aria-label` – full text for screen readers
+- `title` – hover tooltip matching the aria-label
 
-- `tabIndex={0}` – Keyboard accessible
-- `role="img"` – Indicates visual element
-- `aria-label` – Screen reader text
-- `title` – Hover tooltip
-- Tooltip text matches aria-label for consistency
+---
 
-## Hook: useOptimisticUpdate
+## Lock Error Handling in Components
 
-Helper for optimistic mutations on rows.
+### HTTP 409 Conflict
 
-### Purpose
-
-- Apply mutations immediately (optimistically)
-- Store previous state for rollback
-- Revert on error
-
-### Signature
+Any endpoint that validates lock ownership returns `409 Conflict` on lock errors, with `{ error: string }` body:
 
 ```typescript
-function useOptimisticUpdate<T extends Identifiable>(
-  setItems: Dispatch<SetStateAction<T[]>>,
-): {
-  updateItem(id: string, updater: (item: T) => T): T | null;
-  removeItem(id: string): T | null;
-  restoreItem(item: T, index?: number): void;
-};
-```
+// In a form submit handler
+const response = await fetch("/api/admin/borrow/approve", {
+  method: "POST",
+  body: JSON.stringify({ recordId, lockToken }),
+});
 
-### Parameters
-
-- **`setItems`**: State setter for items array
-
-### Return Value
-
-- **`updateItem(id, updater)`**: Apply updater function to item, return previous
-- **`removeItem(id)`**: Remove item, return previous
-- **`restoreItem(item, index)`**: Add item back (optionally at specific index)
-
-### Usage Example
-
-```typescript
-import { useOptimisticUpdate } from "@/lib/admin/realtime/concurrency/useOptimisticUpdate";
-
-export function BorrowRow({ record, onDelete }: Props) {
-  const [records, setRecords] = useState<BorrowRecord[]>([record]);
-  const { removeItem, restoreItem } = useOptimisticUpdate(setRecords);
-
-  const handleDelete = async () => {
-    // Remove optimistically
-    const previous = removeItem(record.id);
-
-    try {
-      await fetch(`/api/admin/records/${record.id}`, {
-        method: "DELETE",
-      });
-      // Success — item stays removed
-    } catch (error) {
-      // Error — restore
-      if (previous) {
-        restoreItem(previous);
-      }
-      alert("Delete failed");
-    }
-  };
-
-  return (
-    <button onClick={handleDelete}>Delete</button>
-  );
+if (response.status === 409) {
+  const { error } = await response.json();
+  toast.error(error); // "Currently being edited by Jane Admin"
+  return;
 }
 ```
 
-### Implementation
+### LockOwnershipError Codes
 
-#### updateItem
+When using `assertLockOwnership` server-side, errors carry a `code`:
 
-```typescript
-const updateItem = useCallback(
-  (id: string, updater: (item: T) => T) => {
-    let previousItem: T | null = null;
+| Code | User-facing message |
+|------|---------------------|
+| `"lock_expired"` | "Your editing session expired. Please reopen and try again." |
+| `"lock_conflict"` | "Currently being edited by \<name\>" |
 
-    setItems((current) =>
-      current.map((item) => {
-        if (item.id !== id) return item;
-        previousItem = item;
-        return updater(item);
-      }),
-    );
-
-    return previousItem;
-  },
-  [setItems],
-);
-```
-
-#### removeItem
-
-```typescript
-const removeItem = useCallback(
-  (id: string) => {
-    let previousItem: T | null = null;
-
-    setItems((current) =>
-      current.filter((item) => {
-        if (item.id === id) {
-          previousItem = item;
-          return false;
-        }
-        return true;
-      }),
-    );
-
-    return previousItem;
-  },
-  [setItems],
-);
-```
-
-#### restoreItem
-
-```typescript
-const restoreItem = useCallback(
-  (item: T, index?: number) => {
-    setItems((current) => {
-      const next = current.filter((entry) => entry.id !== item.id);
-
-      if (typeof index === "number" && index >= 0 && index <= next.length) {
-        next.splice(index, 0, item);
-        return next;
-      }
-
-      return [...next, item];
-    });
-  },
-  [setItems],
-);
-```
+---
 
 ## Best Practices
 
-### 1. Use useRealtimeCore in Table Components
+### Pass filtered items to `useRowLock`, full list to `useRealtimeUpdates`
 
 ```typescript
-export function BorrowTable() {
-  const [records, setRecords] = useState<BorrowRecord[]>([]);
+// Tracks ALL rows (including those not currently visible after filter)
+useRealtimeUpdates({ entity: "users", items: sortedUsers, ... });
 
-  const { status } = useRealtimeCore({
-    onResync: async () => {
-      // Re-fetch current page
-    },
-  });
-
-  // Other hooks
-  useRealtimeUpdates({
-    /* ... */
-  });
-}
+// Only fetches locks for currently visible rows
+useRowLock({ entity: "users", rowIds: filteredUsers.map(u => u.id), ... });
 ```
 
-### 2. Composition over Duplication
+This reduces lock-fetch traffic while keeping realtime updates accurate across filter changes.
 
-If you use both `useRealtimeUpdates` and `useRowLock`:
+### Always unsubscribe from listeners
 
 ```typescript
-export function BorrowTable() {
-  const { status } = useRealtimeCore({ onResync: handleResync });
-
-  useRealtimeUpdates({
-    /* ... */
-  });
-  useRowLock({
-    /* ... */
-  });
-
-  // Only ONE EventSource is open, despite THREE hooks
-}
+useEffect(() => {
+  const unsub = onMessage(handler);
+  return () => unsub();
+}, []);
 ```
 
-### 3. Handle Reconnects Gracefully
+The hooks handle this internally — but if you call `onMessage` directly, always return the unsubscriber.
+
+### Handle resync failures gracefully
 
 ```typescript
 const handleResync = async () => {
   try {
-    const res = await fetch("/api/admin/sync?entity=...");
+    const res = await fetch("/api/admin/sync?...");
     const data = await res.json();
-    setItems(data.rows);
-  } catch (error) {
-    console.error("Resync failed:", error);
-    // Graceful fallback — keep local data until next retry
+    if (data.success) setItems(data.rows);
+  } catch {
+    // Keep local state until next retry — don't throw
   }
 };
-
-useRealtimeCore({ onResync: handleResync });
 ```
 
-### 4. Unblock Editing When Lock Expires
+### Composition: multiple hooks, one connection
 
 ```typescript
-const handleEdit = async () => {
-  const { acquired, lock } = await acquireLock("books", rowId);
-
-  if (!acquired && lock) {
-    alert(`Locked by ${lock.adminName}`);
-    return;
-  }
-
-  setIsEditing(true);
-};
+export function BookTable() {
+  useRealtimeCore({ onResync: handleResync });   // mountCount = 1
+  useRealtimeUpdates({ entity: "books", ... });  // mountCount = 2 (internal useRealtimeCore)
+  useRowLock({ entity: "books", ... });          // mountCount = 3 (internal useRealtimeCore)
+  // → still only ONE EventSource open
+}
 ```
+
+---
 
 ## Related Files
 
 - [lib/realtime/realtimeClient.ts](../lib/realtime/realtimeClient.ts) – Singleton SSE client
-- [lib/admin/realtime/concurrency/rowConcurrency.ts](../lib/admin/realtime/concurrency/rowConcurrency.ts) – Lock/event APIs
-- [lib/admin/realtime/concurrency/adminRealtimeEvents.ts](../lib/admin/realtime/concurrency/adminRealtimeEvents.ts) – Event types
-- [app/api/admin/realtime/rows/route.ts](../app/api/admin/realtime/rows/route.ts) – SSE stream
+- [lib/admin/realtime/concurrency/useRealtimeCore.ts](../lib/admin/realtime/concurrency/useRealtimeCore.ts)
+- [lib/admin/realtime/concurrency/useRowLock.ts](../lib/admin/realtime/concurrency/useRowLock.ts)
+- [lib/admin/realtime/concurrency/useRealtimeUpdates.ts](../lib/admin/realtime/concurrency/useRealtimeUpdates.ts)
+- [lib/admin/realtime/concurrency/useOptimisticUpdate.ts](../lib/admin/realtime/concurrency/useOptimisticUpdate.ts)
+- [lib/admin/realtime/concurrency/rowConcurrency.ts](../lib/admin/realtime/concurrency/rowConcurrency.ts)
+- [app/api/admin/realtime/rows/route.ts](../app/api/admin/realtime/rows/route.ts)

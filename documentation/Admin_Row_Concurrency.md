@@ -14,20 +14,24 @@ The admin row concurrency system provides optimistic locking with conflict detec
 ### Components
 
 1. **Server-side Lock Manager** (`lib/admin/realtime/concurrency/rowConcurrency.ts`)
-   - Lock lifecycle management
+   - Lock lifecycle management (acquire, heartbeat/refresh, release)
    - Version-based update validation
    - Conflict detection and reporting
+   - Atomic Lua scripts for all Redis operations
 
 2. **Client-side Hook** (`lib/admin/realtime/concurrency/useRowLock.ts`)
-   - Lock display UI
+   - Full lock CRUD API (`acquireRowLock`, `refreshRowLock`, `releaseRowLock`)
+   - Convenience selectors (`lockForRow`, `isLockedByOther`, `isLockedByCurrentAdmin`)
+   - Optimistic lock release with rollback
    - Heartbeat maintenance (refresh lock every 20s)
-   - TTL sweep for expired locks
+   - TTL sweep for expired locks (every 10s)
    - SSE event handling
 
 3. **API Endpoints**
    - `GET /api/admin/locks?entity=X&ids=Y,Z` – fetch current locks
-   - `POST /api/admin/locks` – acquire lock
-   - `PATCH /api/admin/locks` – release lock
+   - `POST /api/admin/locks` – acquire a new lock
+   - `PATCH /api/admin/locks` – heartbeat-only refresh (must include token)
+   - `DELETE /api/admin/locks` – release a lock (token required)
    - `GET /api/admin/sync` – re-sync locks + rows after reconnect
 
 4. **Event Types** (`lib/admin/realtime/concurrency/adminRealtimeEvents.ts`)
@@ -35,11 +39,40 @@ The admin row concurrency system provides optimistic locking with conflict detec
    - `LOCK_RELEASED` – lock expired or was released
    - `kind: "lock"` – SSE event structure
 
+## Data Model
+
+### Lock Structure
+
+```typescript
+type AdminRowLock = {
+  entity: AdminRealtimeEntity; // "books" | "users" | "borrow_requests" | "account_requests"
+  entityId: string;            // row ID
+  adminId: string;             // user.id of admin holding lock
+  adminName: string;           // admin's display name
+  expiresAt: string;           // ISO timestamp when lock expires
+  token: string;               // random token for release/heartbeat verification
+  version: number;             // monotonically incremented on each heartbeat refresh
+};
+```
+
+> **Note**: The `version` field on `AdminRowLock` is the lock's own internal version (incremented by every heartbeat), not the row's data version. It is checked by `isAdminRowLock` and must be present for a lock to be considered valid.
+
+### Lock Storage
+
+Locks are stored in Redis with keys: `lock:{entity}:{entityId}`
+
+```
+lock:books:550e8400-e29b-41d4-a716-446655440000
+→ {"adminId":"...","adminName":"Jane Admin","expiresAt":"...","token":"a1b2c3...","version":3}
+```
+
+**TTL**: 60 seconds (auto-expires in Redis). The `version` field starts at `1` on first acquisition and increments by `1` on every heartbeat or re-entrant acquire.
+
 ## Error Handling
 
 ### LockOwnershipError Class
 
-**NEW**: Type-safe error for lock conflicts:
+Type-safe error for lock conflicts:
 
 ```typescript
 export class LockOwnershipError extends Error {
@@ -54,12 +87,12 @@ export class LockOwnershipError extends Error {
 
 **Error Codes**:
 
-- `"lock_expired"` – Lock doesn't exist or expired
+- `"lock_expired"` – Lock doesn't exist, token is missing, or token doesn't match
 - `"lock_conflict"` – Lock held by another admin
 
-### assertLockOwnership Updates
+### assertLockOwnership
 
-Now throws typed errors:
+Validates lock ownership before any mutation. Now guards on a missing token **before** hitting Redis:
 
 ```typescript
 export const assertLockOwnership = async (
@@ -68,6 +101,14 @@ export const assertLockOwnership = async (
   adminId: string,
   token?: string,
 ): Promise<AdminRowLock> => {
+  // Fast-fail: no token means no valid session
+  if (!token) {
+    throw new LockOwnershipError(
+      "Your editing session expired. Please reopen and try again.",
+      "lock_expired",
+    );
+  }
+
   const lock = await getRowLock(entity, entityId);
 
   if (!lock) {
@@ -82,19 +123,20 @@ export const assertLockOwnership = async (
       "lock_conflict",
     );
   }
-  if (token && lock.token !== token) {
+  if (lock.token !== token) {
     throw new LockOwnershipError(
       "Your editing session expired. Please reopen and try again.",
       "lock_expired",
     );
   }
+
   return lock;
 };
 ```
 
 ### API Route Pattern
 
-All admin routes now catch lock errors early:
+All admin routes catch lock errors early:
 
 ```typescript
 try {
@@ -113,8 +155,6 @@ try {
   }
   throw error;
 } finally {
-  // ... business logic ...
-
   try {
     await releaseLock(
       "borrow_requests",
@@ -161,193 +201,144 @@ return NextResponse.json({
 });
 ```
 
-## Data Model
-
-### Lock Structure
-
-```typescript
-type AdminRowLock = {
-  entity: AdminRealtimeEntity; // "books" | "users" | "borrow_requests" | "account_requests"
-  entityId: string; // row ID
-  adminId: string; // user.id of admin holding lock
-  adminName: string; // admin's display name
-  expiresAt: string; // ISO timestamp when lock expires
-  token: string; // random token for release verification
-};
-```
-
-### Lock Storage
-
-Locks are stored in Redis with keys: `lock:{entity}:{entityId}`
-
-```
-lock:books:550e8400-e29b-41d4-a716-446655440000
-→ {"adminId":"...", "adminName":"Jane Admin", "expiresAt":"2026-04-29T10:20:00Z", "token":"a1b2c3..."}
-```
-
-**TTL**: 60 seconds (auto-expires in Redis)
-
 ## Lifecycle
 
 ### 1. Acquiring a Lock
 
-When an admin opens an edit form for a row:
+`acquireLock` uses an atomic Lua script (`ACQUIRE_SCRIPT`):
 
 ```typescript
 export const acquireLock = async (
-  entity: AdminRealtimeEntity, // e.g., "books"
-  entityId: string, // row ID
-  admin: AdminActor, // { id, name }
-  token?: string,
-): Promise<{ acquired: boolean; lock: AdminRowLock | null }> => {
-  // Generate new lock with 60s TTL
-  const lock = {
-    entity,
-    entityId,
-    adminId: admin.id,
-    adminName: admin.name,
-    expiresAt: new Date(Date.now() + ROW_LOCK_TTL_MS).toISOString(),
-    token: token || generateRandomToken(),
-  };
+  entity: AdminRealtimeEntity,
+  entityId: string,
+  admin: AdminActor,
+  existingToken?: string,
+): Promise<{ acquired: boolean; lock: AdminRowLock | null; blockedBy?: AdminRowLock | null }> => {
+  const expiresAt = new Date(Date.now() + ROW_LOCK_TTL_MS).toISOString();
+  const token = existingToken ?? Math.random().toString(36).slice(2);
 
-  // Use Lua script for atomic compare-and-set
-  const result = await redis.eval(
-    `
-    local current = redis.call('GET', KEYS[1])
-    local next = ARGV[1]
-    local ttl = tonumber(ARGV[2])
-    local adminId = ARGV[3]
-
-    if not current then
-      -- Lock is free, acquire it
-      redis.call('SET', KEYS[1], next, 'PX', ttl)
-      return next
-    end
-
-    local decoded = cjson.decode(current)
-    if decoded.adminId == adminId then
-      -- Same admin can re-acquire (refresh TTL)
-      redis.call('SET', KEYS[1], next, 'PX', ttl)
-      return next
-    end
-
-    -- Different admin holds lock
-    return current
-    `,
-    [getLockKey(entity, entityId)],
-    [JSON.stringify(lock), String(ROW_LOCK_TTL_MS), admin.id],
-  );
+  // ...runs ACQUIRE_SCRIPT via redis.eval...
 
   const resolvedLock = parseLock(result, entity, entityId);
   const acquired = resolvedLock?.adminId === admin.id;
 
   if (acquired) {
-    // Broadcast LOCK_ACQUIRED event to all admins
-    await publishLockEvent(entity, entityId, resolvedLock);
+    await publishLockEvent(entity, entityId, resolvedLock).catch(console.error);
+    return { acquired: true, lock: resolvedLock };
   }
 
-  return { acquired, lock: resolvedLock };
+  return { acquired: false, lock: null, blockedBy: resolvedLock };
 };
 ```
 
-**Key Points**:
+**Return shape**:
 
-- Same admin can re-acquire their own lock (refresh TTL)
-- Different admin cannot steal lock
-- Returns `{ acquired: boolean, lock: current holder info }`
+| Field | Type | Meaning |
+|-------|------|---------|
+| `acquired` | `boolean` | Whether this admin now holds the lock |
+| `lock` | `AdminRowLock \| null` | The current admin's lock (if `acquired: true`) |
+| `blockedBy` | `AdminRowLock \| null` | The other admin's lock (if `acquired: false`) |
+
+**Lua script behavior** (`ACQUIRE_SCRIPT`):
+
+- If key is empty → acquire with 60s TTL, `version: 1`
+- If corrupt JSON → overwrite and acquire
+- If `decoded.adminId === adminId` → re-entrant: refresh TTL, keep same token, bump `version`
+- If different admin → return current lock unchanged (caller sees `acquired: false`)
 
 ### 2. Heartbeat (Refresh Lock)
 
-Every 20 seconds while an edit form is open:
+`refreshLock` is a dedicated heartbeat-only operation. It does NOT rotate the token:
 
 ```typescript
-export const ROW_LOCK_HEARTBEAT_MS = 20_000;
+export const refreshLock = async (
+  entity: AdminRealtimeEntity,
+  entityId: string,
+  adminId: string,
+  token: string,
+): Promise<boolean> => {
+  const newExpiry = new Date(Date.now() + ROW_LOCK_TTL_MS).toISOString();
+  const result = await redis.eval(HEARTBEAT_SCRIPT, [...], [...]);
+  return result === 1;
+};
 ```
 
-Client code calls `acquireLock()` again with the same `token` to refresh the 60-second TTL.
+**Lua script behavior** (`HEARTBEAT_SCRIPT`):
 
-**Benefits**:
+- Returns `0` if the lock doesn't exist
+- Returns `0` if `adminId` or `token` don't match
+- Otherwise: updates `expiresAt`, bumps `version`, resets Redis TTL, returns `1`
 
-- Active edits never expire
-- Abandoned forms time out after 60s
-- Prevents stale locks from blocking other admins
+Called every `ROW_LOCK_HEARTBEAT_MS` (20s) from `PATCH /api/admin/locks`.
 
 ### 3. Releasing a Lock
 
-When an admin closes an edit form or saves changes:
+`releaseLock` requires both `adminId` and `token` (neither is optional):
 
 ```typescript
 export const releaseLock = async (
   entity: AdminRealtimeEntity,
   entityId: string,
-  adminId?: string,
-  token?: string,
-): Promise<{ released: boolean; lock: AdminRowLock | null }> => {
-  const result = await redis.eval(
-    `
-    local current = redis.call('GET', KEYS[1])
-    if not current then
-      return ''  -- lock already gone
-    end
+  adminId: string,  // required
+  token: string,    // required
+): Promise<{ released: boolean; reason: string }> => {
+  // Guards on empty strings before hitting Redis
+  const result = await redis.eval(RELEASE_SCRIPT, [...], [...]);
+  const [status, reason] = result as [string, string];
+  const released = status === "OK";
 
-    local decoded = cjson.decode(current)
-
-    -- Check ownership: adminId and token must match
-    if ARGV[1] ~= '' and decoded.adminId ~= ARGV[1] then
-      return current
-    end
-
-    if ARGV[2] ~= '' and decoded.token ~= ARGV[2] then
-      return current
-    end
-
-    redis.call('DEL', KEYS[1])
-    return '__deleted__'
-    `,
-    [getLockKey(entity, entityId)],
-    [adminId ?? "", token ?? ""],
-  );
-
-  if (result === "__deleted__") {
-    // Broadcast LOCK_RELEASED event
-    await publishLockEvent(entity, entityId, null);
-    return { released: true, lock: null };
+  if (released) {
+    await publishLockEvent(entity, entityId, null).catch(console.error);
   }
 
-  return { released: false, lock: parseLock(result, entity, entityId) };
+  return { released, reason };
 };
 ```
 
-**Verification**:
+**Return shape**:
 
-- Only the lock owner (by adminId + token) can release
-- Prevents accidental/malicious unlock by other admins
+| Field | Type | Meaning |
+|-------|------|---------|
+| `released` | `boolean` | Whether the lock was deleted |
+| `reason` | `string` | Outcome code (see below) |
+
+**`reason` codes from `RELEASE_SCRIPT`**:
+
+| Reason | Meaning |
+|--------|---------|
+| `"released"` | Lock deleted successfully |
+| `"already_gone"` | Lock didn't exist (already expired or released) |
+| `"corrupt_deleted"` | Lock had corrupt JSON — deleted anyway |
+| `"wrong_owner"` | `adminId` doesn't match current lock holder |
+| `"token_mismatch"` | `token` doesn't match current lock |
+| `"missing_identity"` | `adminId` or `token` was empty string — rejected |
+
+**Lua script behavior** (`RELEASE_SCRIPT`):
+
+- Rejects immediately if either `adminId` or `token` is empty (`missing_identity`)
+- Returns `already_gone` if the key doesn't exist
+- Deletes corrupt JSON and returns `corrupt_deleted`
+- Returns `wrong_owner` if `adminId` doesn't match
+- Returns `token_mismatch` if `token` doesn't match
+- Deletes the key and returns `released` on success
 
 ### 4. Conflict Detection on Save
 
-When saving changes, the server uses version-based conflict detection:
+Version-based optimistic locking at the database layer:
 
 ```typescript
 export const updateWithVersionCheck = async <TTable>({
-  table,
-  idColumn,
-  versionColumn,
-  id,
-  expectedVersion,
-  values,
-}: UpdateWithVersionCheckArgs<TTable>) => {
+  table, idColumn, versionColumn, id, expectedVersion, values,
+}) => {
   const result = await db
     .update(table)
     .set({
       ...values,
       updatedAt: new Date(),
-      version: sql`${versionColumn} + 1`, // increment version
+      version: sql`${versionColumn} + 1`,
     })
     .where(
-      and(
-        eq(idColumn, id),
-        eq(versionColumn, expectedVersion), // check version matches
-      ),
+      and(eq(idColumn, id), eq(versionColumn, expectedVersion)),
     )
     .returning();
 
@@ -362,97 +353,128 @@ export const updateWithVersionCheck = async <TTable>({
 
 **Flow**:
 
-1. Admin loads row with version `v=5`
-2. Admin makes edits locally (version still `v=5`)
-3. Admin clicks Save
-4. Server tries `UPDATE ... WHERE version = 5 AND id = X` + `SET version = 6`
-5. If another admin updated the row (now at v=6), the WHERE fails → error
+1. Admin loads row with `version = 5`
+2. Admin makes edits locally (row version still `5` locally)
+3. Admin clicks Save — sends `expectedVersion: 5`
+4. Server: `UPDATE ... WHERE version = 5 AND id = X SET version = 6`
+5. If another admin already updated the row to `v=6`, the WHERE clause fails → no rows returned → `CONFLICT_ERROR_MESSAGE` thrown
 6. Admin sees: "Update skipped — newer changes detected"
 
-## Client-Side Hook
+## Client-Side Hook: useRowLock
 
-### useRowLock
+### Full API
 
 ```typescript
-export const useRowLock = ({
-  entity,          // "books" | "users" | ...
-  rowIds,          // [id1, id2, ...] currently visible rows
-  currentAdminId,  // admin's user ID
-}: UseRowLockOptions)
+const {
+  locks,                  // Record<string, AdminRowLock | null>
+  activeRowId,            // string | null — row currently being edited
+  setActiveRowId,         // manual setter (rarely needed directly)
+  acquireRowLock,         // (entityId: string) => Promise<{ success, lock?, message? }>
+  refreshRowLock,         // (entityId: string) => Promise<void>
+  releaseRowLock,         // (entityId: string) => Promise<{ success, reason }>
+  lockForRow,             // (entityId: string) => AdminRowLock | null
+  isLockedByOther,        // (entityId: string) => boolean
+  isLockedByCurrentAdmin, // (entityId: string) => boolean
+} = useRowLock({ entity, rowIds, currentAdminId });
 ```
 
-**Responsibilities**:
+### Optimistic Lock Release with Rollback
 
-1. **Fetch Locks on Mount/Resync**
-
-   ```typescript
-   const fetchLocks = async () => {
-     const params = new URLSearchParams({ entity });
-     if (rowIds.length > 0) {
-       params.set("ids", rowIds.join(","));
-     }
-     const res = await fetch(`/api/admin/locks?${params}`);
-     const data = await res.json();
-     setLocks(data.locks); // { [id]: AdminRowLock | null }
-   };
-   ```
-
-2. **Listen for Lock Events**
-
-   ```typescript
-   onMessage((event: MessageEvent) => {
-     const parsed = JSON.parse(event.data) as AdminRealtimeEvent;
-     if (parsed.kind === "lock" && parsed.entity === entity) {
-       // Update local lock state
-       setLocks((prev) => ({
-         ...prev,
-         [parsed.entityId]: parsed.lock,
-       }));
-     }
-   });
-   ```
-
-3. **TTL Sweep (every 10s)**
-
-   ```typescript
-   const sweep = () => {
-     setLocks((prev) => {
-       const cleaned = { ...prev };
-       for (const [id, lock] of Object.entries(cleaned)) {
-         if (lock && new Date(lock.expiresAt) < new Date()) {
-           delete cleaned[id]; // remove expired lock
-         }
-       }
-       return cleaned;
-     });
-   };
-   ```
-
-4. **Heartbeat When Editing**
-   ```typescript
-   if (activeRowId) {
-     const heartbeat = setInterval(async () => {
-       const { acquired, lock } = await acquireLock(entity, activeRowId, {
-         acquired: true,
-         lock,
-       });
-       const { acquired, lock } = await acquireLock(
-         entity,
-         activeRowId,
-         currentAdmin,
-         currentLock?.token,
-       );
-     }, ROW_LOCK_HEARTBEAT_MS);
-   }
-   ```
-
-### UI Display
-
-The `RowLockIndicator` component shows lock status:
+`releaseRowLock` applies an optimistic local delete before the server DELETE, then rolls back if the server rejects:
 
 ```typescript
-<RowLockIndicator lock={locks[rowId]} />
-// → "Currently being edited by Jane Admin" (with spinner)
+// 1. Capture token FIRST — before any state mutations
+const tokenToRelease = activeTokenRef.current;
+
+// 2. Stop the heartbeat loop immediately
+heartbeatRowIdRef.current = null;
+activeRowIdRef.current = null;
+
+// 3. Optimistic local delete
+const previousLock = locks[entityId];
+setLocks(prev => { const c = {...prev}; delete c[entityId]; return c; });
+
+// 4. Server DELETE
+const response = await fetch("/api/admin/locks", { method: "DELETE", body: JSON.stringify({ entity, entityId, token: tokenToRelease }) });
+
+// 5. Rollback on failure
+if (!response.ok && payload.reason !== "already_gone") {
+  setLocks(prev => ({ ...prev, [entityId]: previousLock }));
+  if (previousLock?.adminId === adminIdToRelease) {
+    setActiveRowId(entityId);
+    activeTokenRef.current = tokenToRelease;
+    heartbeatRowIdRef.current = entityId;
+    activeRowIdRef.current = entityId;
+  }
+  return { success: false, reason: payload.reason ?? "server_error" };
+}
+
+// 6. Clear token ref only AFTER confirmed success
+if (activeTokenRef.current === tokenToRelease) {
+  activeTokenRef.current = null;
+}
+```
+
+The token ref is intentionally not cleared until step 6 so that if the server rejects, the rollback can restore the full heartbeat state.
+
+### Responsibilities
+
+1. **Fetch Locks on Mount / Row ID Change**: Fetches current lock state for all visible row IDs via `GET /api/admin/locks`.
+
+2. **Listen for Lock Events**: Handles `LOCK_ACQUIRED` and `LOCK_RELEASED` SSE events for the relevant entity.
+
+3. **TTL Sweep (every 10s)**: Removes expired locks from local state to prevent ghost locks when `LOCK_RELEASED` events are missed during disconnects.
+
+4. **Heartbeat (every 20s while editing)**: Calls `PATCH /api/admin/locks` to keep the Redis TTL alive while a row is being edited.
+
+5. **Post-Reconnect Resync**: Re-fetches all locks for currently visible rows after SSE reconnects. Also validates that the active lock (if any) is still owned by the current admin with the same token — clears active state if not.
+
+6. **Auto-clear on Lock Disappearance**: Watches `locks[activeRowId]` and clears `activeRowId` when it becomes `null` (TTL sweep, stolen by another admin, or SSE event).
+
+### Usage Example
+
+```typescript
+export function BookTable({ books, session }: Props) {
+  // Only pass visible (filtered) row IDs to reduce lock-fetch scope
+  const visibleIds = useMemo(() => filteredBooks.map(b => b.id), [filteredBooks]);
+
+  const {
+    locks,
+    activeRowId,
+    acquireRowLock,
+    releaseRowLock,
+    isLockedByOther,
+    isLockedByCurrentAdmin,
+  } = useRowLock({
+    entity: "books",
+    rowIds: visibleIds,
+    currentAdminId: session.user.id,
+  });
+
+  const handleEdit = async (bookId: string) => {
+    const result = await acquireRowLock(bookId);
+    if (!result.success) {
+      // result.message will be e.g. "Row locked by Jane Admin"
+      showError(result.message);
+    }
+  };
+
+  return (
+    <>
+      {filteredBooks.map(book => (
+        <BookRow
+          key={book.id}
+          book={book}
+          lock={locks[book.id]}
+          isLockedByOther={isLockedByOther(book.id)}
+          isLockedByCurrentAdmin={isLockedByCurrentAdmin(book.id)}
+          onEdit={() => handleEdit(book.id)}
+          onClose={() => releaseRowLock(book.id)}
+        />
+      ))}
+    </>
+  );
+}
 ```
 
 ## API Endpoints
@@ -461,10 +483,7 @@ The `RowLockIndicator` component shows lock status:
 
 Fetch locks for specific rows.
 
-**Query Params**:
-
-- `entity` (required): "books" | "users" | "borrow_requests" | "account_requests"
-- `ids` (optional): comma-separated row IDs
+**Query Params**: `entity` (required), `ids` (optional comma-separated)
 
 **Response**:
 
@@ -472,125 +491,83 @@ Fetch locks for specific rows.
 {
   "success": true,
   "locks": {
-    "550e8400-e29b-41d4-a716-446655440000": {
+    "550e8400-...": {
       "entity": "books",
-      "entityId": "550e8400-e29b-41d4-a716-446655440000",
+      "entityId": "550e8400-...",
       "adminId": "admin-123",
       "adminName": "Jane Admin",
       "expiresAt": "2026-04-29T10:20:00Z",
-      "token": "a1b2c3..."
+      "token": "a1b2c3...",
+      "version": 3
     },
-    "550e8400-e29b-41d4-a716-446655440001": null
+    "550e8400-...1": null
   }
 }
 ```
 
 ### POST /api/admin/locks
 
-Acquire a lock for editing a row.
+Acquire a lock.
 
-**Request Body**:
+**Request Body**: `{ entity, entityId, token? }`
+
+**Response on Success** (`200`):
 
 ```json
-{
-  "entity": "books",
-  "entityId": "550e8400-e29b-41d4-a716-446655440000",
-  "token": "a1b2c3..." // optional, for refresh
-}
+{ "success": true, "lock": { ...AdminRowLock } }
 ```
 
-**Response on Success**:
+**Response on Lock Held by Another Admin** (`409`):
 
 ```json
 {
-  "success": true,
-  "acquired": true,
-  "lock": { ... }
-}
-```
-
-**Response on Lock Held by Other Admin**:
-
-```json
-{
-  "success": true,
-  "acquired": false,
-  "lock": {
-    "adminName": "John Admin",
-    "expiresAt": "2026-04-29T10:20:00Z",
-    ...
-  }
+  "success": false,
+  "message": "Row locked by John Admin",
+  "lock": { ...John's AdminRowLock }
 }
 ```
 
 ### PATCH /api/admin/locks
 
-Release a lock.
+Heartbeat-only refresh. **Requires `token`** — will return `400` if token is missing.
 
-**Request Body**:
+**Request Body**: `{ entity, entityId, token }`
 
-```json
-{
-  "entity": "books",
-  "entityId": "550e8400-e29b-41d4-a716-446655440000",
-  "token": "a1b2c3..."
-}
-```
+**Response on Success** (`200`): `{ "success": true }`
 
-**Response**:
+**Response on Failure** (`409`): `{ "success": false, "message": "Lock not owned or expired" }`
+
+### DELETE /api/admin/locks
+
+Release a lock. **Requires `token`** — will return `400` if token is missing.
+
+**Request Body**: `{ entity, entityId, token }`
+
+**Response on Success** (`200`):
 
 ```json
 {
   "success": true,
-  "released": true
+  "reason": "released",
+  "message": "Lock released"
 }
 ```
 
-## Error Handling
+**Response on Non-ownership** (`200`, but `success: false`):
 
-### Lock Ownership Verification
-
-```typescript
-export const assertLockOwnership = async (
-  entity: AdminRealtimeEntity,
-  entityId: string,
-  adminId: string,
-  token?: string,
-): Promise<AdminRowLock> => {
-  const lock = await getRowLock(entity, entityId);
-
-  if (!lock || lock.adminId !== adminId || (token && lock.token !== token)) {
-    throw new Error(
-      lock
-        ? lock.adminId !== adminId
-          ? `Currently being edited by ${lock.adminName}`
-          : "Your editing session expired. Please reopen and try again."
-        : "This session expired. Please reopen the action.",
-    );
-  }
-
-  return lock;
-};
+```json
+{
+  "success": false,
+  "reason": "wrong_owner",
+  "message": "Lock not owned by current admin"
+}
 ```
 
-Thrown before any database mutation to prevent conflicts.
-
-### Version Conflict Detection
-
-When update fails due to version mismatch:
-
-```
-throw new Error(CONFLICT_ERROR_MESSAGE);
-// "Update skipped — newer changes detected"
-```
-
-Admin must refresh the form and try again.
+> **Breaking change from older docs**: The DELETE response uses `reason` (string), not `lock` (object). The `lock` field is no longer returned.
 
 ## Realtime Events
 
-### Lock Events
-
-When a lock is acquired or released, an event is broadcast to all connected admins:
+Lock events are published to all admins on acquire and release:
 
 ```typescript
 type AdminRealtimeLockEvent = {
@@ -601,68 +578,59 @@ type AdminRealtimeLockEvent = {
   entityId: string;
   id: string;
   adminName?: string;
-  lock: AdminRowLock | null;
+  lock: AdminRowLock | null; // null on LOCK_RELEASED
   publishedAt: string;
 };
 ```
 
-Example: Admin Jane acquires a lock on book ID 123
-
-```json
-{
-  "kind": "lock",
-  "channel": "locks",
-  "type": "LOCK_ACQUIRED",
-  "entity": "books",
-  "entityId": "123",
-  "id": "123",
-  "adminName": "Jane Admin",
-  "lock": {
-    "entity": "books",
-    "entityId": "123",
-    "adminId": "admin-456",
-    "adminName": "Jane Admin",
-    "expiresAt": "2026-04-29T10:20:00Z",
-    "token": "abc..."
-  },
-  "publishedAt": "2026-04-29T10:00:00Z"
-}
-```
-
-All other admin sessions receive this event and update their UI to show "Jane Admin" is editing row 123.
-
 ## Security Model
 
-1. **Authentication**: Lock operations require `session.user.role === "ADMIN"`
-2. **Lock Ownership**: Only the admin who acquired a lock can release it (checked via adminId + token)
-3. **Version Validation**: Database mutations fail if the row was updated since initial load
-4. **Token Secrecy**: Tokens are generated randomly and stored in Redis (not exposed to other admins)
+1. **Authentication**: All lock operations require `session.user.role === "ADMIN"` via `requireAdminActor()`
+2. **Lock Ownership**: Release requires both `adminId` and `token` to match — enforced in Lua script atomically
+3. **Token Secrecy**: Tokens are random strings stored only in Redis; other admins cannot see them via SSE (they see the lock but not the token)
+4. **Heartbeat Integrity**: Heartbeat script validates both `adminId` and `token` — cannot be called by non-owners
 5. **TTL Protection**: Locks auto-expire after 60s to prevent deadlock if a tab crashes
+6. **Empty-Guard**: Lua scripts reject empty `adminId` or `token` strings with `missing_identity` rather than silently matching
 
 ## Troubleshooting
 
-### Lock shows for a deleted row
+### Lock shows "being edited" after the admin left
 
-- The TTL sweep runs every 10s on the client to clean up expired locks
-- If a row is deleted and recreated with the same ID, the old lock may briefly appear
-- Refresh the page to force a sync
+- TTL sweep runs every 10s on the client; wait up to 10s
+- Redis TTL is 60s; without heartbeat the lock expires automatically
+- Force refresh: `redis-cli GET lock:entity:id` to check the TTL
+- Check `expiresAt` in the lock object shown in SSE events
 
-### "Currently being edited by" message won't go away
+### "Currently being edited by" message won't go away after 60s
 
-- Check the lock's `expiresAt` timestamp – may still be valid
-- Force refresh: Close browser dev tools (to disconnect) and refresh page
-- Check Redis directly: `redis-cli get lock:entity:id`
+- The admin's tab may still be open and heartbeating successfully
+- Check `redis-cli TTL lock:entity:id` — if it keeps resetting, heartbeat is active
+- Ask the other admin to close their edit form
 
 ### Admin can't save despite no lock showing
 
-- A different admin may have acquired the lock between page load and save
-- Version conflict detection may have triggered
+- Another admin may have acquired the lock between page load and save
+- Version conflict detection may have triggered independently
+- Check the HTTP response: `409` → lock conflict, `500` with "newer changes detected" → version conflict
 - Refresh the form and try again
+
+### PATCH heartbeat returning 409
+
+- Lock has expired or the token changed (e.g., was re-acquired elsewhere)
+- Client will clear local `activeRowId` and stop the heartbeat loop
+- User must re-open the edit form to acquire a fresh lock
+
+### Release returns `wrong_owner` or `token_mismatch`
+
+- The lock was taken by another admin after the current session's lock expired
+- The client optimistically clears the lock locally then rolls back on failure
+- User will see their active state restored and a warning
 
 ## Related Files
 
-- [lib/realtime/realtimeClient.ts](../lib/realtime/realtimeClient.ts) – Singleton SSE client
-- [lib/admin/realtime/concurrency/useRealtimeCore.ts](../lib/admin/realtime/concurrency/useRealtimeCore.ts) – Connection lifecycle hook
-- [lib/admin/realtime/concurrency/useRowLock.ts](../lib/admin/realtime/concurrency/useRowLock.ts) – Lock subscription hook
-- [components/admin/shared/RowLockIndicator.tsx](../components/admin/shared/RowLockIndicator.tsx) – UI component
+- [lib/admin/realtime/concurrency/rowConcurrency.ts](../lib/admin/realtime/concurrency/rowConcurrency.ts) – Lock management logic
+- [lib/admin/realtime/concurrency/adminRealtimeEvents.ts](../lib/admin/realtime/concurrency/adminRealtimeEvents.ts) – Event types and encoding
+- [lib/admin/realtime/concurrency/useRowLock.ts](../lib/admin/realtime/concurrency/useRowLock.ts) – Client hook
+- [lib/admin/realtime/concurrency/rowSyncFetchers.ts](../lib/admin/realtime/concurrency/rowSyncFetchers.ts) – Row fetching logic
 - [app/api/admin/locks/route.ts](../app/api/admin/locks/route.ts) – API endpoints
+- [components/admin/shared/RowLockIndicator.tsx](../components/admin/shared/RowLockIndicator.tsx) – UI component

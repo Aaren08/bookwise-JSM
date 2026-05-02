@@ -6,7 +6,7 @@ Three API routes coordinate the admin realtime system:
 
 1. **`GET /api/admin/realtime/rows`** – Server-Sent Events stream for all admin events
 2. **`GET /api/admin/sync`** – Sync/re-hydrate locks and rows after reconnect
-3. **`GET|POST|PATCH|DELETE /api/admin/locks`** – Acquire/release row locks
+3. **`GET|POST|PATCH|DELETE /api/admin/locks`** – Acquire, heartbeat, and release row locks
 
 ## Endpoint: GET /api/admin/realtime/rows
 
@@ -27,11 +27,9 @@ Connection: keep-alive
 X-Accel-Buffering: no
 ```
 
-The `X-Accel-Buffering: no` header prevents Nginx/Vercel edge from buffering the stream.
+`X-Accel-Buffering: no` prevents Nginx / Vercel edge from buffering the stream.
 
 ### Event Stream Format
-
-Server-Sent Events format with two types of events:
 
 #### 1. SSE Metadata (on connection)
 
@@ -84,81 +82,13 @@ Fired when locks are acquired or released.
 
 ```typescript
 const CHANNELS = [
-  "borrow_requests", // borrow records with relationships
-  "account_requests", // pending users
-  "books", // books table
-  "users", // approved users
-  "locks", // all lock events
+  "borrow_requests",
+  "account_requests",
+  "books",
+  "users",
+  "locks",
 ];
 ```
-
-The server maintains one Redis subscription to all channels. Each channel filters events by entity type.
-
-### Implementation Details
-
-```typescript
-export async function GET(request: Request) {
-  // 1. Verify admin authentication
-  try {
-    await requireAdminActor();
-  } catch {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  // 2. Create ReadableStream for SSE
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let isClosed = false;
-
-      // 3. Subscribe to Redis channels
-      const subscription = redis.subscribe(CHANNELS);
-
-      // 4. Send retry directive
-      enqueue(`retry: ${ADMIN_ROW_REALTIME_RETRY_MS}\n\n`);
-
-      // 5. Send immediate heartbeat
-      enqueue(encodeHeartbeatEvent());
-
-      // 6. Listen for Redis messages
-      subscription.on("message", (payload) => {
-        try {
-          const parsed = JSON.parse(payload.message);
-          if (!isAdminRealtimeEvent(parsed)) return;
-          enqueue(encodeAdminRealtimeEvent(parsed));
-        } catch (error) {
-          devLog("Failed to parse admin realtime payload:", error);
-        }
-      });
-
-      // 7. Send heartbeat every 15 seconds
-      const heartbeat = setInterval(() => {
-        enqueue(encodeHeartbeatEvent());
-      }, ADMIN_ROW_REALTIME_HEARTBEAT_MS);
-
-      // 8. Handle client disconnect
-      const close = () => {
-        if (isClosed) return;
-        isClosed = true;
-        clearInterval(heartbeat);
-        void subscription.unsubscribe();
-        controller.close();
-      };
-
-      request.signal.addEventListener("abort", close);
-    },
-  });
-
-  return new Response(stream, { headers: { ... } });
-}
-```
-
-### Error Handling
-
-- **401 Unauthorized**: Admin is not authenticated or lacks admin role
-- **Parse Errors**: Invalid JSON from Redis is logged and skipped (doesn't close stream)
-- **Redis Errors**: Logged but don't close stream; client will reconnect after timeout
 
 ### Client Reconnection
 
@@ -168,6 +98,8 @@ When the client detects a closed connection:
 2. Attempt to reconnect
 3. Use exponential backoff if reconnects fail (100ms → 200ms → 400ms … max 30s)
 4. Backoff resets when first heartbeat arrives after reconnect
+
+---
 
 ## Endpoint: GET /api/admin/sync
 
@@ -183,15 +115,16 @@ Called by clients:
 
 ### Query Parameters
 
-- **`entity`** (required): One of `borrow_requests`, `account_requests`, `books`, `users`
-- **`ids`** (optional): Comma-separated row IDs. If omitted, returns first-page data.
-- **`includeRows`** (optional): When `"true"`, response includes `rows[]` data
+| Param | Required | Description |
+|-------|----------|-------------|
+| `entity` | Yes | One of `borrow_requests`, `account_requests`, `books`, `users` |
+| `ids` | No | Comma-separated row IDs. If omitted, returns first-page data (20 rows) |
+| `includeRows` | No | When `"true"`, response also includes `rows[]` |
 
 ### Request Example
 
 ```
-GET /api/admin/sync?entity=books&ids=550e8400...,550e8400...&includeRows=true
-Authorization: Bearer <session-token>
+GET /api/admin/sync?entity=books&ids=550e8400...,550e8401...&includeRows=true
 ```
 
 ### Response Example
@@ -207,7 +140,8 @@ Authorization: Bearer <session-token>
       "adminId": "admin-456",
       "adminName": "Jane Admin",
       "expiresAt": "2026-04-29T10:20:00Z",
-      "token": "a1b2c3..."
+      "token": "a1b2c3...",
+      "version": 3
     },
     "550e8400-e29b-41d4-a716-446655440001": null
   },
@@ -229,12 +163,6 @@ Authorization: Bearer <session-token>
 }
 ```
 
-### Response Fields
-
-- **`locks`**: Key-value map where key is row ID, value is lock info or null
-- **`rows`**: Array of row data (only if `includeRows=true`)
-- **`syncedAt`**: ISO timestamp when sync was performed
-
 ### Fetch Logic
 
 When `ids` is empty, fetches first page (20 rows) per entity:
@@ -246,7 +174,6 @@ const fetchEntityRows = async (
 ): Promise<unknown[]> => {
   switch (entity) {
     case "borrow_requests":
-      // If ids provided, fetch those; else fetch first 20 by date
       return getBorrowRecordsForSync(ids.length > 0 ? ids : undefined);
     case "account_requests":
       return getPendingUsersForSync(ids.length > 0 ? ids : undefined);
@@ -264,15 +191,13 @@ const fetchEntityRows = async (
 
 ```json
 // 400 Bad Request
-{
-  "message": "Invalid entity"
-}
+{ "message": "Invalid entity" }
 
 // 401 Unauthorized
-{
-  "message": "Unauthorized"
-}
+{ "message": "Unauthorized" }
 ```
+
+---
 
 ## Endpoint: GET /api/admin/locks
 
@@ -280,10 +205,12 @@ Fetch current locks for specified row IDs.
 
 ### Query Parameters
 
-- **`entity`** (required): One of `borrow_requests`, `account_requests`, `books`, `users`
-- **`ids`** (optional): Comma-separated row IDs
+| Param | Required | Description |
+|-------|----------|-------------|
+| `entity` | Yes | One of `borrow_requests`, `account_requests`, `books`, `users` |
+| `ids` | No | Comma-separated row IDs |
 
-### Response Example
+### Response
 
 ```json
 {
@@ -295,12 +222,15 @@ Fetch current locks for specified row IDs.
       "adminId": "admin-456",
       "adminName": "Jane Admin",
       "expiresAt": "2026-04-29T10:20:00Z",
-      "token": "a1b2c3..."
+      "token": "a1b2c3...",
+      "version": 3
     },
     "550e8400-e29b-41d4-a716-446655440001": null
   }
 }
 ```
+
+---
 
 ## Endpoint: POST /api/admin/locks
 
@@ -311,18 +241,13 @@ Acquire a row lock.
 ```json
 {
   "entity": "books",
-  "entityId": "550e8400-e29b-41d4-a716-446655440000",
-  "token": "a1b2c3..."
+  "entityId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-**Fields**:
+`token` is not needed on first acquire; the server generates one.
 
-- **`entity`** (required): Entity type
-- **`entityId`** (required): Row ID to lock
-- **`token`** (optional): Token for refreshing existing lock
-
-### Response on Success
+### Response on Success (`200`)
 
 ```json
 {
@@ -333,12 +258,13 @@ Acquire a row lock.
     "adminId": "admin-456",
     "adminName": "Jane Admin",
     "expiresAt": "2026-04-29T10:20:00Z",
-    "token": "a1b2c3..."
+    "token": "a1b2c3...",
+    "version": 1
   }
 }
 ```
 
-### Response on Lock Held by Another Admin
+### Response on Lock Held by Another Admin (`409`)
 
 ```json
 {
@@ -350,23 +276,54 @@ Acquire a row lock.
     "adminId": "admin-789",
     "adminName": "John Admin",
     "expiresAt": "2026-04-29T10:15:00Z",
-    "token": "xyz..."
+    "token": "xyz...",
+    "version": 2
   }
 }
 ```
 
-Status: `409 Conflict`
-
 ### Behavior
 
-- If no lock exists, acquires it with 60s TTL
-- If current admin holds the lock, refreshes it (resets TTL)
-- If another admin holds the lock, returns their lock info
-- Broadcasts `LOCK_ACQUIRED` event to all admins
+- If no lock exists → acquires it, returns `success: true` with the new lock
+- If current admin already holds the lock → re-entrant acquire: refreshes TTL, bumps lock `version`, keeps same token
+- If another admin holds the lock → returns `409` with that admin's lock info
+- On success: broadcasts `LOCK_ACQUIRED` event to all admins
+
+---
 
 ## Endpoint: PATCH /api/admin/locks
 
-Alias for `POST` – can also be used to acquire/refresh locks.
+Heartbeat-only lock refresh. Extends the Redis TTL without changing the token.
+
+> **Note**: PATCH is exclusively for heartbeats. It is not an alias for POST. Unlike POST which creates or re-acquires, PATCH only refreshes an existing lock that the current admin already owns.
+
+### Request Body
+
+```json
+{
+  "entity": "books",
+  "entityId": "550e8400-e29b-41d4-a716-446655440000",
+  "token": "a1b2c3..."
+}
+```
+
+`token` is **required** — returns `400` if missing.
+
+### Response on Success (`200`)
+
+```json
+{ "success": true }
+```
+
+### Response on Failure (`409`)
+
+```json
+{ "success": false, "message": "Lock not owned or expired" }
+```
+
+**Failure causes**: Lock expired, `adminId` doesn't match, or `token` doesn't match.
+
+---
 
 ## Endpoint: DELETE /api/admin/locks
 
@@ -382,55 +339,61 @@ Release a row lock.
 }
 ```
 
-**Fields**:
+Both `entity`/`entityId` and `token` are **required**. Returns `400` if `token` is missing.
 
-- **`entity`** (required): Entity type
-- **`entityId`** (required): Row ID to unlock
-- **`token`** (required): Token from lock acquisition
-
-### Response on Success
+### Response on Success (`200`)
 
 ```json
 {
   "success": true,
-  "lock": null,
+  "reason": "released",
   "message": "Lock released"
 }
 ```
 
-### Response on Token Mismatch
+### Response on Non-ownership (`200`, `success: false`)
 
 ```json
 {
   "success": false,
-  "lock": {
-    "entity": "books",
-    "entityId": "550e8400-e29b-41d4-a716-446655440000",
-    "adminId": "admin-789",
-    "adminName": "John Admin",
-    "expiresAt": "2026-04-29T10:15:00Z",
-    "token": "xyz..."
-  },
+  "reason": "wrong_owner",
   "message": "Lock not owned by current admin"
 }
 ```
 
+> **Breaking change from older versions**: The response no longer includes a `lock` field. The outcome is communicated through `success` (boolean) and `reason` (string). See `reason` codes below.
+
+### `reason` Codes
+
+| Reason | Meaning |
+|--------|---------|
+| `"released"` | Lock deleted successfully |
+| `"already_gone"` | Lock didn't exist (already expired or released) — treated as success |
+| `"corrupt_deleted"` | Lock had corrupt JSON; deleted anyway — treated as success |
+| `"wrong_owner"` | `adminId` doesn't match current lock holder |
+| `"token_mismatch"` | `token` doesn't match current lock |
+| `"missing_identity"` | `adminId` or `token` was empty — rejected before Redis call |
+
 ### Behavior
 
-- Verifies admin ID and token match the current lock holder
+- Verifies `adminId` and `token` match the current lock holder (atomic Lua script)
 - Deletes lock from Redis if ownership verified
 - Broadcasts `LOCK_RELEASED` event to all admins
-- Returns error if token doesn't match or no lock exists
+- Returns non-`200` only for auth/validation errors; ownership mismatches return `200` with `success: false`
+
+---
 
 ## Error Codes
 
-| Status                      | Meaning                                     |
-| --------------------------- | ------------------------------------------- |
-| `200 OK`                    | Request succeeded                           |
-| `400 Bad Request`           | Invalid entity, missing required fields     |
-| `401 Unauthorized`          | Admin not authenticated or lacks admin role |
-| `409 Conflict`              | Row locked by another admin (for POST)      |
-| `500 Internal Server Error` | Server error                                |
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Request succeeded (check `success` field for lock operations) |
+| `400 Bad Request` | Invalid entity, missing required fields (e.g., token on PATCH/DELETE) |
+| `401 Unauthorized` | Admin not authenticated or lacks admin role |
+| `409 Conflict` | Row locked by another admin (POST), or heartbeat rejected (PATCH) |
+| `500 Internal Server Error` | Server error |
+
+---
 
 ## Rate Limiting
 
@@ -439,7 +402,6 @@ These endpoints are authenticated but not rate-limited by default. If high-frequ
 ```typescript
 import { authenticatedApiRateLimit } from "@/lib/essentials/rateLimit";
 
-// Per admin per minute
 const result = await authenticatedApiRateLimit.limit(`admin:${adminId}`, {
   rate: 30,
   window: 60000,
