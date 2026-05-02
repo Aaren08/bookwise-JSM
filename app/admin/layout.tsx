@@ -1,16 +1,12 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
 import { ReactNode } from "react";
 import "@/app/styles/admin.css";
 import Sidebar from "@/components/admin/Sidebar";
 import Header from "@/components/admin/Header";
 import { SearchProvider } from "@/components/admin/context/SearchContext";
+import { requireAdmin } from "@/lib/admin/essentials/requireAdmin";
 
 const Layout = async ({ children }: { children: ReactNode }) => {
-  const session = await auth();
-
-  if (!session?.user?.id) redirect("/sign-in");
-  if (session.user.role !== "ADMIN") redirect("/");
+  const session = await requireAdmin();
 
   return (
     <SearchProvider>

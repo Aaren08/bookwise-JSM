@@ -218,7 +218,6 @@ const UserTable = ({ users, currentAdmin }: Props) => {
       }
 
       if (!pendingIdsRef.current.has(user.id)) {
-        await rowLock.releaseRowLock(user.id);
         setPinnedRowId((current) => (current === user.id ? null : current));
       }
     },
@@ -273,7 +272,6 @@ const UserTable = ({ users, currentAdmin }: Props) => {
       } finally {
         pendingIdsRef.current.delete(user.id);
         setPendingIds(new Set(pendingIdsRef.current));
-        await rowLock.releaseRowLock(user.id);
         setPinnedRowId((current) => (current === user.id ? null : current));
       }
     },
