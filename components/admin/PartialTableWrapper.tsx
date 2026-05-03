@@ -64,12 +64,10 @@ export const PartialTableWrapper = ({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-dark-400">{title}</h2>
         {filterSlot && (
-          <div className="flex flex-wrap items-center gap-2">
-            {filterSlot}
-          </div>
+          <div className="flex flex-wrap items-center gap-2">{filterSlot}</div>
         )}
       </div>
-      <div className="mt-7 w-full overflow-x-auto">
+      <div className="mt-7 table-scroll-container">
         <table className="w-full min-w-max table-auto text-left">
           {/* Header always visible - no suspense */}
           {header}
