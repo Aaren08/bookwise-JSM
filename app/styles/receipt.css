@@ -117,3 +117,76 @@
   background-size: 36px 36px; /* diameter × 2 */
   background-repeat: repeat-x;
 }
+
+/* Column wrappers — stack vertically by default (portrait) */
+.receipt-left-col,
+.receipt-right-col {
+  @apply flex flex-col w-full;
+}
+
+@media (max-width: 500px) and (orientation: portrait) {
+  .receipt-footer::after {
+    right: -1px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .modal-overlay:has(.receipt-container) .modal-container {
+    max-width: 700px;
+    max-height: 96dvh;
+    padding: 0;
+    border-radius: 0.75rem;
+    overflow: hidden; /* no scrollbars needed */
+  }
+
+  .receipt-container .modal-content {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .receipt-container .download-receipt-btn {
+    top: 16px;
+    right: 80px;
+  }
+
+  /* LEFT: header + book details stacked */
+  .receipt-container .receipt-left-col {
+    flex: 0 0 50%;
+    max-width: 50%;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(107, 114, 128, 0.3);
+  }
+
+  .receipt-container .receipt-left-col .receipt-header {
+    flex-shrink: 0;
+  }
+
+  /* Move book details section into left col naturally via DOM order */
+  .receipt-container .receipt-left-col .receipt-section {
+    border-top: 1px solid rgba(107, 114, 128, 0.3);
+    flex: 1;
+  }
+
+  /* RIGHT: terms on top, footer below */
+  .receipt-container .receipt-right-col {
+    flex: 0 0 50%;
+    max-width: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .receipt-container .receipt-right-col .receipt-terms {
+    flex: 1;
+    border-top: none;
+  }
+
+  .receipt-container .receipt-right-col .receipt-footer {
+    flex-shrink: 0;
+  }
+
+  .receipt-footer::after {
+    display: none;
+  }
+}

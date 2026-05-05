@@ -21,7 +21,12 @@ type ReceiptModalProps = {
   isOpen: boolean;
   onClose: () => void;
   receipt: Receipt | null;
-  borrowStatus?: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
+  borrowStatus?:
+    | "PENDING"
+    | "BORROWED"
+    | "RETURNED"
+    | "LATE_RETURN"
+    | "REJECTED";
 };
 
 const ReceiptModal: React.FC<ReceiptModalProps> = ({
@@ -51,107 +56,115 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
           </button>
 
           <div className="modal-content w-full !items-start">
-            {/* Header */}
-            <div className="receipt-header">
-              <div className="receipt-logo">
-                <Image
-                  src="/icons/logo.svg"
-                  alt="BookWise"
-                  width={32}
-                  height={32}
-                  style={{ width: "auto", height: "auto" }}
-                />
-                BookWise
+            {/* LEFT COLUMN */}
+            <div className="receipt-left-col">
+              {/* Header */}
+              <div className="receipt-header">
+                <div className="receipt-logo">
+                  <Image
+                    src="/icons/logo.svg"
+                    alt="BookWise"
+                    width={32}
+                    height={32}
+                    style={{ width: "auto", height: "auto" }}
+                  />
+                  BookWise
+                </div>
+
+                {!(borrowStatus === "PENDING") && (
+                  <button
+                    className="download-receipt-btn"
+                    onClick={handleDownloadPDF}
+                    title="Download as PDF"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                )}
+
+                <h2 className="modal-title">Borrow Receipt</h2>
+
+                <div className="receipt-meta">
+                  <div className="card-info-row">
+                    <span className="card-info-label">Receipt ID:</span>
+                    <span className="card-info-value">
+                      #{receipt.receiptId}
+                    </span>
+                  </div>
+                  <div className="card-info-row">
+                    <span className="card-info-label">Date Issued:</span>
+                    <span className="card-info-value">
+                      {borrowStatus === "PENDING"
+                        ? "--/--/----, --:-- --"
+                        : receipt.issuedAt}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {!(borrowStatus === "PENDING") && (
-                <button
-                  className="download-receipt-btn"
-                  onClick={handleDownloadPDF}
-                  title="Download as PDF"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
-              )}
+              {/* Book Details */}
+              <div className="receipt-section">
+                <h3 className="receipt-section-title">Book Details:</h3>
 
-              <h2 className="modal-title">Borrow Receipt</h2>
-
-              <div className="receipt-meta">
-                <div className="card-info-row">
-                  <span className="card-info-label">Receipt ID:</span>
-                  <span className="card-info-value">#{receipt.receiptId}</span>
-                </div>
-                <div className="card-info-row">
-                  <span className="card-info-label">Date Issued:</span>
-                  <span className="card-info-value">
-                    {borrowStatus === "PENDING"
-                      ? "--/--/----, --:-- --"
-                      : receipt.issuedAt}
-                  </span>
+                <div className="card-info-section">
+                  <div className="card-info-row">
+                    <span className="card-info-label">Title:</span>
+                    <span className="card-info-value">{receipt.title}</span>
+                  </div>
+                  <div className="card-info-row">
+                    <span className="card-info-label">Author:</span>
+                    <span className="card-info-value">{receipt.author}</span>
+                  </div>
+                  <div className="card-info-row">
+                    <span className="card-info-label">Genre:</span>
+                    <span className="card-info-value">{receipt.genre}</span>
+                  </div>
+                  <div className="card-info-row">
+                    <span className="card-info-label">Borrowed On:</span>
+                    <span className="card-info-value">
+                      {borrowStatus === "PENDING"
+                        ? "--/--/----"
+                        : receipt.borrowedOn}
+                    </span>
+                  </div>
+                  <div className="card-info-row">
+                    <span className="card-info-label">Due Date:</span>
+                    <span className="card-info-value">
+                      {borrowStatus === "PENDING"
+                        ? "--/--/----"
+                        : receipt.dueDate}
+                    </span>
+                  </div>
+                  <div className="card-info-row">
+                    <span className="card-info-label">Duration:</span>
+                    <span className="card-info-value">{receipt.duration}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Book Details */}
-            <div className="receipt-section">
-              <h3 className="receipt-section-title">Book Details:</h3>
-
-              <div className="card-info-section">
-                <div className="card-info-row">
-                  <span className="card-info-label">Title:</span>
-                  <span className="card-info-value">{receipt.title}</span>
-                </div>
-                <div className="card-info-row">
-                  <span className="card-info-label">Author:</span>
-                  <span className="card-info-value">{receipt.author}</span>
-                </div>
-                <div className="card-info-row">
-                  <span className="card-info-label">Genre:</span>
-                  <span className="card-info-value">{receipt.genre}</span>
-                </div>
-                <div className="card-info-row">
-                  <span className="card-info-label">Borrowed On:</span>
-                  <span className="card-info-value">
-                    {borrowStatus === "PENDING"
-                      ? "--/--/----"
-                      : receipt.borrowedOn}
-                  </span>
-                </div>
-                <div className="card-info-row">
-                  <span className="card-info-label">Due Date:</span>
-                  <span className="card-info-value">
-                    {borrowStatus === "PENDING"
-                      ? "--/--/----"
-                      : receipt.dueDate}
-                  </span>
-                </div>
-                <div className="card-info-row">
-                  <span className="card-info-label">Duration:</span>
-                  <span className="card-info-value">{receipt.duration}</span>
-                </div>
+            {/* RIGHT COLUMN */}
+            <div className="receipt-right-col">
+              {/* Terms */}
+              <div className="receipt-terms">
+                <h4 className="receipt-section-title">Terms</h4>
+                <ul>
+                  <li>Please return the book by the due date.</li>
+                  <li>Lost or damaged books may incur replacement costs.</li>
+                </ul>
               </div>
-            </div>
 
-            {/* Terms */}
-            <div className="receipt-terms">
-              <h4 className="receipt-section-title">Terms</h4>
-              <ul>
-                <li>Please return the book by the due date.</li>
-                <li>Lost or damaged books may incur replacement costs.</li>
-              </ul>
-            </div>
-
-            {/* Footer */}
-            <div className="receipt-footer">
-              <p>
-                Thank you for using <strong>BookWise</strong>!
-              </p>
-              <p>
-                Website: <strong>bookwise.example.com</strong>
-              </p>
-              <p>
-                Email: <strong>support@bookwise.example.com</strong>
-              </p>
+              {/* Footer */}
+              <div className="receipt-footer">
+                <p>
+                  Thank you for using <strong>BookWise</strong>!
+                </p>
+                <p>
+                  Website: <strong>bookwise.example.com</strong>
+                </p>
+                <p>
+                  Email: <strong>support@bookwise.example.com</strong>
+                </p>
+              </div>
             </div>
           </div>
         </div>
