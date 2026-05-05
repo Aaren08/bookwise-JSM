@@ -10,9 +10,10 @@ import { showErrorToast } from "@/lib/essentials/toast-utils";
 interface Props {
   borrowRecordId: string;
   status: "PENDING" | "BORROWED" | "RETURNED" | "LATE_RETURN" | "REJECTED";
+  disabled?: boolean;
 }
 
-const GenerateReceipt = ({ borrowRecordId, status }: Props) => {
+const GenerateReceipt = ({ borrowRecordId, status, disabled }: Props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,7 +42,7 @@ const GenerateReceipt = ({ borrowRecordId, status }: Props) => {
     <>
       <Button
         onClick={handleGenerate}
-        disabled={isLoading || hasGenerated || status !== "PENDING"}
+        disabled={isLoading || hasGenerated || status !== "PENDING" || disabled}
         variant="outline"
         className="generate-btn"
       >

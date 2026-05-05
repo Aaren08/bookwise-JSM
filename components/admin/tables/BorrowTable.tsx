@@ -216,7 +216,11 @@ const BorrowTableRow = memo(function BorrowTableRow({
       </td>
       <td className="relative py-4 pr-4 max-sm:pr-6">
         <RowLockIndicator lock={lock} />
-        <GenerateReceipt borrowRecordId={record.id} status={record.status} />
+        <GenerateReceipt
+          borrowRecordId={record.id}
+          status={record.status}
+          disabled={isLocked}
+        />
       </td>
     </TableRow>
   );
