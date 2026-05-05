@@ -1,4 +1,3 @@
-// app/admin/layout.tsx
 import { ReactNode } from "react";
 import "@/app/styles/admin.css";
 import Sidebar from "@/components/admin/Sidebar";
@@ -13,13 +12,15 @@ const Layout = async ({ children }: { children: ReactNode }) => {
   return (
     <SearchProvider>
       <SessionGuard />
-      <main className="flex min-h-screen flex-row w-full">
+      <div className="flex h-screen overflow-hidden w-full">
         <Sidebar session={session} />
-        <div className="admin-container">
-          <Header session={session} />
-          {children}
-        </div>
-      </main>
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-light-300">
+          <div className="p-5 sm:p-10">
+            <Header session={session} />
+            {children}
+          </div>
+        </main>
+      </div>
     </SearchProvider>
   );
 };

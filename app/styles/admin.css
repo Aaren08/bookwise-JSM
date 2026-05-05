@@ -26,7 +26,7 @@
   }
 
   .admin-container {
-    @apply !flex w-[calc(100%-264px)] flex-1 flex-col bg-light-300 p-5 sm:p-10;
+    @apply flex flex-1 min-w-0 flex-col;
   }
 
   .back-btn {
@@ -220,7 +220,10 @@
 
   /* Sidebar */
   .admin-sidebar {
-    @apply sticky left-0 top-0 flex h-dvh flex-col justify-between bg-white px-5 pb-5 pt-10;
+    @apply flex h-screen w-[315px] max-md:w-[150px] max-sm:w-[100px] 
+         shrink-0 flex-col justify-between bg-white px-5 pb-5 pt-10;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .admin-sidebar .logo {
@@ -258,22 +261,27 @@
 
   /* Modal Display */
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all;
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all p-4;
   }
 
   .modal-container {
     @apply relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all;
+    @apply max-sm:p-4 max-sm:rounded-xl max-sm:max-h-[90dvh] max-sm:overflow-y-auto;
   }
 
   .modal-close-btn {
     @apply absolute right-4 top-4 rounded-full cursor-pointer bg-gray-100 p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-700;
+    @apply max-sm:right-3 max-sm:top-3 max-sm:p-1.5;
   }
 
   .modal-content {
     @apply flex flex-col items-center gap-4;
+    @apply max-sm:gap-3;
   }
+
   .modal-title {
     @apply text-xl font-bold text-dark-400;
+    @apply max-sm:text-base;
   }
 
   .card-image-wrapper {
@@ -286,6 +294,7 @@
 
   .card-info-section {
     @apply w-full space-y-2 rounded-lg bg-light-300 p-4;
+    @apply max-sm:p-3 max-sm:space-y-1.5;
   }
 
   .card-info-row {
@@ -294,10 +303,51 @@
 
   .card-info-label {
     @apply text-sm font-medium text-light-500;
+    @apply max-sm:text-xs;
   }
 
   .card-info-value {
     @apply text-sm font-bold text-dark-400;
+    @apply max-sm:text-xs;
+  }
+
+  /* Landscape mobile: side-by-side layout so modal fits short viewports */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .modal-overlay {
+      @apply items-center p-3;
+    }
+
+    .modal-container {
+      @apply max-w-2xl max-h-[96dvh] overflow-y-auto rounded-xl p-4;
+    }
+
+    .modal-content {
+      @apply flex-row items-start gap-4;
+    }
+
+    .modal-title {
+      @apply hidden;
+    }
+
+    .modal-close-btn {
+      @apply right-3 top-3 p-1.5;
+    }
+
+    .card-image-wrapper {
+      @apply w-64 flex-shrink-0;
+    }
+
+    .card-info-section {
+      @apply flex-1 p-3 space-y-2 self-center;
+    }
+
+    .card-info-label {
+      @apply text-xs;
+    }
+
+    .card-info-value {
+      @apply text-xs;
+    }
   }
 
   /* Empty / No-Results Search State  */

@@ -32,7 +32,7 @@ const Sidebar = ({ session }: { session: Session }) => {
         </div>
       </div>
 
-      <div className="user relative">
+      <div className="user relative flex flex-wrap">
         <div className="relative">
           <Avatar className="size-10">
             <AvatarImage
@@ -47,8 +47,12 @@ const Sidebar = ({ session }: { session: Session }) => {
         </div>
         <div className="flex flex-row">
           <div className="flex flex-col max-md:hidden">
-            <p className="text-dark-200 font-semibold">{session?.user?.name}</p>
-            <p className="text-xs text-light-500">{session?.user?.email}</p>
+            <p className="text-dark-200 font-semibold truncate ">
+              {session?.user?.name}
+            </p>
+            <p className="text-xs text-light-500 truncate">
+              {session?.user?.email}
+            </p>
           </div>
           <form action={handleSignOut} className="mt-2.5 ml-2.5">
             <button type="submit" className="cursor-pointer">
