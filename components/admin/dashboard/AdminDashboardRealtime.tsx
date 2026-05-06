@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Statistics from "@/components/admin/dashboard/Statistics";
-import { useAdminDashboardRealtime } from "@/lib/admin/realtime/useAdminDashboardRealtime";
+import { useAdminDashboardRealtime } from "@/lib/admin/realtime/broadcast/useAdminDashboardRealtime";
 
 // Lazy load non-critical dashboard sections
 const AccountRequests = dynamic(

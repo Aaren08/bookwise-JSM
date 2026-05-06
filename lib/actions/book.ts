@@ -9,7 +9,7 @@ import dayjs from "dayjs";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
-} from "@/lib/admin/realtime/dashboardSocketServer";
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { CACHE_TAGS, getSimilarBooksCached } from "@/lib/performance/cache";
 import { sql } from "drizzle-orm";
 import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";

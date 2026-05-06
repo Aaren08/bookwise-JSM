@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
-} from "@/lib/admin/realtime/dashboardSocketServer";
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { NextResponse } from "next/server";
@@ -55,10 +55,7 @@ export async function PATCH(
       );
     } catch (error) {
       if (error instanceof LockOwnershipError) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: error.message }, { status: 409 });
       }
       throw error;
     }
@@ -98,6 +95,7 @@ export async function PATCH(
         availableCopies: number;
         reservedCount: number;
         borrowedCount: number;
+        version: number;
       }>(sql`
         WITH updated_borrow AS (
           UPDATE ${borrowRecords}
@@ -116,13 +114,14 @@ export async function PATCH(
               updated_at = NOW(),
               version = version + 1
           WHERE id = (SELECT book_id FROM updated_borrow)
-          RETURNING available_copies, reserved_count, borrowed_count
+          RETURNING available_copies, reserved_count, borrowed_count, version
         )
         SELECT
           ub.id,
           bk.available_copies as "availableCopies",
           bk.reserved_count as "reservedCount",
-          bk.borrowed_count as "borrowedCount"
+          bk.borrowed_count as "borrowedCount",
+          bk.version as "version"
         FROM updated_borrow ub
         JOIN updated_book bk ON true;
       `);
@@ -151,6 +150,7 @@ export async function PATCH(
           updatedBook.availableCopies,
           updatedBook.reservedCount,
           updatedBook.borrowedCount,
+          updatedBook.version,
         ).catch((err) =>
           console.error("broadcastBookAvailabilityUpdate failed", err),
         );

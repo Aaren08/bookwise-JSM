@@ -5,7 +5,7 @@ import { borrowRecords, books, users } from "@/database/schema";
 import { eq } from "drizzle-orm";
 import dayjs from "dayjs";
 import { revalidatePath } from "next/cache";
-import { broadcastAdminDashboardUpdate } from "../realtime/dashboardSocketServer";
+import { broadcastAdminDashboardUpdate } from "../realtime/broadcast/dashboardSocketServer";
 import {
   publishEvent,
   requireAdminActor,

@@ -4,8 +4,8 @@ import {
   subscribeToAdminDashboardUpdates,
   type AdminDashboardRealtimeListener,
   type AdminDashboardRealtimeSubscription,
-} from "@/lib/admin/realtime/dashboardRedisPubSub";
-import { type AdminDashboardRealtimeMessage } from "@/lib/admin/realtime/dashboardRealtimeEvents";
+} from "@/lib/admin/realtime/broadcast/dashboardRedisPubSub";
+import { type AdminDashboardRealtimeMessage } from "@/lib/admin/realtime/broadcast/dashboardRealtimeEvents";
 
 const ADMIN_DASHBOARD_SUBSCRIPTION_IDLE_MS = 30_000;
 

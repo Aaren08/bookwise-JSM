@@ -5,7 +5,7 @@ import {
   DASHBOARD_REALTIME_DELAY_MS,
   getAdminDashboardRealtimeUrl,
 } from "@/lib/admin/essentials/dashboardStatUtil";
-import { isDashboardRealtimeMessage } from "@/lib/admin/realtime/dashboardRealtimeEvents";
+import { isDashboardRealtimeMessage } from "@/lib/admin/realtime/broadcast/dashboardRealtimeEvents";
 
 const DASHBOARD_API_ENDPOINT = "/api/admin/dashboard";
 const RECONNECT_DELAY_MS = 2000;

@@ -19,7 +19,7 @@ export const runtime = "nodejs";
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
 import { borrowRecords, users } from "@/database/schema";
-import { broadcastBookAvailabilityUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { broadcastBookAvailabilityUpdate } from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql } from "drizzle-orm";
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
         WHERE
           id = ${bookId}
           AND reserved_count + borrowed_count < total_copies
-        RETURNING available_copies, reserved_count, borrowed_count
+        RETURNING available_copies, reserved_count, borrowed_count, version
       ),
       new_record AS (
         INSERT INTO borrow_records
@@ -144,7 +144,8 @@ export async function POST(request: Request) {
         (SELECT id FROM new_record)  AS record_id,
         rb.available_copies,
         rb.reserved_count,
-        rb.borrowed_count
+        rb.borrowed_count,
+        rb.version
       FROM reserved_book rb
     `);
 
@@ -154,6 +155,7 @@ export async function POST(request: Request) {
           available_copies: number;
           reserved_count: number;
           borrowed_count: number;
+          version: number;
         }
       | undefined;
 
@@ -169,6 +171,7 @@ export async function POST(request: Request) {
       availableCopies: result.available_copies,
       reservedCount: result.reserved_count,
       borrowedCount: result.borrowed_count,
+      version: result.version,
     };
     const record = { id: result.record_id };
 
@@ -181,6 +184,7 @@ export async function POST(request: Request) {
       updatedBook.availableCopies,
       updatedBook.reservedCount,
       updatedBook.borrowedCount,
+      updatedBook.version,
     ).catch((err) =>
       console.error("broadcastBookAvailabilityUpdate failed", err),
     );

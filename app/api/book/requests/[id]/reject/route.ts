@@ -7,7 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
-} from "@/lib/admin/realtime/dashboardSocketServer";
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { NextResponse } from "next/server";
@@ -125,6 +125,7 @@ export async function PATCH(
           availableCopies: books.availableCopies,
           reservedCount: books.reservedCount,
           borrowedCount: books.borrowedCount,
+          version: books.version,
           recordId: updatedBorrowRecord.id,
         });
 
@@ -151,6 +152,7 @@ export async function PATCH(
           updatedBook.availableCopies,
           updatedBook.reservedCount,
           updatedBook.borrowedCount,
+          updatedBook.version,
         ).catch((err) =>
           console.error("broadcastBookAvailabilityUpdate failed", err),
         );

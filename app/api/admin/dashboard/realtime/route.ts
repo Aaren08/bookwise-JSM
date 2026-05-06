@@ -4,8 +4,8 @@ import {
   ADMIN_DASHBOARD_SSE_RETRY_MS,
   createDashboardConnectedMessage,
   encodeDashboardSseEvent,
-} from "@/lib/admin/realtime/dashboardRealtimeEvents";
-import { addAdminDashboardRealtimeListener } from "@/lib/admin/realtime/dashboardRealtimeBroker";
+} from "@/lib/admin/realtime/broadcast/dashboardRealtimeEvents";
+import { addAdminDashboardRealtimeListener } from "@/lib/admin/realtime/broadcast/dashboardRealtimeBroker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -12,6 +12,7 @@ export type BookUpdatedMessage = {
   availableCount: number;
   reservedCount: number;
   borrowedCount: number;
+  version: number;
 };
 
 export type RequestUpdatedMessage = {
@@ -39,6 +40,7 @@ export const createBookUpdatedMessage = (
   availableCount: number,
   reservedCount: number,
   borrowedCount: number,
+  version: number,
 ): BookUpdatedMessage => ({
   type: "BOOK_UPDATED",
   timestamp: new Date().toISOString(),
@@ -46,6 +48,7 @@ export const createBookUpdatedMessage = (
   availableCount,
   reservedCount,
   borrowedCount,
+  version,
 });
 
 export const createRequestUpdatedMessage = (
@@ -75,7 +78,8 @@ export const isBookUpdatedMessage = (
     typeof message.bookId === "string" &&
     typeof message.availableCount === "number" &&
     typeof message.reservedCount === "number" &&
-    typeof message.borrowedCount === "number"
+    typeof message.borrowedCount === "number" &&
+    typeof message.version === "number"
   );
 };
 

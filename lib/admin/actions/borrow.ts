@@ -7,7 +7,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
-} from "@/lib/admin/realtime/dashboardSocketServer";
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import {
   CONFLICT_ERROR_MESSAGE,

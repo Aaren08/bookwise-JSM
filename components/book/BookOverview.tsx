@@ -4,7 +4,7 @@ import Image from "next/image";
 import BookCover from "./BookCover";
 import BorrowBook from "./BorrowBook";
 import type { BorrowingEligibility } from "@/lib/performance/cache";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 type BookOverviewProps = Book & {
   userId: string;
@@ -22,12 +22,14 @@ const BookOverview = ({
   coverColor,
   coverUrl,
   id,
+  version: initialVersion,
   userId,
   borrowingEligibility,
 }: BookOverviewProps) => {
   const [availableCopies, setAvailableCopies] = useState(
     initialAvailableCopies,
   );
+  const versionRef = useRef(initialVersion);
 
   useEffect(() => {
     const stream = new EventSource(`/api/book/stream?bookId=${id}`, {
@@ -38,7 +40,10 @@ const BookOverview = ({
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === "BOOK_UPDATED" && payload.bookId === id) {
-          setAvailableCopies(payload.availableCount);
+          if (payload.version > versionRef.current) {
+            versionRef.current = payload.version;
+            setAvailableCopies(payload.availableCount);
+          }
         }
       } catch (error) {
         console.error("Invalid streaming message:", error);

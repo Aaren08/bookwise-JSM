@@ -4,7 +4,7 @@ import { db } from "@/database/drizzle";
 import { users, borrowRecords } from "@/database/schema";
 import { eq, desc, count, and, or, sql } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import {
   CONFLICT_ERROR_MESSAGE,

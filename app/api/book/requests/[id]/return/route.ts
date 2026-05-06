@@ -6,7 +6,7 @@ import { borrowRecords } from "@/database/schema";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
-} from "@/lib/admin/realtime/dashboardSocketServer";
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, sql } from "drizzle-orm";
@@ -138,13 +138,14 @@ export async function PATCH(
           WHERE
             id = ${current.bookId}
             AND EXISTS (SELECT 1 FROM updated_record)
-          RETURNING available_copies, reserved_count, borrowed_count
+          RETURNING available_copies, reserved_count, borrowed_count, version
         )
         SELECT
           (SELECT id FROM updated_record) AS record_id,
           ub.available_copies,
           ub.reserved_count,
-          ub.borrowed_count
+          ub.borrowed_count,
+          ub.version
         FROM updated_book ub
       `);
 
@@ -154,6 +155,7 @@ export async function PATCH(
             available_copies: number;
             reserved_count: number;
             borrowed_count: number;
+            version: number;
           }
         | undefined;
 
@@ -167,6 +169,7 @@ export async function PATCH(
         availableCopies: result.available_copies,
         reservedCount: result.reserved_count,
         borrowedCount: result.borrowed_count,
+        version: result.version,
       };
 
       revalidatePath("/admin/borrow-records");
@@ -181,6 +184,7 @@ export async function PATCH(
         updatedBook.availableCopies,
         updatedBook.reservedCount,
         updatedBook.borrowedCount,
+        updatedBook.version,
       ).catch((err) =>
         console.error("broadcastBookAvailabilityUpdate failed", err),
       );

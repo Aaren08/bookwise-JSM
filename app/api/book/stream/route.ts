@@ -6,13 +6,13 @@ import {
   ADMIN_DASHBOARD_SSE_KEEPALIVE_MS,
   ADMIN_DASHBOARD_SSE_MAX_LIFETIME_MS,
   ADMIN_DASHBOARD_SSE_RETRY_MS,
-} from "@/lib/admin/realtime/dashboardRealtimeEvents";
+} from "@/lib/admin/realtime/broadcast/dashboardRealtimeEvents";
 import { encodeBorrowBookSseEvent } from "@/lib/admin/realtime/concurrency/borrowBookRealtimeEvents";
 import {
   getBorrowBookRealtimeReplay,
   subscribeToBorrowBookUpdates,
   type BorrowBookRealtimeSubscription,
-} from "@/lib/admin/realtime/dashboardRedisPubSub";
+} from "@/lib/admin/realtime/broadcast/dashboardRedisPubSub";
 import {
   acquireSseConnectionLease,
   anonymousSseConnectRateLimit,

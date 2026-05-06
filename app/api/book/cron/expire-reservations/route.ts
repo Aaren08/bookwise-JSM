@@ -21,13 +21,12 @@ import { books, borrowRecords, users } from "@/database/schema";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
-} from "@/lib/admin/realtime/dashboardSocketServer";
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
-
 
 const RESERVATION_EXPIRY_MINUTES = 15;
 
@@ -75,7 +74,6 @@ export async function GET(request: Request) {
       })
       .where(inArray(borrowRecords.id, expiredIds));
 
-
     // ── 3. Group by bookId and decrement each book's reserved_count ──────────
     const bookIdToExpiredCount = expiredRecords.reduce<Record<string, number>>(
       (acc, r) => {
@@ -99,6 +97,7 @@ export async function GET(request: Request) {
           availableCopies: books.availableCopies,
           reservedCount: books.reservedCount,
           borrowedCount: books.borrowedCount,
+          version: books.version,
         });
 
       if (updatedBook) {
@@ -108,6 +107,7 @@ export async function GET(request: Request) {
             updatedBook.availableCopies,
             updatedBook.reservedCount,
             updatedBook.borrowedCount,
+            updatedBook.version,
           ).catch((err) =>
             console.error("broadcastBookAvailabilityUpdate failed", err),
           ),
@@ -159,7 +159,6 @@ export async function GET(request: Request) {
         ),
       ),
     ]);
-
 
     console.log(
       `[expire-reservations] Expired ${expiredIds.length} reservations across ${Object.keys(bookIdToExpiredCount).length} book(s).`,

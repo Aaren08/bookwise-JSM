@@ -6,7 +6,7 @@ import {
   createDashboardRefreshMessage,
   isDashboardRealtimeMessage,
   type AdminDashboardRealtimeMessage,
-} from "@/lib/admin/realtime/dashboardRealtimeEvents";
+} from "@/lib/admin/realtime/broadcast/dashboardRealtimeEvents";
 import {
   BORROW_BOOK_REALTIME_CHANNEL,
   BORROW_BOOK_REALTIME_REPLAY_KEY,
@@ -116,12 +116,14 @@ export const publishBookAvailabilityUpdate = async (
   availableCount: number,
   reservedCount: number,
   borrowedCount: number,
+  version: number,
 ) => {
   const message = createBookUpdatedMessage(
     bookId,
     availableCount,
     reservedCount,
     borrowedCount,
+    version,
   );
 
   return publishBorrowBookRealtimeMessage(message);

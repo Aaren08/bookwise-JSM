@@ -10,7 +10,7 @@ import { ratelimit, safeRateLimit } from "../essentials/rateLimit";
 import { redirect } from "next/navigation";
 import config from "../config";
 import { workflowClient } from "../workflow";
-import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/dashboardSocketServer";
+import { broadcastAdminDashboardUpdate } from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 import { getPendingUserById } from "@/lib/admin/actions/user";
 
