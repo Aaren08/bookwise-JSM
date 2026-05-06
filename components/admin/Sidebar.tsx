@@ -45,16 +45,17 @@ const Sidebar = ({ session }: { session: Session }) => {
           </Avatar>
           <div className="size-3 rounded-full bg-green-500 absolute bottom-0 right-0" />
         </div>
-        <div className="flex flex-row">
-          <div className="flex flex-col max-md:hidden">
-            <p className="text-dark-200 font-semibold truncate ">
+
+        <div className="flex flex-row min-w-0 flex-1">
+          <div className="flex flex-col max-md:hidden min-w-0 flex-1">
+            <p className="text-dark-200 font-semibold truncate">
               {session?.user?.name}
             </p>
             <p className="text-xs text-light-500 truncate">
               {session?.user?.email}
             </p>
           </div>
-          <form action={handleSignOut} className="mt-2.5 ml-2.5">
+          <form action={handleSignOut} className="mt-2.5 ml-2.5 shrink-0">
             <button type="submit" className="cursor-pointer">
               <Image
                 src="/icons/logout.svg"
