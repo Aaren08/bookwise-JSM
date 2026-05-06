@@ -19,10 +19,12 @@ const BookList = ({ title, books, containerClassName }: Props) => {
 
       <ul className="book-list">
         {books.map((book) => {
+          const uniqueKey = book.borrowRecordId || book.id;
+
           if (book.isLoanedBook && book.borrowDate && book.dueDate) {
             return (
               <BorrowedBookCard
-                key={book.id}
+                key={uniqueKey}
                 {...book}
                 borrowDate={book.borrowDate}
                 dueDate={book.dueDate}
@@ -33,7 +35,7 @@ const BookList = ({ title, books, containerClassName }: Props) => {
             );
           }
 
-          return <BookCard key={book.id} {...book} />;
+          return <BookCard key={uniqueKey} {...book} />;
         })}
       </ul>
     </section>

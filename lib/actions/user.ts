@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { users, borrowRecords, books } from "@/database/schema";
 import { auth } from "@/auth";
-import { and, count } from "drizzle-orm";
+import { and, count, desc } from "drizzle-orm";
 import { getApprovedUserById } from "@/lib/admin/actions/user";
 import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 
@@ -46,6 +46,7 @@ export const getUserBorrowedBooks = async (
         .where(
           and(eq(borrowRecords.userId, userId), eq(borrowRecords.dismissed, 0)),
         )
+        .orderBy(desc(borrowRecords.borrowDate))
         .limit(limit)
         .offset(offset),
       db
