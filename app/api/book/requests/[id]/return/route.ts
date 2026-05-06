@@ -217,12 +217,14 @@ export async function PATCH(
     } finally {
       if (isAdmin) {
         try {
-          await releaseLock(
-            "borrow_requests",
-            recordId,
-            session.user.id,
-            lockToken,
-          );
+          if (lockToken) {
+            await releaseLock(
+              "borrow_requests",
+              recordId,
+              session.user.id,
+              lockToken,
+            );
+          }
         } catch (lockError) {
           console.error("releaseLock failed best-effort cleanup", {
             recordId,

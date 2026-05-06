@@ -183,12 +183,14 @@ export async function PATCH(
       });
     } finally {
       try {
-        await releaseLock(
-          "borrow_requests",
-          recordId,
-          session.user.id,
-          body.lockToken,
-        );
+        if (body.lockToken) {
+          await releaseLock(
+            "borrow_requests",
+            recordId,
+            session.user.id,
+            body.lockToken,
+          );
+        }
       } catch (lockError) {
         console.error("releaseLock failed best-effort cleanup", {
           recordId,
