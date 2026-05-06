@@ -104,7 +104,7 @@
   content: "";
   position: absolute;
   left: 0px;
-  right: -92px; /* overshoot */
+  right: 0px;
   top: 90px;
   height: 36px; /* must match background-size Y */
 
