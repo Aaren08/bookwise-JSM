@@ -2,7 +2,7 @@
 
 import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
-import { eq, desc, asc, count, sql, inArray } from "drizzle-orm";
+import { eq, desc, asc, count, sql, inArray, and } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
 import {
   broadcastAdminDashboardUpdate,
@@ -40,6 +40,7 @@ export const getAllBorrowRecords = async ({
         version: borrowRecords.version,
       })
       .from(borrowRecords)
+      .where(eq(borrowRecords.isAdminCleared, false))
       .orderBy(
         sortOrder === "asc"
           ? asc(borrowRecords.borrowDate)
@@ -78,7 +79,10 @@ export const getAllBorrowRecords = async ({
 
     const [records, [{ value: totalRecords }]] = await Promise.all([
       recordsQuery,
-      db.select({ value: count() }).from(borrowRecords),
+      db
+        .select({ value: count() })
+        .from(borrowRecords)
+        .where(eq(borrowRecords.isAdminCleared, false)),
     ]);
 
     const totalPages = Math.ceil(totalRecords / limit);
@@ -261,6 +265,7 @@ export const updateBorrowStatus = async ({
           available_copies: number;
           reserved_count: number;
           borrowed_count: number;
+          version: number;
         }
       | undefined;
 
@@ -273,6 +278,7 @@ export const updateBorrowStatus = async ({
       availableCopies: result.available_copies,
       reservedCount: result.reserved_count,
       borrowedCount: result.borrowed_count,
+      version: result.version,
     };
 
     if (updatedBook) {
@@ -281,6 +287,7 @@ export const updateBorrowStatus = async ({
         updatedBook.availableCopies,
         updatedBook.reservedCount,
         updatedBook.borrowedCount,
+        updatedBook.version,
       ).catch((err) =>
         console.error("broadcastBookAvailabilityUpdate failed", err),
       );
@@ -360,13 +367,18 @@ export const clearBorrowRecords = async ({
       };
     }
 
-    const deletedRecords = await db
-      .delete(borrowRecords)
-      .where(inArray(borrowRecords.borrowStatus, statusesToClear))
+    const clearedRecords = await db
+      .update(borrowRecords)
+      .set({ isAdminCleared: true })
+      .where(
+        and(
+          inArray(borrowRecords.borrowStatus, statusesToClear),
+          eq(borrowRecords.isAdminCleared, false),
+        ),
+      )
       .returning();
 
     revalidatePath("/admin/borrow-records");
-    revalidatePath("/my-profile");
     revalidatePath("/admin/users");
     revalidateTag(CACHE_TAGS.users, "max");
     revalidateTag(CACHE_TAGS.books, "max");
@@ -376,7 +388,7 @@ export const clearBorrowRecords = async ({
 
     try {
       await Promise.all(
-        deletedRecords.map((record) =>
+        clearedRecords.map((record) =>
           publishEvent("borrow_requests", {
             type: "DELETE",
             entityId: record.id,
@@ -394,8 +406,8 @@ export const clearBorrowRecords = async ({
     return {
       success: true,
       data: {
-        deletedCount: deletedRecords.length,
-        message: `Successfully cleared ${deletedRecords.length} record(s)`,
+        clearedCount: clearedRecords.length,
+        message: `Successfully cleared ${clearedRecords.length} record(s)`,
       },
     };
   } catch (error) {

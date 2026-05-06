@@ -91,6 +91,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
         availableCopies: books.availableCopies,
         reservedCount: books.reservedCount,
         borrowedCount: books.borrowedCount,
+        version: books.version,
       });
 
     if (!updatedBook) {
@@ -125,6 +126,7 @@ export const borrowBook = async (params: BorrowBookParams) => {
       updatedBook.availableCopies,
       updatedBook.reservedCount,
       updatedBook.borrowedCount,
+      updatedBook.version,
     ).catch((err) =>
       console.error("Failed to broadcast book availability update:", err),
     );

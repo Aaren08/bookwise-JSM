@@ -10,6 +10,7 @@ import {
   timestamp,
   real,
   index,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const STATUS_ENUM = pgEnum("status", [
@@ -105,6 +106,7 @@ export const borrowRecords = pgTable(
       .notNull(),
     // Timestamp set when status = PENDING; used by expiration cron to detect stale reservations.
     reservedAt: timestamp("reserved_at", { withTimezone: true }),
+    isAdminCleared: boolean("is_admin_cleared").default(false).notNull(),
     dismissed: integer("dismissed").default(0).notNull(),
     version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
