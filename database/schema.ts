@@ -58,14 +58,17 @@ export const books = pgTable(
     genre: varchar("genre", { length: 255 }).notNull(),
     rating: real("rating").notNull().default(0),
     totalCopies: integer("total_copies").notNull().default(1),
+
     // Managed explicitly by application transactions (never set manually)
     borrowedCount: integer("borrowed_count").notNull().default(0),
     reservedCount: integer("reserved_count").notNull().default(0),
+
     // GENERATED ALWAYS AS (total_copies - borrowed_count - reserved_count) STORED
     // PostgreSQL ensures this can never be inconsistent with the two source columns.
     availableCopies: integer("available_copies")
       .generatedAlwaysAs(sql`total_copies - borrowed_count - reserved_count`)
       .notNull(),
+
     description: text("description").notNull(),
     coverColor: varchar("cover_color", { length: 7 }).notNull(),
     coverUrl: text("cover_url").notNull(),
@@ -77,13 +80,7 @@ export const books = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => {
-    return {
-      availableCopiesIdx: index("available_copies_idx").on(
-        table.availableCopies,
-      ),
-    };
-  },
+  (table) => [index("available_copies_idx").on(table.availableCopies)],
 );
 
 export const borrowRecords = pgTable(
@@ -104,8 +101,10 @@ export const borrowRecords = pgTable(
     borrowStatus: BORROW_STATUS_ENUM("borrow_status")
       .default("PENDING")
       .notNull(),
+
     // Timestamp set when status = PENDING; used by expiration cron to detect stale reservations.
     reservedAt: timestamp("reserved_at", { withTimezone: true }),
+
     isAdminCleared: boolean("is_admin_cleared").default(false).notNull(),
     dismissed: integer("dismissed").default(0).notNull(),
     version: integer("version").notNull().default(1),
@@ -114,14 +113,9 @@ export const borrowRecords = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => {
-    return {
-      bookStatusIdx: index("book_status_idx").on(
-        table.bookId,
-        table.borrowStatus,
-      ),
-      borrowDateIdx: index("borrow_date_idx").on(table.borrowDate),
-      reservedAtIdx: index("reserved_at_idx").on(table.reservedAt),
-    };
-  },
+  (table) => [
+    index("book_status_idx").on(table.bookId, table.borrowStatus),
+    index("borrow_date_idx").on(table.borrowDate),
+    index("reserved_at_idx").on(table.reservedAt),
+  ],
 );
