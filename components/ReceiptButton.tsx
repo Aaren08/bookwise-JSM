@@ -23,6 +23,7 @@ const ReceiptButton = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReceiptLoading, setIsReceiptLoading] = useState(false);
 
+  if (borrowStatus === "REJECTED") return null;
   const handleReceiptClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();

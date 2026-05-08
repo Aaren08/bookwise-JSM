@@ -13,8 +13,8 @@ import {
 } from "@/lib/essentials/returnPolicy";
 import { dismissBorrowRecord } from "@/lib/actions/book";
 import { formatReturnDate } from "@/lib/utils";
-import { toast } from "sonner";
 import { PrefetchOnIntentLink } from "@/lib/performance/PrefetchOnIntentLink";
+import { showErrorToast, showSuccessToast } from "@/lib/essentials/toast-utils";
 
 const OVERDUE_ICON_FILTER =
   "brightness(0) saturate(100%) invert(43%) sepia(94%) saturate(3217%) hue-rotate(334deg) brightness(101%) contrast(93%)";
@@ -45,36 +45,12 @@ const BorrowedBookCard = ({
       const result = await dismissBorrowRecord(borrowRecordId);
       if (result.success) {
         setIsDismissed(true);
-        toast.success("Record dismissed", {
-          position: "top-right",
-          style: {
-            background: "#dcfce7",
-            color: "#000000",
-            border: "1px solid #86efac",
-          },
-          className: "!bg-green-200 !text-black",
-        });
+        showSuccessToast("Record dismissed");
       } else {
-        toast.error(result.error || "Failed to dismiss record", {
-          position: "top-right",
-          style: {
-            background: "#fee2e2",
-            color: "#000000",
-            border: "1px solid #fca5a5",
-          },
-          className: "!bg-red-200 !text-black",
-        });
+        showErrorToast(result.error || "Failed to dismiss record");
       }
     } catch {
-      toast.error("Failed to dismiss record", {
-        position: "top-right",
-        style: {
-          background: "#fee2e2",
-          color: "#000000",
-          border: "1px solid #fca5a5",
-        },
-        className: "!bg-red-200 !text-black",
-      });
+      showErrorToast("An error occurred while dismissing record");
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +67,11 @@ const BorrowedBookCard = ({
   const showOverdueWarning = borrowStatus === "BORROWED" && status.isOverdue;
 
   return (
-    <li className={cn("w-48 sm:w-60 relative bg-dark-800 rounded-2xl p-4")}>
+    <li
+      className={cn(
+        "w-60 max-lg:w-56 max-md:w-52 max-sm:w-42 relative bg-dark-800 rounded-2xl p-4",
+      )}
+    >
       <PrefetchOnIntentLink
         href={`/books/${book.id}`}
         className={cn("w-full flex flex-col items-center")}
@@ -138,7 +118,7 @@ const BorrowedBookCard = ({
             height={18}
             className="object-contain"
           />
-          <p className="text-light-100 text-sm">
+          <p className="text-light-100 text-sm max-sm:text-xs">
             {borrowStatus === "PENDING"
               ? "Requesting admin"
               : `Borrowed on ${status.borrowDate}`}
@@ -157,7 +137,7 @@ const BorrowedBookCard = ({
                   height={18}
                   className="object-contain"
                 />
-                <p className="text-sm font-medium text-green-500">
+                <p className="text-sm max-sm:text-xs font-medium text-green-500">
                   Returned on {returnDate && formatReturnDate(returnDate)}
                 </p>
               </>

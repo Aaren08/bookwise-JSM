@@ -32,7 +32,14 @@ const Header = ({ session }: { session?: Session | null }) => {
             activeClassName="text-light-200"
             inactiveClassName="text-light-100"
           >
-            Home
+            <Image
+              src="/icons/admin/home.svg"
+              alt="Home"
+              className="block sm:hidden sepia"
+              width={24}
+              height={24}
+            />
+            <span className="hidden sm:inline">Home</span>
           </ActiveLink>
         </li>
 
@@ -43,13 +50,23 @@ const Header = ({ session }: { session?: Session | null }) => {
             activeClassName="text-light-200"
             inactiveClassName="text-light-100"
           >
-            Search
+            <Image
+              src="/icons/admin/search.svg"
+              alt="Search"
+              className="block sm:hidden sepia"
+              width={24}
+              height={24}
+            />
+            <span className="hidden sm:inline">Search</span>
           </ActiveLink>
         </li>
 
         {session && (
           <li>
-            <PrefetchOnIntentLink href="/my-profile" className="flex items-center gap-2">
+            <PrefetchOnIntentLink
+              href="/my-profile"
+              className="flex items-center gap-2"
+            >
               <Avatar>
                 <AvatarImage
                   src={session.user?.image || ""}
@@ -59,7 +76,7 @@ const Header = ({ session }: { session?: Session | null }) => {
                   {getInitials(session.user?.name || "")}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-light-100 font-semibold">
+              <span className="text-light-100 font-semibold max-sm:hidden">
                 {session.user?.name?.split(" ")[0]}
               </span>
             </PrefetchOnIntentLink>

@@ -17,7 +17,10 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
   const validId = z.uuid().safeParse(id);
   if (!validId.success) return notFound();
 
-  const [session, bookDetails] = await Promise.all([auth(), getBookByIdCached(id)]);
+  const [session, bookDetails] = await Promise.all([
+    auth(),
+    getBookByIdCached(id),
+  ]);
 
   if (!bookDetails) return notFound();
 
@@ -57,9 +60,14 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
         {similarBooks.length > 0 && (
           <section className="flex flex-col gap-7">
             <h3>Similar Books</h3>
-            <div className="grid grid-cols-3 max-sm:grid-cols-2 gap-5">
+
+            <div className="grid grid-cols-3 max-sm:grid-cols-2 gap-5 place-items-center">
               {similarBooks.map((book: Book) => (
-                <PrefetchOnIntentLink key={book.id} href={`/books/${book.id}`}>
+                <PrefetchOnIntentLink
+                  key={book.id}
+                  href={`/books/${book.id}`}
+                  className="flex justify-center w-full"
+                >
                   <BookCover
                     variant="regular"
                     className="transition-transform hover:scale-105"

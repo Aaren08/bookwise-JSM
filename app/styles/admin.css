@@ -46,6 +46,7 @@
     @apply flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-admin/50 cursor-pointer;
   }
 
+  /* Clear Menu */
   .clear-menu {
     @apply absolute left-0 top-full z-50 mt-2 w-[280px] rounded-lg border border-gray-200 bg-white shadow-lg;
   }
@@ -76,6 +77,40 @@
 
   .clear-menu-confirm-btn {
     @apply flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
+  }
+
+  @media (max-width: 640px) and (orientation: portrait) {
+    .clear-menu {
+      @apply w-[240px] rounded-md;
+    }
+
+    .clear-menu-content {
+      @apply p-3 space-y-1.5;
+    }
+
+    .clear-menu-option {
+      @apply gap-2 p-1.5;
+    }
+
+    .clear-menu-checkbox {
+      @apply h-3.5 w-3.5;
+    }
+
+    .clear-menu-label {
+      @apply text-xs;
+    }
+
+    .clear-menu-actions {
+      @apply gap-1.5 pt-2;
+    }
+
+    .clear-menu-cancel-btn {
+      @apply px-2 py-1.5 text-xs;
+    }
+
+    .clear-menu-confirm-btn {
+      @apply px-2 py-1.5 text-xs;
+    }
   }
 
   .approve-account-btn {
@@ -149,7 +184,7 @@
 
   /* Home Page */
   .view-btn {
-    @apply !bg-light-300 p-2 !rounded-md !text-primary-admin !font-semibold hover:!bg-light-400 !shadow-none;
+    @apply !bg-light-300 p-2 !rounded-md !text-primary-admin !font-semibold hover:!bg-light-400 !shadow-none max-sm:text-sm;
   }
 
   .add-new-book_btn {
@@ -381,7 +416,7 @@
   }
 
   .borrow-requests-title {
-    @apply text-xl font-semibold text-dark-400 max-sm:text-lg;
+    @apply text-xl font-semibold text-dark-400 max-sm:text-sm;
   }
 
   .borrow-requests-empty-state {
@@ -410,7 +445,7 @@
   }
 
   .account-requests-title {
-    @apply text-xl font-semibold text-dark-400 max-sm:text-lg;
+    @apply text-xl font-semibold text-dark-400 max-sm:text-sm;
   }
 
   .account-requests-empty-state {
@@ -435,7 +470,7 @@
   }
 
   .recent-books-title {
-    @apply text-xl font-semibold text-dark-400 max-sm:text-lg;
+    @apply text-xl font-semibold text-dark-400 max-sm:text-sm;
   }
 
   /* Borrow Request Cards */
