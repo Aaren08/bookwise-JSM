@@ -157,19 +157,21 @@ export async function POST(req: NextRequest) {
             (SELECT id FROM mark_initialized)  AS settings_id
         `);
 
-        return rows;
+        // Validate inside the transaction so a missing ID throws before
+        // COMMIT, causing Drizzle to issue a ROLLBACK automatically.
+        const row = rows.rows[0];
+        if (!row?.owner_id || !row?.settings_id || !row?.profile_id) {
+          throw new Error("Setup failed");
+        }
+
+        return row;
       },
       { isolationLevel: "serializable" },
     );
 
-    const row = result.rows[0];
-    if (!row?.owner_id) {
-      throw new Error("Setup failed");
-    }
-
     return NextResponse.json({
       success: true,
-      ownerId: row.owner_id,
+      ownerId: result.owner_id,
     });
   } catch (error) {
     if (error instanceof AlreadyInitializedError) {

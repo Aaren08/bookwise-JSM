@@ -1,8 +1,14 @@
-import { db } from "../drizzle";
-import { sql } from "drizzle-orm";
+-- Migration: 0011_app_settings_setup_lock
+-- Adds a BEFORE UPDATE trigger on app_settings that prevents:
+--   1. Reverting setup_completed from true back to false.
+--   2. Clearing initialized_at once it has been set.
+--
+-- Mirrors the inline pattern used by
+-- 0010_setup_initialization_architecture.sql: function and trigger
+-- are defined together so they are created at migration time, not
+-- at application runtime.
 
-export async function setupTrigger() {
-  await db.execute(sql`CREATE OR REPLACE FUNCTION "prevent_setup_reinit"()
+CREATE OR REPLACE FUNCTION "prevent_setup_reinit"()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
@@ -25,5 +31,4 @@ DROP TRIGGER IF EXISTS "app_settings_prevent_reinit" ON "app_settings";
 CREATE TRIGGER "app_settings_prevent_reinit"
 BEFORE UPDATE ON "app_settings"
 FOR EACH ROW
-EXECUTE FUNCTION "prevent_setup_reinit"();`);
-}
+EXECUTE FUNCTION "prevent_setup_reinit"();
