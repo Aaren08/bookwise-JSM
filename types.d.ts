@@ -313,19 +313,6 @@ interface AdminSidebarLinkProps {
   label: string;
 }
 
-interface BootstrapInput {
-  fullName: string;
-  email: string;
-  hashedPassword: string;
-  borrowDurationDays: number;
-  supportEmail: string;
-  websiteUrl: string;
-  universityName: string;
-  ipAddress: string;
-  userAgent: string;
-  requestId: string;
-}
-
 interface AuditMeta {
   requestId: string;
   correlationId: string;
