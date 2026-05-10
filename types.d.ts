@@ -312,3 +312,12 @@ interface AdminSidebarLinkProps {
   icon: string;
   label: string;
 }
+
+interface AuditMeta {
+  requestId: string;
+  correlationId: string;
+  ipAddress: string;
+  userAgent: string;
+  sessionId: string; // pass in the hashed session token
+  source: "SETUP" | "ADMIN_PANEL" | "API" | "SYSTEM" | "MIGRATION";
+}

@@ -10,7 +10,8 @@
     "seed": "npx tsx database/seed.ts",
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "npx drizzle-kit migrate",
-    "db:studio": "npx drizzle-kit studio"
+    "db:studio": "npx drizzle-kit studio",
+    "db:push": "npx drizzle-kit push"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
@@ -32,6 +33,7 @@
     "debounce": "^3.0.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.44.7",
+    "framer-motion": "^12.38.0",
     "imagekit": "^6.0.0",
     "jspdf": "^4.0.0",
     "lucide-react": "^0.555.0",
@@ -49,7 +51,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "ws": "^8.20.0",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
