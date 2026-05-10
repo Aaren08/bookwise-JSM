@@ -1,3 +1,4 @@
+import { db } from "@/database/drizzle";
 import { users, adminAuditLogs } from "@/database/schema";
 import { eq } from "drizzle-orm";
 
@@ -48,12 +49,16 @@ export async function assertNotSystemOwner(
   if (!user) throw new Error(`User ${userId} not found`);
 
   if (user.ownershipType === "SYSTEM_OWNER") {
-    // Log the blocked attempt
-    await tx.insert(adminAuditLogs).values({
+    // Write the blocked-attempt audit log outside the caller's transaction so
+    // it is NOT rolled back when PrivilegeEscalationError unwinds the outer tx.
+    // `db` is the module-level connection — it commits immediately and
+    // independently of whatever `tx` the caller is running.
+    await db.insert(adminAuditLogs).values({
       targetUserId: userId,
       action: "OWNER_PROTECTION_BLOCKED",
       newValues: { attempted_operation: operation },
     });
+
     throw new PrivilegeEscalationError(
       `Operation '${operation}' is not permitted on the system owner`,
     );

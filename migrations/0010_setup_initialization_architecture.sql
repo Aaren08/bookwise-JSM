@@ -156,7 +156,7 @@ CREATE TABLE "setup_events" (
   "user_agent" text,
   "request_id" uuid,
   "source" "audit_source" NOT NULL,
-  "sessionId" text, // hashed, not raw
+  "sessionId" text, 
   "correlation_id" uuid,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -179,7 +179,7 @@ CREATE TABLE "admin_audit_logs" (
   "user_agent" text,
   "request_id" uuid,
   "source" "audit_source" NOT NULL,
-  "sessionId" text, // hashed, not raw
+  "sessionId" text, 
   "correlation_id" uuid,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );

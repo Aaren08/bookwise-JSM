@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
-import { requireOwner } from "@/lib/global/auth/require-owner";
+import {
+  requireOwner,
+  StaleSessionError,
+} from "@/lib/global/auth/require-owner";
+import {
+  PrivilegeEscalationError,
+  OwnershipTransferError,
+} from "@/lib/global/ownership-guards";
 
 export async function POST() {
   try {
@@ -22,13 +29,16 @@ export async function POST() {
   } catch (error) {
     console.error(error);
 
+    const isAuthError =
+      error instanceof StaleSessionError ||
+      error instanceof PrivilegeEscalationError ||
+      error instanceof OwnershipTransferError;
+
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Internal Server Error",
+        error: isAuthError ? (error as Error).message : "Internal Server Error",
       },
-      {
-        status: 403,
-      },
+      { status: isAuthError ? 403 : 500 },
     );
   }
 }

@@ -1,7 +1,7 @@
 import { db } from "../drizzle";
 import { sql } from "drizzle-orm";
 
-async function setupTrigger() {
+export async function setupTrigger() {
   await db.execute(sql`CREATE OR REPLACE FUNCTION "prevent_setup_reinit"()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -21,10 +21,9 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS "app_settings_prevent_reinit" ON "app_settings";
 CREATE TRIGGER "app_settings_prevent_reinit"
 BEFORE UPDATE ON "app_settings"
 FOR EACH ROW
 EXECUTE FUNCTION "prevent_setup_reinit"();`);
 }
-
-setupTrigger().catch(console.error);
