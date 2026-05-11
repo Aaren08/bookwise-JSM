@@ -8,6 +8,7 @@ import {
   AlreadyInitializedError,
 } from "@/lib/global/auth/require-uninitialized";
 import { randomUUID } from "crypto";
+import { refreshSetupStateCache } from "@/lib/global/setup-state";
 
 const setupBodySchema = z.object({
   fullName: z.string().trim().min(1).max(255),
@@ -168,6 +169,8 @@ export async function POST(req: NextRequest) {
       },
       { isolationLevel: "serializable" },
     );
+
+    await refreshSetupStateCache();
 
     return NextResponse.json({
       success: true,
