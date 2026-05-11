@@ -43,10 +43,8 @@ export async function POST(req: NextRequest) {
       universityName,
     } = parsed.data;
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Get request metadata
     const forwardedFor = req.headers.get("x-forwarded-for");
     const ipAddress =
       forwardedFor?.split(",")[0]?.trim() ||
@@ -55,14 +53,9 @@ export async function POST(req: NextRequest) {
     const userAgent = req.headers.get("user-agent") || "unknown";
     const requestId = randomUUID();
 
-    // Execute the setup transaction.
-    // Each tx.execute() call is a single prepared statement; Drizzle manages
-    // BEGIN SERIALIZABLE / COMMIT / ROLLBACK around the callback automatically.
     const result = await db.transaction(
       async (tx) => {
-        // Acquire a session-level advisory lock so concurrent setup requests
-        // in other connections block rather than race. The lock is released
-        // automatically when the transaction ends.
+        // Advisory lock: only one setup transaction proceeds at a time globally.
         await tx.execute(sql`
           DO $$
           BEGIN
@@ -72,10 +65,8 @@ export async function POST(req: NextRequest) {
           END $$
         `);
 
-        // One CTE does all DML and returns the three IDs we need.
-        // Keeping everything in a single round-trip preserves the original
-        // atomicity guarantee (all-or-nothing) while staying within the
-        // single-statement limit of the extended query protocol.
+        // Single CTE: all DML in one round-trip, fully atomic.
+        // insert_profile is removed — profile columns now live on users directly.
         const rows = await tx.execute(sql`
           WITH
           guard AS (
@@ -87,8 +78,7 @@ export async function POST(req: NextRequest) {
           insert_owner AS (
             INSERT INTO users (
               full_name, email, password,
-              status, role, ownership_type,
-              ownership_assigned_at,
+              status, role,
               session_version, version
             )
             SELECT
@@ -97,18 +87,12 @@ export async function POST(req: NextRequest) {
               ${hashedPassword},
               'APPROVED'::status,
               'ADMIN'::role,
-              'SYSTEM_OWNER'::ownership_type,
-              NOW(),
               1, 1
             WHERE NOT EXISTS (
-              SELECT 1 FROM guard WHERE initialized_at IS NOT NULL OR setup_completed = true
+              SELECT 1 FROM guard
+              WHERE initialized_at IS NOT NULL OR setup_completed = true
             )
             RETURNING id
-          ),
-          insert_profile AS (
-            INSERT INTO user_profiles (user_id)
-            SELECT id FROM insert_owner
-            RETURNING user_id
           ),
           mark_initialized AS (
             UPDATE app_settings SET
@@ -129,7 +113,12 @@ export async function POST(req: NextRequest) {
           insert_events AS (
             INSERT INTO setup_events (event_type, actor_user_id, metadata, ip_address, user_agent)
             SELECT
-              unnest(ARRAY['SETUP_STARTED', 'OWNER_CREATED', 'SETTINGS_SAVED', 'SETUP_COMPLETED']::setup_event_type[]),
+              unnest(ARRAY[
+                'SETUP_STARTED',
+                'OWNER_CREATED',
+                'SETTINGS_SAVED',
+                'SETUP_COMPLETED'
+              ]::setup_event_type[]),
               (SELECT id FROM insert_owner),
               jsonb_build_object('request_id', ${requestId}),
               ${ipAddress}::inet,
@@ -146,23 +135,23 @@ export async function POST(req: NextRequest) {
               (SELECT id FROM insert_owner),
               (SELECT id FROM insert_owner),
               'ADMIN_CREATED'::admin_audit_action,
-              jsonb_build_object('ownership_type', 'SYSTEM_OWNER'),
+              jsonb_build_object('role', 'ADMIN', 'via', 'setup'),
               ${ipAddress}::inet,
               ${userAgent}
             WHERE EXISTS (SELECT 1 FROM mark_initialized)
             RETURNING id
           )
           SELECT
-            (SELECT id FROM insert_owner)      AS owner_id,
-            (SELECT user_id FROM insert_profile) AS profile_id,
-            (SELECT id FROM mark_initialized)  AS settings_id
+            (SELECT id FROM insert_owner)     AS owner_id,
+            (SELECT id FROM mark_initialized) AS settings_id
         `);
 
-        // Validate inside the transaction so a missing ID throws before
-        // COMMIT, causing Drizzle to issue a ROLLBACK automatically.
         const row = rows.rows[0];
-        if (!row?.owner_id || !row?.settings_id || !row?.profile_id) {
-          throw new Error("Setup failed");
+
+        // If either ID is null the guard fired (already initialized) or a
+        // step silently failed. Throwing here causes Drizzle to ROLLBACK.
+        if (!row?.owner_id || !row?.settings_id) {
+          throw new Error("Setup failed: system may already be initialized");
         }
 
         return row;

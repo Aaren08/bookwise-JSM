@@ -17,6 +17,8 @@ import {
   inet,
 } from "drizzle-orm/pg-core";
 
+// Enums
+
 export const STATUS_ENUM = pgEnum("status", [
   "PENDING",
   "APPROVED",
@@ -24,11 +26,6 @@ export const STATUS_ENUM = pgEnum("status", [
 ]);
 
 export const ROLE_ENUM = pgEnum("role", ["USER", "ADMIN"]);
-
-export const OWNERSHIP_TYPE_ENUM = pgEnum("ownership_type", [
-  "NONE",
-  "SYSTEM_OWNER",
-]);
 
 export const BORROW_STATUS_ENUM = pgEnum("borrow_status", [
   "PENDING",
@@ -51,7 +48,6 @@ export const ADMIN_AUDIT_ACTION_ENUM = pgEnum("admin_audit_action", [
   "ADMIN_UPDATED",
   "ADMIN_DEMOTED",
   "ADMIN_DELETED",
-  "OWNER_PROTECTION_BLOCKED",
   "USER_STATUS_CHANGED",
   "SETTINGS_UPDATED",
 ]);
@@ -60,9 +56,11 @@ export const AUDIT_SOURCE_ENUM = pgEnum("audit_source", [
   "SETUP",
   "ADMIN_PANEL",
   "API",
-  "SYSTEM", // cron jobs, automated processes
-  "MIGRATION", // schema migrations that touch data
+  "SYSTEM",
+  "MIGRATION",
 ]);
+
+// Users
 
 export const users = pgTable(
   "users",
@@ -73,65 +71,47 @@ export const users = pgTable(
     password: text("password").notNull(),
     status: STATUS_ENUM("status").default("PENDING").notNull(),
     role: ROLE_ENUM("role").default("USER").notNull(),
-    ownershipType: OWNERSHIP_TYPE_ENUM("ownership_type")
-      .default("NONE")
-      .notNull(),
-    ownershipAssignedAt: timestamp("ownership_assigned_at", {
-      withTimezone: true,
-    }),
+
+    // Profile fields (formerly user_profiles)
+    universityId: varchar("university_id", { length: 30 }),
+    universityCard: text("university_card"),
+    userAvatar: text("user_avatar"),
+    userAvatarFileId: text("user_avatar_file_id"),
+
+    // Session invalidation — bump this to force sign-out
     sessionVersion: integer("session_version").notNull().default(1),
     lastActivityDate: date("last_activity_date").defaultNow(),
+
+    // Optimistic concurrency
     version: integer("version").notNull().default(1),
+
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
-    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
   },
   (table) => [
     index("users_role_idx").on(table.role),
     index("users_status_idx").on(table.status),
     index("users_created_at_idx").on(table.createdAt),
-    uniqueIndex("users_single_system_owner_idx")
-      .on(table.ownershipType)
-      .where(sql`${table.ownershipType} = 'SYSTEM_OWNER'`),
-    check(
-      "users_owner_must_be_admin_chk",
-      sql`${table.ownershipType} = 'NONE' OR ${table.role} = 'ADMIN'`,
-    ),
-  ],
-) as unknown as ReturnType<typeof pgTable>;
-
-export const userProfiles = pgTable(
-  "user_profiles",
-  {
-    userId: uuid("user_id")
-      .primaryKey()
-      .references(() => users.id, { onDelete: "cascade" }),
-    fullName: varchar("full_name", { length: 255 }), // denormalized for profile reads without joining users
-    universityId: varchar("university_id", { length: 30 }),
-    universityCard: text("university_card"),
-    userAvatar: text("user_avatar"),
-    userAvatarFileId: text("user_avatar_file_id"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("user_profiles_university_id_idx")
+    uniqueIndex("users_university_id_idx")
       .on(table.universityId)
       .where(sql`${table.universityId} IS NOT NULL`),
   ],
 );
+
+// App Settings (singleton)
 
 export const appSettings = pgTable(
   "app_settings",
   {
     id: boolean("id").primaryKey().default(true).notNull(),
     initializedAt: timestamp("initialized_at", { withTimezone: true }),
+    setupCompleted: boolean("setup_completed").default(false).notNull(),
+    setupCompletedAt: timestamp("setup_completed_at", { withTimezone: true }),
+    setupCompletedBy: uuid("setup_completed_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
     borrowDurationDays: integer("borrow_duration_days").notNull(),
     supportEmail: varchar("support_email", { length: 255 }).notNull(),
     websiteUrl: text("website_url").notNull(),
@@ -143,11 +123,6 @@ export const appSettings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
-    setupCompleted: boolean("setup_completed").default(false).notNull(),
-    setupCompletedAt: timestamp("setup_completed_at", { withTimezone: true }),
-    setupCompletedBy: uuid("setup_completed_by").references(() => users.id, {
-      onDelete: "restrict",
-    }),
   },
   (table) => [
     check("app_settings_singleton_chk", sql`${table.id} = true`),
@@ -161,8 +136,14 @@ export const appSettings = pgTable(
       "app_settings_university_name_chk",
       sql`${table.universityName} <> ''`,
     ),
+    check(
+      "app_settings_no_reinit_chk",
+      sql`${table.setupCompleted} = false OR ${table.initializedAt} IS NOT NULL`,
+    ),
   ],
 );
+
+// Setup Events
 
 export const setupEvents = pgTable(
   "setup_events",
@@ -177,7 +158,7 @@ export const setupEvents = pgTable(
     userAgent: text("user_agent"),
     requestId: uuid("request_id"),
     source: AUDIT_SOURCE_ENUM("source"),
-    sessionId: text("session_id"), // hashed, not raw
+    sessionId: text("session_id"),
     correlationId: uuid("correlation_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -187,8 +168,13 @@ export const setupEvents = pgTable(
     index("setup_events_event_type_idx").on(table.eventType),
     index("setup_events_actor_user_id_idx").on(table.actorUserId),
     index("setup_events_created_at_idx").on(table.createdAt),
+    index("setup_events_request_id_idx")
+      .on(table.requestId)
+      .where(sql`${table.requestId} IS NOT NULL`),
   ],
 );
+
+// Admin Audit Logs
 
 export const adminAuditLogs = pgTable(
   "admin_audit_logs",
@@ -207,7 +193,7 @@ export const adminAuditLogs = pgTable(
     userAgent: text("user_agent"),
     requestId: uuid("request_id"),
     source: AUDIT_SOURCE_ENUM("source"),
-    sessionId: text("session_id"), // hashed, not raw
+    sessionId: text("session_id"),
     correlationId: uuid("correlation_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -218,8 +204,16 @@ export const adminAuditLogs = pgTable(
     index("admin_audit_logs_target_user_id_idx").on(table.targetUserId),
     index("admin_audit_logs_action_idx").on(table.action),
     index("admin_audit_logs_created_at_idx").on(table.createdAt),
+    index("admin_audit_logs_request_id_idx")
+      .on(table.requestId)
+      .where(sql`${table.requestId} IS NOT NULL`),
+    index("admin_audit_logs_correlation_id_idx")
+      .on(table.correlationId)
+      .where(sql`${table.correlationId} IS NOT NULL`),
   ],
 );
+
+// Books
 
 export const books = pgTable(
   "books",
@@ -235,8 +229,7 @@ export const books = pgTable(
     borrowedCount: integer("borrowed_count").notNull().default(0),
     reservedCount: integer("reserved_count").notNull().default(0),
 
-    // GENERATED ALWAYS AS (total_copies - borrowed_count - reserved_count) STORED
-    // PostgreSQL ensures this can never be inconsistent with the two source columns.
+    // GENERATED ALWAYS AS — PostgreSQL keeps this consistent automatically
     availableCopies: integer("available_copies")
       .generatedAlwaysAs(sql`total_copies - borrowed_count - reserved_count`)
       .notNull(),
@@ -251,12 +244,11 @@ export const books = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
-    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
   },
   (table) => [index("available_copies_idx").on(table.availableCopies)],
 );
+
+// Borrow Records
 
 export const borrowRecords = pgTable(
   "borrow_records",
@@ -277,7 +269,7 @@ export const borrowRecords = pgTable(
       .default("PENDING")
       .notNull(),
 
-    // Timestamp set when status = PENDING; used by expiration cron to detect stale reservations.
+    // Set when status = PENDING; used by expiration cron to detect stale reservations
     reservedAt: timestamp("reserved_at", { withTimezone: true }),
 
     isAdminCleared: boolean("is_admin_cleared").default(false).notNull(),

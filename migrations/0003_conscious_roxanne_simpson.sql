@@ -1,1 +1,0 @@
-ALTER TABLE "borrow_records" ADD COLUMN "dismissed" integer DEFAULT 0 NOT NULL;

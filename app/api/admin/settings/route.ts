@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import {
-  requireOwner,
+  requireAdmin,
   StaleSessionError,
-} from "@/lib/global/auth/require-owner";
-import {
-  PrivilegeEscalationError,
-  OwnershipTransferError,
-} from "@/lib/global/ownership-guards";
+  UnauthorizedError,
+} from "@/lib/global/auth/require-admin";
+import { PrivilegeEscalationError } from "@/lib/global/ownership-guards";
 
 export async function POST() {
   try {
@@ -18,21 +16,19 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await requireOwner({
+    await requireAdmin({
       userId: session.user.id,
       sessionVersion: session.user.sessionVersion,
     });
 
-    return NextResponse.json({
-      success: true,
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error(error);
 
     const isAuthError =
       error instanceof StaleSessionError ||
-      error instanceof PrivilegeEscalationError ||
-      error instanceof OwnershipTransferError;
+      error instanceof UnauthorizedError ||
+      error instanceof PrivilegeEscalationError;
 
     return NextResponse.json(
       {
