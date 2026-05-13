@@ -229,10 +229,7 @@ const ReviewScreen = ({
 
       <div className="grid gap-3">
         {reviewItems.map((item) => (
-          <div
-            key={item.id}
-            className="setup-review-box"
-          >
+          <div key={item.id} className="setup-review-box">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
               {item.label}
             </p>
@@ -243,9 +240,7 @@ const ReviewScreen = ({
         ))}
       </div>
 
-      <p className="setup-warning-box">
-        {REVIEW_WARNING}
-      </p>
+      <p className="setup-warning-box">{REVIEW_WARNING}</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Button
@@ -397,6 +392,7 @@ const SetupPage = () => {
       });
 
       if (signInResult?.error) {
+        window.sessionStorage.removeItem(SETUP_OWNER_STORAGE_KEY);
         router.push("/sign-in");
         router.refresh();
         return;
@@ -408,7 +404,6 @@ const SetupPage = () => {
         websiteUrl: answers.websiteUrl.trim(),
         borrowDurationDays: Number(answers.borrowDurationDays),
       });
-      window.sessionStorage.removeItem(SETUP_OWNER_STORAGE_KEY);
       showSuccessToast("Setup completed successfully");
       router.push("/admin");
       router.refresh();
@@ -417,6 +412,7 @@ const SetupPage = () => {
         error instanceof Error ? error.message : "Failed to complete setup",
       );
     } finally {
+      window.sessionStorage.removeItem(SETUP_OWNER_STORAGE_KEY);
       setIsSubmitting(false);
     }
   };

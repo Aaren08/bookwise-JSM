@@ -30,7 +30,7 @@
   }
 
   .back-btn {
-    @apply !mb-10 !w-fit !border !border-light-300 !bg-white !text-xs !font-medium !text-dark-200 hover:!bg-light-300;
+    @apply mb-10! w-fit! border! border-light-300! bg-white! text-xs! font-medium! text-dark-200! hover:bg-light-300!;
   }
 
   .generate-btn {
@@ -146,19 +146,19 @@
 
   /* Confirmation Dialog */
   .confirm-trigger {
-    @apply !font-semibold !text-sm !shadow-none hover:!opacity-70 !w-full;
+    @apply font-semibold! text-sm! shadow-none! hover:opacity-70! w-full!;
   }
 
   .confirm-approve {
-    @apply !bg-green-100 !text-green-800 hover:!bg-green-100/70;
+    @apply bg-green-100! text-green-800! hover:bg-green-100/70!;
   }
 
   .confirm-reject {
-    @apply !bg-red-100 !text-red-800 hover:!bg-red-100/70;
+    @apply bg-red-100! text-red-800! hover:bg-red-100/70!;
   }
 
   .confirm-content {
-    @apply sm:!max-w-md !flex !flex-col !items-center !justify-center !p-6;
+    @apply sm:max-w-md! flex! flex-col! items-center! justify-center! p-6!;
   }
 
   .confirm-illustration {
@@ -170,21 +170,21 @@
   }
 
   .confirm-btn {
-    @apply !w-full !min-h-14 !rounded-xl !font-bold !text-base !text-light-800;
+    @apply w-full! min-h-14! rounded-xl! font-bold! text-base! text-light-800!;
   }
 
   /* Book Form */
   .book-form_input {
-    @apply !min-h-14 !border !border-gray-100 !bg-light-600 !p-4 !text-base !font-semibold placeholder:font-normal placeholder:text-slate-500;
+    @apply min-h-14! border! border-gray-100! bg-light-600! p-4! text-base! font-semibold! placeholder:font-normal placeholder:text-slate-500!;
   }
 
   .book-form_btn {
-    @apply !min-h-14 !w-full !bg-primary-admin hover:!bg-primary-admin/95;
+    @apply min-h-14! w-full! bg-primary-admin! hover:bg-primary-admin/95!;
   }
 
   /* Home Page */
   .view-btn {
-    @apply !bg-light-300 p-2 !rounded-md !text-primary-admin !font-semibold hover:!bg-light-400 !shadow-none max-sm:text-sm;
+    @apply bg-light-300! p-2! rounded-md! text-primary-admin! font-semibold! hover:bg-light-400! shadow-none! max-sm:text-sm!;
   }
 
   .add-new-book_btn {
@@ -250,7 +250,7 @@
   }
 
   .admin-search_input {
-    @apply !w-full !border-0 !shadow-none !bg-transparent !outline-none focus:!outline-none focus:!ring-0 focus:!border-0;
+    @apply w-full! border-0! shadow-none! bg-transparent! outline-none! focus:outline-none! focus:ring-0! focus:border-0!;
   }
 
   /* Sidebar */
