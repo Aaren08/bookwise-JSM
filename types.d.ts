@@ -321,3 +321,20 @@ interface AuditMeta {
   sessionId: string; // pass in the hashed session token
   source: "SETUP" | "ADMIN_PANEL" | "API" | "SYSTEM" | "MIGRATION";
 }
+
+interface SetupOwnerDraft {
+  fullName: string;
+  email: string;
+  password: string;
+  userAvatar: string;
+  userAvatarFileId?: string | null;
+}
+
+interface AdminAuthFormValues {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  avatarUrl: string;
+  avatarFileId?: string;
+}

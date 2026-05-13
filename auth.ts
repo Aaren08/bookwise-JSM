@@ -60,6 +60,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id;
         token.name = user.name;
+        token.email = user.email;
         token.picture = user.image;
         token.role = user.role;
         token.sessionVersion =
@@ -74,6 +75,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.id = token.id as string;
         session.user.name = token.name as string;
+        session.user.email = token.email as string;
         session.user.image = token.picture as string;
         session.user.role = token.role as string;
         session.user.sessionVersion = token.sessionVersion as number;

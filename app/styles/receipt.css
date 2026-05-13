@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 .receipt-container {
-  @apply max-w-md bg-[#111624] text-white rounded-lg overflow-visible shadow-2xl border-none p-6 !text-left;
+  @apply max-w-md bg-[#111624] text-white rounded-lg overflow-visible shadow-2xl border-none p-6 text-left!;
 }
 
 .receipt-inner {
@@ -13,7 +13,7 @@
 }
 
 .receipt-logo {
-  @apply flex gap-2 text-xl font-bold tracking-tight text-white mb-3 !justify-start;
+  @apply flex gap-2 text-xl font-bold tracking-tight text-white mb-3 justify-start!;
 }
 
 .download-receipt-btn {
@@ -30,7 +30,7 @@
 }
 
 .receipt-meta .card-info-row {
-  @apply flex gap-2 !justify-start;
+  @apply flex gap-2 justify-start!;
 }
 
 .receipt-meta .card-info-label {
@@ -55,7 +55,7 @@
 }
 
 .receipt-section .card-info-row {
-  @apply flex items-start gap-2 !justify-start;
+  @apply flex items-start gap-2 justify-start!;
 }
 
 .receipt-section .card-info-label {
@@ -85,7 +85,7 @@
 }
 
 .receipt-terms li {
-  @apply flex !items-start gap-2 text-sm text-gray-400 !justify-start;
+  @apply flex items-start! gap-2 text-sm text-gray-400 justify-start!;
 }
 
 .receipt-terms li::before {

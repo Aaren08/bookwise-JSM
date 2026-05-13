@@ -1,282 +1,119 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useRef, useCallback } from "react";
-import Cropper, { Area } from "react-easy-crop";
-import getCroppedImg from "@/lib/essentials/imageCrop";
-import { upload } from "@imagekit/next";
-import { cn } from "@/lib/utils";
-import "@/app/styles/animate.css";
-import Image from "next/image";
 import { useSession } from "next-auth/react";
+import AvatarUploadControls from "@/components/AvatarUploadControls";
 import {
-  showErrorToast,
-  showSuccessToast,
-  showFileErrorToast,
-} from "@/lib/essentials/toast-utils";
-import {
-  generateSafeFilename,
-  isAllowedMimeType,
-} from "@/lib/essentials/sanitizeFileExt";
+  AvatarUploadResult,
+  useAvatarUpload,
+  UseAvatarUploadReturn,
+} from "@/lib/global/essentials/use-avatar-upload";
+import { showSuccessToast } from "@/lib/essentials/toast-utils";
 
-const ImageCropper = ({ userAvatar }: { userAvatar: string }) => {
-  const router = useRouter();
-  const { data: session, update } = useSession();
-  const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null);
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [rotation] = useState(0);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [showCropper, setShowCropper] = useState(false);
+interface ImageCropperProps {
+  userAvatar?: string | null;
+  avatarUpload?: UseAvatarUploadReturn;
+  fallbackAvatar?: string;
+  ariaLabel?: string;
+  saveLabel?: string;
+  triggerClassName?: string;
+  avatarClassName?: string;
+  hoverOverlayClassName?: string;
+}
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const currentAvatar = uploadedAvatar || session?.user?.image || userAvatar;
-
-  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-
-      // Validate file MIME type
-      if (!isAllowedMimeType(file.type)) {
-        showFileErrorToast(
-          "Invalid file type",
-          `File type ${file.type} is not allowed. Please upload a valid image file.`,
-        );
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.addEventListener("load", () => {
-        setImageSrc(reader.result?.toString() || null);
-        setShowCropper(true);
-      });
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const onCropComplete = useCallback(
-    (croppedArea: Area, croppedAreaPixels: Area) => {
-      setCroppedAreaPixels(croppedAreaPixels);
-    },
-    [],
-  );
-
-  const authenticator = async () => {
-    try {
-      const response = await fetch("/api/auth/imagekit");
-      if (!response.ok) {
-        throw new Error("Authentication request failed");
-      }
-      return await response.json();
-    } catch (error) {
-      console.error("Authentication error:", error);
-      throw error;
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!imageSrc || !croppedAreaPixels) return;
-
-    try {
-      setIsUploading(true);
-      setShowCropper(false);
-
-      const croppedImageBlob = (await getCroppedImg(
-        imageSrc,
-        croppedAreaPixels,
-        rotation,
-      )) as string;
-
-      const response = await fetch(croppedImageBlob);
-      const blob = await response.blob();
-
-      // Validate blob MIME type
-      if (!isAllowedMimeType(blob.type)) {
-        showErrorToast("Invalid image type. Please upload a valid image file.");
-        setIsUploading(false);
-        return;
-      }
-
-      // Create file with sanitized filename
-      const safeFileName = generateSafeFilename(
-        `avatar-${Date.now()}`,
-        blob.type,
-      );
-
-      const file = new File([blob], safeFileName, { type: blob.type });
-
-      const authParams = await authenticator();
-
-      const uploadResponse = await upload({
-        file,
-        fileName: safeFileName,
-        folder: "/users/avatars",
-        ...authParams,
-      });
-
-      if (uploadResponse.url) {
-        // Call API route to update user avatar with rate limiting
-        const apiResponse = await fetch("/api/avatar", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            imageUrl: uploadResponse.url,
-            fileId: uploadResponse.fileId,
-          }),
-        });
-
-        const result = await apiResponse.json();
-
-        if (apiResponse.ok && result.success) {
-          // Update local state immediately for instant feedback
-          setUploadedAvatar(uploadResponse.url);
-
-          // Update session with new image URL - this is crucial for persistence
-          await update({
-            ...session,
-            user: {
-              ...session?.user,
-              image: uploadResponse.url,
-            },
-          });
-
-          showSuccessToast("Profile updated successfully");
-
-          // Refresh the router to update all components
-          router.refresh();
-        } else {
-          showErrorToast(result.error || "Failed to update profile image");
-        }
-      }
-    } catch (error) {
-      console.error("Upload error:", error);
-      showErrorToast("Failed to upload image");
-    } finally {
-      setIsUploading(false);
-      setImageSrc(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
+const ImageCropper = ({
+  userAvatar,
+  avatarUpload,
+  fallbackAvatar,
+  ariaLabel,
+  saveLabel,
+  triggerClassName,
+  avatarClassName,
+  hoverOverlayClassName,
+}: ImageCropperProps) => {
+  if (avatarUpload) {
+    return (
+      <AvatarUploadControls
+        avatarUpload={avatarUpload}
+        fallbackAvatar={fallbackAvatar}
+        ariaLabel={ariaLabel}
+        saveLabel={saveLabel}
+        triggerClassName={triggerClassName}
+        avatarClassName={avatarClassName}
+        hoverOverlayClassName={hoverOverlayClassName}
+      />
+    );
+  }
 
   return (
-    <>
-      {/* File Input */}
-      <input
-        type="file"
-        accept="image/*"
-        ref={fileInputRef}
-        onChange={onFileChange}
-        className="hidden"
-      />
+    <ProfileImageCropper
+      userAvatar={userAvatar}
+      fallbackAvatar={fallbackAvatar}
+      ariaLabel={ariaLabel}
+      saveLabel={saveLabel}
+      triggerClassName={triggerClassName}
+      avatarClassName={avatarClassName}
+      hoverOverlayClassName={hoverOverlayClassName}
+    />
+  );
+};
 
-      {/* Cropper Modal */}
-      {showCropper && (
-        <div className="cropper-modal">
-          <div className="cropper-content">
-            <div className="cropper-image_container">
-              <Cropper
-                image={imageSrc!}
-                crop={crop}
-                zoom={zoom}
-                rotation={rotation}
-                aspect={1}
-                onCropChange={setCrop}
-                onCropComplete={onCropComplete}
-                onZoomChange={setZoom}
-                showGrid={true}
-                cropShape="round"
-              />
-            </div>
+const ProfileImageCropper = ({
+  userAvatar,
+  fallbackAvatar,
+  ariaLabel,
+  saveLabel,
+  triggerClassName,
+  avatarClassName,
+  hoverOverlayClassName,
+}: Omit<ImageCropperProps, "avatarUpload">) => {
+  const router = useRouter();
+  const { data: session, update } = useSession();
 
-            <div className="cropper-controls">
-              <div className="cropper-zoom_slider">
-                <span className="text-sm text-light-200">Zoom</span>
-                <input
-                  type="range"
-                  value={zoom}
-                  min={1}
-                  max={3}
-                  step={0.1}
-                  aria-labelledby="Zoom"
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  className="cropper-zoom_input"
-                />
-              </div>
+  const profileAvatarUpload = useAvatarUpload({
+    initialAvatar: session?.user?.image || userAvatar,
+    fallbackAvatar,
+    async onUploadComplete(result: AvatarUploadResult) {
+      const apiResponse = await fetch("/api/avatar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageUrl: result.url,
+          fileId: result.fileId,
+        }),
+      });
 
-              <div className="cropper-btn_container">
-                <button
-                  onClick={() => {
-                    setShowCropper(false);
-                    setImageSrc(null);
-                    if (fileInputRef.current) {
-                      fileInputRef.current.value = "";
-                    }
-                  }}
-                  className="cropper-cancel_btn"
-                >
-                  Cancel
-                </button>
-                <button onClick={handleUpload} className="cropper-save_btn">
-                  Save & Upload
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      const apiResult = await apiResponse.json();
 
-      {/* Trigger Button / Avatar Display */}
-      <button
-        type="button"
-        className="cropper-avatar_trigger"
-        onClick={() => !isUploading && fileInputRef.current?.click()}
-        disabled={isUploading}
-        aria-label="Change avatar"
-      >
-        <div className="cropper-avatar_circle">
-          {isUploading ? (
-            <div className="loader" />
-          ) : (
-            <>
-              <Image
-                src={currentAvatar || "/icons/user-fill.svg"}
-                alt="user avatar"
-                fill={!!currentAvatar}
-                width={!currentAvatar ? 40 : undefined}
-                height={!currentAvatar ? 40 : undefined}
-                className={cn(
-                  "object-cover",
-                  !currentAvatar && "object-contain w-10 h-10",
-                )}
-              />
+      if (!apiResponse.ok || !apiResult.success) {
+        throw new Error(apiResult.error || "Failed to update profile image");
+      }
 
-              {/* Hover Overlay */}
-              <div className="cropper-hover_overlay">
-                <Image
-                  src={
-                    currentAvatar && currentAvatar !== "/icons/user-fill.svg"
-                      ? "/icons/edit.svg"
-                      : "/icons/camera.svg"
-                  }
-                  alt="upload"
-                  width={24}
-                  height={24}
-                />
-              </div>
-            </>
-          )}
-        </div>
-      </button>
-    </>
+      await update({
+        ...session,
+        user: {
+          ...session?.user,
+          image: result.url,
+        },
+      });
+
+      showSuccessToast("Profile updated successfully");
+      router.refresh();
+    },
+  });
+
+  return (
+    <AvatarUploadControls
+      avatarUpload={profileAvatarUpload}
+      fallbackAvatar={fallbackAvatar}
+      ariaLabel={ariaLabel}
+      saveLabel={saveLabel}
+      triggerClassName={triggerClassName}
+      avatarClassName={avatarClassName}
+      hoverOverlayClassName={hoverOverlayClassName}
+    />
   );
 };
 

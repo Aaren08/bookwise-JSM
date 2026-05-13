@@ -106,11 +106,11 @@
   }
 
   .form-btn {
-    @apply !bg-primary !text-dark-100 hover:!bg-primary/90 cursor-pointer !inline-flex !min-h-14 !w-full !items-center !justify-center !rounded-md !px-6 !py-2 !font-bold !text-base;
+    @apply bg-primary! text-dark-100! hover:bg-primary/90! cursor-pointer inline-flex! min-h-14! w-full! items-center! justify-center! rounded-md! px-6! py-2! font-bold! text-base!;
   }
 
   .form-input {
-    @apply !w-full !min-h-14 !border-none !text-base !font-bold placeholder:!font-normal !text-white placeholder:!text-light-100 focus-visible:!ring-0 focus-visible:!shadow-none !bg-dark-300;
+    @apply w-full! min-h-14! border-none! text-base! font-bold! placeholder:font-normal! text-white placeholder:text-light-100! focus-visible:ring-0! focus-visible:shadow-none! bg-dark-300!;
   }
 
   .password-toggle {
@@ -209,7 +209,7 @@
   }
 
   .book-overview_btn {
-    @apply !mt-4 !min-h-14 !w-fit !bg-primary !text-dark-100 hover:!bg-primary/90 max-md:!w-full;
+    @apply mt-4! min-h-14! w-fit! bg-primary! text-dark-100! hover:bg-primary/90! max-md:w-full!;
   }
 
   /* File Upload */
@@ -236,12 +236,12 @@
   }
 
   .search-input {
-    @apply !w-full !border-none !font-bold placeholder:!font-normal !text-white placeholder:!text-light-100 focus-visible:!ring-0 focus-visible:!shadow-none;
+    @apply w-full! border-none! font-bold! placeholder:font-normal! text-white! placeholder:text-light-100! focus-visible:ring-0! focus-visible:shadow-none!;
   }
 
   /* Book Receipt */
   .book-receipt_admin-btn {
-    @apply !bg-light-300 !rounded-md !text-primary-admin !font-semibold hover:!bg-light-300/80;
+    @apply bg-light-300! rounded-md! text-primary-admin! font-semibold! hover:bg-light-300/80!;
   }
 
   /* Book Ticket */
@@ -287,7 +287,7 @@
   }
 
   .not-found-btn {
-    @apply !bg-primary !min-w-[360px] !mt-6 !text-dark-100 !text-xl hover:!bg-primary/90 !min-h-12;
+    @apply bg-primary! min-w-[360px]! mt-6! text-dark-100! text-xl! hover:bg-primary/90! min-h-12!;
     font-family: var(--bebas-neue) !important;
   }
 
@@ -297,11 +297,11 @@
   }
 
   .pagination-btn_light {
-    @apply !bg-primary !text-dark-100 hover:!bg-primary/90;
+    @apply bg-primary! text-dark-100! hover:bg-primary/90!;
   }
 
   .pagination-btn_dark {
-    @apply !bg-dark-300 !text-light-100 hover:!bg-dark-100;
+    @apply bg-dark-300! text-light-100! hover:bg-dark-100!;
   }
 
   #pagination p {
@@ -310,15 +310,15 @@
 
   /* Sort */
   .select-trigger {
-    @apply !w-45 !h-10 !px-4 !bg-dark-300 !text-light-100 !border-dark-100;
+    @apply w-45! h-10! px-4! bg-dark-300! text-light-100! border-dark-100!;
   }
 
   .select-content {
-    @apply !bg-dark-300 !text-light-100 !border-dark-100;
+    @apply bg-dark-300! text-light-100! border-dark-100!;
   }
 
   .select-item {
-    @apply focus:!bg-dark-600 focus:!text-light-100;
+    @apply focus:bg-dark-600! focus:text-light-100!;
   }
 
   /* Cropper Component */
@@ -490,6 +490,79 @@
 
   .confirmation-link-btn {
     @apply mt-6 inline-flex w-full min-h-12 items-center justify-center rounded-md bg-primary px-6 py-2 text-base font-bold text-dark-100 transition-colors hover:bg-primary/90;
+  }
+
+  /* Admin & Setup UI */
+  .admin-main {
+    @apply min-h-screen bg-gradient-to-br from-white via-sky-50 to-blue-100 px-5 py-12;
+  }
+
+  .admin-section {
+    @apply flex min-h-[calc(100vh-6rem)] items-center justify-center;
+  }
+
+  .admin-card {
+    @apply relative w-full max-w-[430px] rounded-[28px] bg-white/95 px-8 pb-8 pt-20 shadow-[0_28px_90px_rgba(37,56,140,0.16)] ring-1 ring-blue-100/70 backdrop-blur;
+  }
+
+  .setup-card {
+    @apply w-full max-w-[560px] rounded-[28px] bg-white/95 p-8 shadow-[0_28px_90px_rgba(37,56,140,0.16)] ring-1 ring-blue-100/70 backdrop-blur sm:p-10;
+  }
+
+  .admin-avatar-wrapper {
+    @apply absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2;
+  }
+
+  .admin-avatar-inner {
+    @apply rounded-full border-[6px] border-white bg-white shadow-[0_18px_45px_rgba(37,56,140,0.22)];
+  }
+
+  .admin-avatar-cropper {
+    @apply h-28! w-28! border-0! bg-sky-50!;
+  }
+
+  .admin-avatar-hover {
+    @apply rounded-full;
+  }
+
+  .admin-input {
+    @apply min-h-12 rounded-full border-0 bg-slate-100 px-6 text-slate-900 shadow-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary-admin/30;
+  }
+
+  .admin-password-input {
+    @apply min-h-12 rounded-full border-0 bg-slate-100 px-6 pr-12 text-slate-900 shadow-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary-admin/30;
+  }
+
+  .setup-input {
+    @apply min-h-14 rounded-full border-0 bg-slate-100 px-6 text-base text-slate-900 shadow-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary-admin/30;
+  }
+
+  .admin-btn-primary {
+    @apply min-h-12 rounded-full bg-primary-admin! px-6 text-base font-semibold text-white shadow-[0_14px_28px_rgba(37,56,140,0.22)] transition hover:bg-primary-admin/95! disabled:opacity-60 cursor-pointer;
+  }
+
+  .admin-btn-secondary {
+    @apply min-h-12 rounded-full border border-slate-200 bg-white px-6 text-base font-semibold text-slate-700 shadow-none transition hover:bg-slate-50 cursor-pointer;
+  }
+
+  .setup-back-btn {
+    @apply inline-flex size-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer;
+  }
+
+  .setup-icon-box {
+    @apply mb-5 inline-flex size-12 items-center justify-center rounded-2xl bg-sky-50 text-primary-admin;
+  }
+
+  .setup-success-icon-box {
+    @apply inline-flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600;
+  }
+
+  .setup-review-box {
+    @apply rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4;
+  }
+
+  .setup-warning-box {
+    @apply rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-medium leading-6 text-amber-800;
   }
 }
 

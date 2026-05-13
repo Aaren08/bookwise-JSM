@@ -23,10 +23,13 @@ import { broadcastBookAvailabilityUpdate } from "@/lib/admin/realtime/broadcast/
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql } from "drizzle-orm";
-import dayjs from "dayjs";
 import { NextResponse } from "next/server";
 import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
+import {
+  getBorrowDurationDays,
+  getDueDateFromBorrowDuration,
+} from "@/lib/global/system-config";
 
 export async function POST(request: Request) {
   try {
@@ -79,7 +82,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
+    const borrowDurationDays = await getBorrowDurationDays();
+    const dueDate = getDueDateFromBorrowDuration(borrowDurationDays).format(
+      "YYYY-MM-DD",
+    );
 
     /**
      * Single atomic CTE — replaces the db.transaction() block.

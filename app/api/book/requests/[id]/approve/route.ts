@@ -22,6 +22,10 @@ import {
   getBorrowRecordById,
   validateBorrowStatusTransition,
 } from "@/lib/admin/actions/borrow";
+import {
+  getBorrowDurationDays,
+  getDueDateFromBorrowDuration,
+} from "@/lib/global/system-config";
 
 export async function PATCH(
   request: Request,
@@ -90,6 +94,11 @@ export async function PATCH(
         );
       }
 
+      const borrowDurationDays = await getBorrowDurationDays();
+      const dueDate = getDueDateFromBorrowDuration(borrowDurationDays).format(
+        "YYYY-MM-DD",
+      );
+
       const result = await db.execute<{
         id: string;
         availableCopies: number;
@@ -100,6 +109,8 @@ export async function PATCH(
         WITH updated_borrow AS (
           UPDATE ${borrowRecords}
           SET borrow_status = 'BORROWED',
+              borrow_date = NOW(),
+              due_date = ${dueDate}::date,
               updated_at = NOW(),
               version = version + 1
           WHERE id = ${recordId}

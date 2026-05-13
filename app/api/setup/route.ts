@@ -14,6 +14,8 @@ const setupBodySchema = z.object({
   fullName: z.string().trim().min(1).max(255),
   email: z.email().max(255),
   password: z.string().min(8).max(256),
+  userAvatar: z.url().optional().nullable(),
+  userAvatarFileId: z.string().optional().nullable(),
   borrowDurationDays: z.number().int().min(1).max(365),
   supportEmail: z.email().max(255),
   websiteUrl: z.url(),
@@ -37,6 +39,8 @@ export async function POST(req: NextRequest) {
       fullName,
       email,
       password,
+      userAvatar,
+      userAvatarFileId,
       borrowDurationDays,
       supportEmail,
       websiteUrl,
@@ -79,6 +83,7 @@ export async function POST(req: NextRequest) {
             INSERT INTO users (
               full_name, email, password,
               status, role,
+              user_avatar, user_avatar_file_id,
               session_version, version
             )
             SELECT
@@ -87,6 +92,8 @@ export async function POST(req: NextRequest) {
               ${hashedPassword},
               'APPROVED'::status,
               'ADMIN'::role,
+              ${userAvatar ?? null},
+              ${userAvatarFileId ?? null},
               1, 1
             WHERE NOT EXISTS (
               SELECT 1 FROM guard

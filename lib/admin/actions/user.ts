@@ -465,6 +465,7 @@ export const updateUserRole = async ({
 
     try {
       // Bump BOTH record version AND session version atomically
+      // If downgrading to USER, ensure at least one admin remains via atomic DB condition
       const [updatedUser] = await db
         .update(users)
         .set({
@@ -480,10 +481,25 @@ export const updateUserRole = async ({
             ELSE ${users.sessionVersion}
           END`,
         })
-        .where(and(eq(users.id, userId), eq(users.version, expectedVersion)))
+        .where(
+          and(
+            eq(users.id, userId),
+            eq(users.version, expectedVersion),
+            role === "USER"
+              ? sql`(${users.role} != 'ADMIN' OR (SELECT count(*) FROM ${users} WHERE ${users.role} = 'ADMIN') > 1)`
+              : undefined,
+          ),
+        )
         .returning();
 
       if (!updatedUser) {
+        if (role === "USER") {
+          return {
+            success: false,
+            error:
+              "At least one administrator is required. Cannot downgrade the last administrator.",
+          };
+        }
         throw new Error(CONFLICT_ERROR_MESSAGE);
       }
 

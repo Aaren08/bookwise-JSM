@@ -7,6 +7,10 @@ import { handleSignOut } from "@/lib/actions/auth";
 import { AdminSidebarLink } from "@/components/navigation/AdminSidebarLink";
 
 const Sidebar = ({ session }: { session: Session }) => {
+  const displayName = session.user?.name || session.user?.email || "Admin";
+  const displayEmail = session.user?.email || "";
+  const displayImage = session.user?.image || "";
+
   return (
     <div className="admin-sidebar">
       <div>
@@ -36,11 +40,11 @@ const Sidebar = ({ session }: { session: Session }) => {
         <div className="relative">
           <Avatar className="size-10">
             <AvatarImage
-              src={session.user?.image || ""}
-              alt={session.user?.name || ""}
+              src={displayImage}
+              alt={displayName}
             />
             <AvatarFallback className="bg-light-100 font-bold">
-              {getInitials(session?.user?.name || "")}
+              {getInitials(displayName)}
             </AvatarFallback>
           </Avatar>
           <div className="size-3 rounded-full bg-green-500 absolute bottom-0 right-0" />
@@ -49,10 +53,10 @@ const Sidebar = ({ session }: { session: Session }) => {
         <div className="flex flex-row min-w-0 flex-1">
           <div className="flex flex-col max-md:hidden min-w-0 flex-1">
             <p className="text-dark-200 font-semibold truncate">
-              {session?.user?.name}
+              {displayName}
             </p>
             <p className="text-xs text-light-500 truncate">
-              {session?.user?.email}
+              {displayEmail}
             </p>
           </div>
           <form action={handleSignOut} className="mt-2.5 ml-2.5 shrink-0">
