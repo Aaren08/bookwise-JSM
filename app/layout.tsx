@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import SystemConfigProvider from "@/components/SystemConfigProvider";
+import { getSystemConfig } from "@/lib/global/system-config";
 import "./styles/globals.css";
 import "./styles/animate.css";
 import "./styles/receipt.css";
@@ -34,12 +36,16 @@ export default async function RootLayout({
 }: {
   children: ReactNode;
 }) {
+  const systemConfig = await getSystemConfig();
+
   return (
     <html lang="en">
       <body
         className={`${ibmPlexSans.variable} ${bebasNeue.variable} antialiased`}
       >
-        {children}
+        <SystemConfigProvider config={systemConfig}>
+          {children}
+        </SystemConfigProvider>
         <Toaster />
       </body>
     </html>

@@ -1,8 +1,11 @@
+"use client";
+
 import Image from "next/image";
 import React from "react";
 import { X, Download } from "lucide-react";
 import { downloadReceiptAsPDF } from "../lib/essentials/downloadReceipt";
 import { toast } from "sonner";
+import { useSystemConfig } from "@/lib/store/system-config-store";
 
 export type Receipt = {
   receiptId: string;
@@ -35,6 +38,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
   receipt,
   borrowStatus,
 }) => {
+  const { websiteUrl, supportEmail } = useSystemConfig();
+
   if (!isOpen || !receipt) return null;
 
   const handleDownloadPDF = async () => {
@@ -159,10 +164,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   Thank you for using <strong>BookWise</strong>!
                 </p>
                 <p>
-                  Website: <strong>bookwise.example.com</strong>
+                  Website: <strong>{websiteUrl}</strong>
                 </p>
                 <p>
-                  Email: <strong>support@bookwise.example.com</strong>
+                  Email: <strong>{supportEmail}</strong>
                 </p>
               </div>
             </div>

@@ -1,5 +1,15 @@
+"use client";
+
 import Image from "next/image";
-import { LazyImageCropper } from "@/lib/performance/bundle";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import AvatarUploadControls from "@/components/AvatarUploadControls";
+import {
+  AvatarUploadResult,
+  useAvatarUpload,
+} from "@/lib/global/essentials/use-avatar-upload";
+import { showSuccessToast } from "@/lib/essentials/toast-utils";
+import { useSystemConfig } from "@/lib/store/system-config-store";
 
 const UserProfile = ({
   fullName,
@@ -9,6 +19,43 @@ const UserProfile = ({
   userAvatar,
   status = "PENDING",
 }: UserProfileProps) => {
+  const router = useRouter();
+  const { data: session, update } = useSession();
+  const { instituteName } = useSystemConfig();
+
+  const avatarUpload = useAvatarUpload({
+    initialAvatar: session?.user?.image || userAvatar,
+    async onUploadComplete(result: AvatarUploadResult) {
+      const apiResponse = await fetch("/api/avatar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageUrl: result.url,
+          fileId: result.fileId,
+        }),
+      });
+
+      const apiResult = await apiResponse.json();
+
+      if (!apiResponse.ok || !apiResult.success) {
+        throw new Error(apiResult.error || "Failed to update profile image");
+      }
+
+      await update({
+        ...session,
+        user: {
+          ...session?.user,
+          image: result.url,
+        },
+      });
+
+      showSuccessToast("Profile updated successfully");
+      router.refresh();
+    },
+  });
+
   const getStatusConfig = () => {
     switch (status) {
       case "APPROVED":
@@ -49,7 +96,7 @@ const UserProfile = ({
       {/* User Profile Card */}
       <div className="profile-card">
         <div className="profile-header">
-          <LazyImageCropper userAvatar={userAvatar} />
+          <AvatarUploadControls avatarUpload={avatarUpload} />
 
           <div className="profile-details">
             {/* Status Badge */}
@@ -73,7 +120,7 @@ const UserProfile = ({
         <div className="profile-info_container">
           <div>
             <p className="profile-info_label">University</p>
-            <p className="profile-info_value">JS Mastery Pro</p>
+            <p className="profile-info_value">{instituteName}</p>
           </div>
 
           <div>

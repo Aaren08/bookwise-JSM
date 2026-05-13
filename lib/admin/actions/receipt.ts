@@ -11,6 +11,11 @@ import {
   requireAdminActor,
 } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
+import {
+  formatBorrowDuration,
+  getBorrowDurationDays,
+  getDueDateFromBorrowDuration,
+} from "@/lib/global/system-config";
 
 export const generateReceipt = async (borrowRecordId: string) => {
   try {
@@ -56,7 +61,9 @@ export const generateReceipt = async (borrowRecordId: string) => {
 
     // Update the record to BORROWED and set current dates
     const now = new Date();
-    const dueDateObj = dayjs().add(14, "days").toDate();
+    const borrowDurationDays = await getBorrowDurationDays();
+    const dueDateObj =
+      getDueDateFromBorrowDuration(borrowDurationDays).toDate();
 
     await db
       .update(borrowRecords)
@@ -94,8 +101,7 @@ export const generateReceipt = async (borrowRecordId: string) => {
     const borrowedOn = dayjs(now).format("DD/MM/YYYY");
     const dueDate = dayjs(dueDateObj).format("DD/MM/YYYY");
 
-    // Calculate duration (just an example, or could be fixed 14 days)
-    const duration = "14 Days";
+    const duration = formatBorrowDuration(borrowDurationDays);
 
     const receipt = {
       receiptId: data.id.substring(0, 8).toUpperCase(), // Short ID for display
@@ -160,8 +166,11 @@ export const getReceipt = async (borrowRecordId: string) => {
     const borrowedOn = dayjs(data.borrowDate).format("DD/MM/YYYY");
     const dueDate = dayjs(data.dueDate).format("DD/MM/YYYY");
 
-    // Calculate duration (just an example, or could be fixed 14 days)
-    const duration = "14 Days";
+    const durationDays = dayjs(data.dueDate).diff(
+      dayjs(data.borrowDate).startOf("day"),
+      "day",
+    );
+    const duration = formatBorrowDuration(durationDays);
 
     const receipt = {
       receiptId: data.id.substring(0, 8).toUpperCase(), // Short ID for display

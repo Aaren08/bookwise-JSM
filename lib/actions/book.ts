@@ -5,7 +5,6 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
 import { auth } from "@/auth";
-import dayjs from "dayjs";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
@@ -14,6 +13,10 @@ import { CACHE_TAGS, getSimilarBooksCached } from "@/lib/performance/cache";
 import { sql } from "drizzle-orm";
 import { publishEvent } from "@/lib/admin/realtime/concurrency/rowConcurrency";
 import { getBorrowRecordById } from "@/lib/admin/actions/borrow";
+import {
+  getBorrowDurationDays,
+  getDueDateFromBorrowDuration,
+} from "@/lib/global/system-config";
 
 /**
  * borrowBook — Server Action
@@ -102,7 +105,10 @@ export const borrowBook = async (params: BorrowBookParams) => {
     }
 
     // ── 4. Insert the PENDING borrow record ───────────────────────────────────
-    const dueDate = dayjs().add(14, "days").format("YYYY-MM-DD");
+    const borrowDurationDays = await getBorrowDurationDays();
+    const dueDate = getDueDateFromBorrowDuration(borrowDurationDays).format(
+      "YYYY-MM-DD",
+    );
     const now = new Date();
 
     const [record] = await db
