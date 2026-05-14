@@ -15,7 +15,7 @@ export async function requireUninitialized(): Promise<void> {
     WHERE id = true
   `);
 
-  const row = result.rows[0];
+  const row = result[0];
   if (!row) return; // No singleton row yet → not initialized
 
   const isInitialized =

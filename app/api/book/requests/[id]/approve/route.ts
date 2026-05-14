@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords } from "@/database/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
@@ -49,6 +49,7 @@ export async function PATCH(
         { status: 400 },
       );
     }
+    const expectedVersion = body.expectedVersion;
 
     try {
       await assertLockOwnership(
@@ -65,88 +66,102 @@ export async function PATCH(
     }
 
     try {
-      const [current] = await db
-        .select({
-          id: borrowRecords.id,
-          bookId: borrowRecords.bookId,
-          borrowStatus: borrowRecords.borrowStatus,
-        })
-        .from(borrowRecords)
-        .where(eq(borrowRecords.id, recordId))
-        .limit(1);
+      const borrowDurationDays = await getBorrowDurationDays();
+      const dueDate = getDueDateFromBorrowDuration(borrowDurationDays).format(
+        "YYYY-MM-DD",
+      );
 
-      if (!current) {
+      const result = await db.transaction(async (tx) => {
+        const [current] = await tx
+          .select({
+            id: borrowRecords.id,
+            bookId: borrowRecords.bookId,
+            borrowStatus: borrowRecords.borrowStatus,
+          })
+          .from(borrowRecords)
+          .where(eq(borrowRecords.id, recordId))
+          .limit(1)
+          .for("update");
+
+        if (!current) {
+          return { type: "not-found" as const };
+        }
+
+        if (
+          !(await validateBorrowStatusTransition(
+            current.borrowStatus,
+            "BORROWED",
+          ))
+        ) {
+          return { type: "invalid-transition" as const };
+        }
+
+        const [updatedRecord] = await tx
+          .update(borrowRecords)
+          .set({
+            borrowStatus: "BORROWED",
+            borrowDate: new Date(),
+            dueDate,
+            updatedAt: new Date(),
+            version: sql`${borrowRecords.version} + 1`,
+          })
+          .where(
+            and(
+              eq(borrowRecords.id, recordId),
+              eq(borrowRecords.borrowStatus, "PENDING"),
+              eq(borrowRecords.version, expectedVersion),
+            ),
+          )
+          .returning({
+            id: borrowRecords.id,
+            bookId: borrowRecords.bookId,
+          });
+
+        if (!updatedRecord) {
+          return { type: "conflict" as const };
+        }
+
+        const [updatedBook] = await tx
+          .update(books)
+          .set({
+            reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
+            borrowedCount: sql`${books.borrowedCount} + 1`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, updatedRecord.bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+            version: books.version,
+          });
+
+        return { type: "success" as const, current, updatedBook };
+      });
+
+      if (result.type === "not-found") {
         return NextResponse.json(
           { error: "Borrow record not found." },
           { status: 404 },
         );
       }
 
-      if (
-        !(await validateBorrowStatusTransition(
-          current.borrowStatus,
-          "BORROWED",
-        ))
-      ) {
+      if (result.type === "invalid-transition") {
         return NextResponse.json(
           { error: "Invalid status transition" },
           { status: 409 },
         );
       }
 
-      const borrowDurationDays = await getBorrowDurationDays();
-      const dueDate = getDueDateFromBorrowDuration(borrowDurationDays).format(
-        "YYYY-MM-DD",
-      );
-
-      const result = await db.execute<{
-        id: string;
-        availableCopies: number;
-        reservedCount: number;
-        borrowedCount: number;
-        version: number;
-      }>(sql`
-        WITH updated_borrow AS (
-          UPDATE ${borrowRecords}
-          SET borrow_status = 'BORROWED',
-              borrow_date = NOW(),
-              due_date = ${dueDate}::date,
-              updated_at = NOW(),
-              version = version + 1
-          WHERE id = ${recordId}
-            AND borrow_status = 'PENDING'
-            AND version = ${body.expectedVersion}
-          RETURNING id, book_id
-        ),
-        updated_book AS (
-          UPDATE ${books}
-          SET reserved_count = GREATEST(0, reserved_count - 1),
-              borrowed_count = borrowed_count + 1,
-              updated_at = NOW(),
-              version = version + 1
-          WHERE id = (SELECT book_id FROM updated_borrow)
-          RETURNING available_copies, reserved_count, borrowed_count, version
-        )
-        SELECT
-          ub.id,
-          bk.available_copies as "availableCopies",
-          bk.reserved_count as "reservedCount",
-          bk.borrowed_count as "borrowedCount",
-          bk.version as "version"
-        FROM updated_borrow ub
-        JOIN updated_book bk ON true;
-      `);
-
-      const [row] = result.rows;
-
-      if (!row) {
+      if (result.type === "conflict") {
         return NextResponse.json(
           { error: CONFLICT_ERROR_MESSAGE },
           { status: 409 },
         );
       }
 
-      const updatedBook = row;
+      const { current, updatedBook } = result;
 
       revalidatePath("/admin/borrow-records");
       revalidatePath("/my-profile");

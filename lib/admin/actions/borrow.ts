@@ -193,93 +193,66 @@ export const updateBorrowStatus = async ({
 
     const needsBookUpdate = reservedChange !== 0 || borrowedChange !== 0;
 
-    /**
-     * Single atomic CTE — replaces the db.transaction() block.
-     *
-     * updated_record: updates borrow_records with an optimistic-lock version
-     *   check. Returns 0 rows on conflict → all downstream CTEs are no-ops.
-     *
-     * updated_book: conditionally updates books counters only when:
-     *   a) updated_record succeeded (EXISTS guard), AND
-     *   b) at least one counter actually changes (needsBookUpdate param).
-     *
-     * current_book: fallback SELECT used when no counter update is needed,
-     *   so the final SELECT always has book state to return.
-     *
-     * The COALESCE in the final SELECT merges both paths into one result row.
-     */
-    const queryResult = await db.execute(sql`
-      WITH
-      updated_record AS (
-        UPDATE borrow_records
-        SET
-          borrow_status = ${status},
-          return_date   = ${returnDate},
-          updated_at    = NOW(),
-          version       = version + 1
-        WHERE
-          id      = ${borrowRecordId}
-          AND version = ${expectedVersion}
-        RETURNING id, book_id
-      ),
-      updated_book AS (
-        UPDATE books
-        SET
-          reserved_count = GREATEST(0, reserved_count + ${reservedChange}),
-          borrowed_count = GREATEST(0, borrowed_count + ${borrowedChange}),
-          updated_at     = NOW(),
-          version        = version + 1
-        WHERE
-          id = (SELECT book_id FROM updated_record)
-          AND EXISTS (SELECT 1 FROM updated_record)
-          AND ${needsBookUpdate} = TRUE
-        RETURNING available_copies, reserved_count, borrowed_count
-      ),
-      current_book AS (
-        SELECT available_copies, reserved_count, borrowed_count
-        FROM books
-        WHERE
-          id = (SELECT book_id FROM updated_record)
-          AND NOT EXISTS (SELECT 1 FROM updated_book)
-          AND EXISTS (SELECT 1 FROM updated_record)
-      )
-      SELECT
-        (SELECT id FROM updated_record)   AS record_id,
-        COALESCE(
-          (SELECT available_copies FROM updated_book),
-          (SELECT available_copies FROM current_book)
-        )                                 AS available_copies,
-        COALESCE(
-          (SELECT reserved_count   FROM updated_book),
-          (SELECT reserved_count   FROM current_book)
-        )                                 AS reserved_count,
-        COALESCE(
-          (SELECT borrowed_count   FROM updated_book),
-          (SELECT borrowed_count   FROM current_book)
-        )                                 AS borrowed_count
-    `);
+    const result = await db.transaction(async (tx) => {
+      const [updatedRecord] = await tx
+        .update(borrowRecords)
+        .set({
+          borrowStatus: status,
+          returnDate,
+          updatedAt: new Date(),
+          version: sql`${borrowRecords.version} + 1`,
+        })
+        .where(
+          and(
+            eq(borrowRecords.id, borrowRecordId),
+            eq(borrowRecords.version, expectedVersion),
+          ),
+        )
+        .returning({ id: borrowRecords.id, bookId: borrowRecords.bookId });
 
-    const result = queryResult.rows[0] as
-      | {
-          record_id: string | null;
-          available_copies: number;
-          reserved_count: number;
-          borrowed_count: number;
-          version: number;
-        }
-      | undefined;
+      if (!updatedRecord) {
+        return null;
+      }
 
-    // No record_id → optimistic lock conflict (version mismatch)
-    if (!result?.record_id) {
+      if (needsBookUpdate) {
+        const [updatedBook] = await tx
+          .update(books)
+          .set({
+            reservedCount: sql`GREATEST(0, ${books.reservedCount} + ${reservedChange})`,
+            borrowedCount: sql`GREATEST(0, ${books.borrowedCount} + ${borrowedChange})`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, updatedRecord.bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+            version: books.version,
+          });
+
+        return { recordId: updatedRecord.id, updatedBook };
+      }
+
+      const [currentBook] = await tx
+        .select({
+          availableCopies: books.availableCopies,
+          reservedCount: books.reservedCount,
+          borrowedCount: books.borrowedCount,
+          version: books.version,
+        })
+        .from(books)
+        .where(eq(books.id, updatedRecord.bookId))
+        .limit(1);
+
+      return { recordId: updatedRecord.id, updatedBook: currentBook };
+    });
+
+    if (!result) {
       throw new Error(CONFLICT_ERROR_MESSAGE);
     }
 
-    const updatedBook = {
-      availableCopies: result.available_copies,
-      reservedCount: result.reserved_count,
-      borrowedCount: result.borrowed_count,
-      version: result.version,
-    };
+    const { updatedBook } = result;
 
     if (updatedBook) {
       broadcastBookAvailabilityUpdate(
@@ -322,7 +295,7 @@ export const updateBorrowStatus = async ({
 
     return {
       success: true,
-      data: { id: result.record_id },
+      data: { id: result.recordId },
     };
   } catch (error) {
     console.error(error);

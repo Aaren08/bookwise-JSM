@@ -70,7 +70,6 @@ export async function POST(req: NextRequest) {
         `);
 
         // Single CTE: all DML in one round-trip, fully atomic.
-        // insert_profile is removed — profile columns now live on users directly.
         const rows = await tx.execute(sql`
           WITH
           guard AS (
@@ -102,21 +101,44 @@ export async function POST(req: NextRequest) {
             RETURNING id
           ),
           mark_initialized AS (
-            UPDATE app_settings SET
-              initialized_at       = NOW(),
-              setup_completed      = true,
-              setup_completed_at   = NOW(),
-              setup_completed_by   = (SELECT id FROM insert_owner),
-              borrow_duration_days = ${borrowDurationDays},
-              support_email        = ${supportEmail},
-              website_url          = ${websiteUrl},
-              university_name      = ${universityName},
-              version              = version + 1,
-              updated_at           = NOW()
-            WHERE id = true
-              AND EXISTS (SELECT 1 FROM insert_owner)
-            RETURNING id
-          ),
+            INSERT INTO app_settings (
+              id,
+    initialized_at,
+    setup_completed,
+    setup_completed_at,
+    setup_completed_by,
+    borrow_duration_days,
+    support_email,
+    website_url,
+    university_name,
+    version,
+    updated_at
+  ) SELECT
+    true,
+    NOW(),
+    true,
+    NOW(),
+    (SELECT id FROM insert_owner),
+    ${borrowDurationDays},
+    ${supportEmail},
+    ${websiteUrl},
+    ${universityName},
+    1,
+    NOW()
+  WHERE EXISTS (SELECT 1 FROM insert_owner)
+  ON CONFLICT (id) DO UPDATE SET
+    initialized_at     = NOW(),
+    setup_completed    = true,
+    setup_completed_at = NOW(),
+    setup_completed_by = (SELECT id FROM insert_owner),
+    borrow_duration_days = ${borrowDurationDays},
+    support_email      = ${supportEmail},
+    website_url        = ${websiteUrl},
+    university_name    = ${universityName},
+    version            = app_settings.version + 1,
+    updated_at         = NOW()
+  RETURNING id
+),
           insert_events AS (
             INSERT INTO setup_events (event_type, actor_user_id, metadata, ip_address, user_agent)
             SELECT
@@ -127,7 +149,7 @@ export async function POST(req: NextRequest) {
                 'SETUP_COMPLETED'
               ]::setup_event_type[]),
               (SELECT id FROM insert_owner),
-              jsonb_build_object('request_id', ${requestId}),
+              jsonb_build_object('request_id', ${sql`cast(${requestId} as text)`}),
               ${ipAddress}::inet,
               ${userAgent}
             WHERE EXISTS (SELECT 1 FROM mark_initialized)
@@ -153,7 +175,7 @@ export async function POST(req: NextRequest) {
             (SELECT id FROM mark_initialized) AS settings_id
         `);
 
-        const row = rows.rows[0];
+        const row = rows[0];
 
         // If either ID is null the guard fired (already initialized) or a
         // step silently failed. Throwing here causes Drizzle to ROLLBACK.

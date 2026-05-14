@@ -348,21 +348,48 @@ export const deleteUser = async ({
     await assertLockOwnership("users", userId, admin.id, lockToken);
 
     try {
-      const activeBorrowRecords = await db
-        .select()
-        .from(borrowRecords)
-        .where(
-          and(
-            eq(borrowRecords.userId, userId),
-            or(
-              eq(borrowRecords.borrowStatus, "BORROWED"),
-              eq(borrowRecords.borrowStatus, "LATE_RETURN"),
+      const deletedUser = await db.transaction(async (tx) => {
+        const activeBorrowRecords = await tx
+          .select()
+          .from(borrowRecords)
+          .where(
+            and(
+              eq(borrowRecords.userId, userId),
+              or(
+                eq(borrowRecords.borrowStatus, "BORROWED"),
+                eq(borrowRecords.borrowStatus, "LATE_RETURN"),
+              ),
             ),
-          ),
-        )
-        .limit(1);
+          )
+          .limit(1)
+          .for("update");
 
-      if (activeBorrowRecords.length > 0) {
+        if (activeBorrowRecords.length > 0) {
+          return { type: "active-borrows" as const };
+        }
+
+        const [targetUser] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, userId), eq(users.version, expectedVersion)))
+          .limit(1)
+          .for("update");
+
+        if (!targetUser) {
+          return { type: "conflict" as const };
+        }
+
+        await tx.delete(borrowRecords).where(eq(borrowRecords.userId, userId));
+
+        const [deleted] = await tx
+          .delete(users)
+          .where(eq(users.id, userId))
+          .returning();
+
+        return { type: "success" as const, user: deleted };
+      });
+
+      if (deletedUser.type === "active-borrows") {
         return {
           success: false,
           error:
@@ -370,31 +397,7 @@ export const deleteUser = async ({
         };
       }
 
-      const deletedUserCTE = db.$with("deletedUser").as(
-        db
-          .delete(users)
-          .where(and(eq(users.id, userId), eq(users.version, expectedVersion)))
-          .returning(),
-      );
-
-      const deletedRecordsCTE = db.$with("deletedRecords").as(
-        db
-          .delete(borrowRecords)
-          .where(
-            and(
-              eq(borrowRecords.userId, userId),
-              sql`EXISTS (SELECT 1 FROM ${deletedUserCTE})`,
-            ),
-          )
-          .returning({ id: borrowRecords.id }),
-      );
-
-      const deletedUser = await db
-        .with(deletedUserCTE, deletedRecordsCTE)
-        .select()
-        .from(deletedUserCTE);
-
-      if (!deletedUser[0]) {
+      if (deletedUser.type === "conflict") {
         return {
           success: false,
           error: CONFLICT_ERROR_MESSAGE,
@@ -423,7 +426,7 @@ export const deleteUser = async ({
       return {
         success: true,
         message: "User deleted successfully",
-        data: JSON.parse(JSON.stringify(deletedUser[0])) as User,
+        data: JSON.parse(JSON.stringify(deletedUser.user)) as User,
       };
     } finally {
       if (lockToken) {

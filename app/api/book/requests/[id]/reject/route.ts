@@ -45,6 +45,7 @@ export async function PATCH(
         { status: 400 },
       );
     }
+    const expectedVersion = body.expectedVersion;
 
     try {
       await assertLockOwnership(
@@ -61,37 +62,32 @@ export async function PATCH(
     }
 
     try {
-      const [current] = await db
-        .select({
-          id: borrowRecords.id,
-          bookId: borrowRecords.bookId,
-          borrowStatus: borrowRecords.borrowStatus,
-        })
-        .from(borrowRecords)
-        .where(eq(borrowRecords.id, recordId))
-        .limit(1);
+      const result = await db.transaction(async (tx) => {
+        const [current] = await tx
+          .select({
+            id: borrowRecords.id,
+            bookId: borrowRecords.bookId,
+            borrowStatus: borrowRecords.borrowStatus,
+          })
+          .from(borrowRecords)
+          .where(eq(borrowRecords.id, recordId))
+          .limit(1)
+          .for("update");
 
-      if (!current) {
-        return NextResponse.json(
-          { error: "Borrow record not found." },
-          { status: 404 },
-        );
-      }
+        if (!current) {
+          return { type: "not-found" as const };
+        }
 
-      if (
-        !(await validateBorrowStatusTransition(
-          current.borrowStatus,
-          "REJECTED",
-        ))
-      ) {
-        return NextResponse.json(
-          { error: "Invalid status transition" },
-          { status: 409 },
-        );
-      }
+        if (
+          !(await validateBorrowStatusTransition(
+            current.borrowStatus,
+            "REJECTED",
+          ))
+        ) {
+          return { type: "invalid-transition" as const };
+        }
 
-      const updatedBorrowRecord = db.$with("updatedBorrowRecord").as(
-        db
+        const [updatedRecord] = await tx
           .update(borrowRecords)
           .set({
             borrowStatus: "REJECTED",
@@ -102,42 +98,58 @@ export async function PATCH(
             and(
               eq(borrowRecords.id, recordId),
               eq(borrowRecords.borrowStatus, "PENDING"),
-              eq(borrowRecords.version, body.expectedVersion),
+              eq(borrowRecords.version, expectedVersion),
             ),
           )
           .returning({
             id: borrowRecords.id,
             bookId: borrowRecords.bookId,
-          }),
-      );
+          });
 
-      const [result] = await db
-        .with(updatedBorrowRecord)
-        .update(books)
-        .set({
-          reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
-          updatedAt: new Date(),
-          version: sql`${books.version} + 1`,
-        })
-        .from(updatedBorrowRecord)
-        .where(eq(books.id, updatedBorrowRecord.bookId))
-        .returning({
-          availableCopies: books.availableCopies,
-          reservedCount: books.reservedCount,
-          borrowedCount: books.borrowedCount,
-          version: books.version,
-          recordId: updatedBorrowRecord.id,
-        });
+        if (!updatedRecord) {
+          return { type: "conflict" as const };
+        }
 
-      const updatedRecord = result ? { id: result.recordId } : null;
-      const updatedBook = result;
+        const [updatedBook] = await tx
+          .update(books)
+          .set({
+            reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, updatedRecord.bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+            version: books.version,
+          });
 
-      if (!updatedRecord) {
+        return { type: "success" as const, current, updatedRecord, updatedBook };
+      });
+
+      if (result.type === "not-found") {
+        return NextResponse.json(
+          { error: "Borrow record not found." },
+          { status: 404 },
+        );
+      }
+
+      if (result.type === "invalid-transition") {
+        return NextResponse.json(
+          { error: "Invalid status transition" },
+          { status: 409 },
+        );
+      }
+
+      if (result.type === "conflict") {
         return NextResponse.json(
           { error: CONFLICT_ERROR_MESSAGE },
           { status: 409 },
         );
       }
+
+      const { current, updatedBook } = result;
 
       revalidatePath("/admin/borrow-records");
       revalidatePath("/my-profile");

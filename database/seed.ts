@@ -1,14 +1,20 @@
 import dummyBooks from "@/dummyBooks.json";
 import { books } from "./schema";
 import ImageKit from "imagekit";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { config } from "dotenv";
 
 config({ path: ".env.local" });
 
-const sql = neon(process.env.DATABASE_URL!);
-export const db = drizzle({ client: sql });
+const sqlClient = postgres(process.env.DATABASE_URL!, {
+  connect_timeout: 10,
+  idle_timeout: 20,
+  max: 1,
+  prepare: false,
+  ssl: "require",
+});
+export const db = drizzle(sqlClient);
 
 const imagekit = new ImageKit({
   privateKey: process.env.IMAGEKIT_PRIVATE_KEY!,
@@ -70,4 +76,11 @@ const seed = async () => {
   }
 };
 
-seed();
+seed()
+  .catch((error) => {
+    console.error("Seed process failed:", error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await sqlClient.end();
+  });

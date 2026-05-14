@@ -2,14 +2,14 @@ export const runtime = "nodejs";
 
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
-import { borrowRecords } from "@/database/schema";
+import { books, borrowRecords } from "@/database/schema";
 import {
   broadcastAdminDashboardUpdate,
   broadcastBookAvailabilityUpdate,
 } from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import dayjs from "dayjs";
 import {
@@ -105,72 +105,51 @@ export async function PATCH(
         ? "LATE_RETURN"
         : "RETURNED";
 
-      /**
-       * Single atomic CTE — replaces the db.transaction() block.
-       *
-       * updated_record: updates the borrow record with an optimistic-lock
-       *   version check. Returns 0 rows on conflict → books UPDATE is skipped.
-       *
-       * updated_book: updates books only when updated_record succeeded
-       *   (EXISTS guard). This gives all-or-nothing semantics without a
-       *   transaction, which is required by the Neon HTTP driver.
-       */
-      const rows = await db.execute(sql`
-        WITH updated_record AS (
-          UPDATE borrow_records
-          SET
-            borrow_status = ${resolvedStatus},
-            return_date   = ${today},
-            updated_at    = NOW(),
-            version       = version + 1
-          WHERE
-            id            = ${recordId}
-            AND borrow_status = 'BORROWED'
-            AND version   = ${expectedVersion}
-          RETURNING id
-        ),
-        updated_book AS (
-          UPDATE books
-          SET
-            borrowed_count = GREATEST(0, borrowed_count - 1),
-            updated_at     = NOW(),
-            version        = version + 1
-          WHERE
-            id = ${current.bookId}
-            AND EXISTS (SELECT 1 FROM updated_record)
-          RETURNING available_copies, reserved_count, borrowed_count, version
-        )
-        SELECT
-          (SELECT id FROM updated_record) AS record_id,
-          ub.available_copies,
-          ub.reserved_count,
-          ub.borrowed_count,
-          ub.version
-        FROM updated_book ub
-      `);
+      const result = await db.transaction(async (tx) => {
+        const [updatedRecord] = await tx
+          .update(borrowRecords)
+          .set({
+            borrowStatus: resolvedStatus,
+            returnDate: today,
+            updatedAt: new Date(),
+            version: sql`${borrowRecords.version} + 1`,
+          })
+          .where(
+            and(
+              eq(borrowRecords.id, recordId),
+              eq(borrowRecords.borrowStatus, "BORROWED"),
+              eq(borrowRecords.version, expectedVersion),
+            ),
+          )
+          .returning({ id: borrowRecords.id });
 
-      const result = rows.rows[0] as
-        | {
-            record_id: string | null;
-            available_copies: number;
-            reserved_count: number;
-            borrowed_count: number;
-            version: number;
-          }
-        | undefined;
+        if (!updatedRecord) {
+          return { type: "conflict" as const };
+        }
 
-      // No row returned → version mismatch or status was not BORROWED
-      if (!result?.record_id) {
+        const [updatedBook] = await tx
+          .update(books)
+          .set({
+            borrowedCount: sql`GREATEST(0, ${books.borrowedCount} - 1)`,
+            updatedAt: new Date(),
+            version: sql`${books.version} + 1`,
+          })
+          .where(eq(books.id, current.bookId))
+          .returning({
+            availableCopies: books.availableCopies,
+            reservedCount: books.reservedCount,
+            borrowedCount: books.borrowedCount,
+            version: books.version,
+          });
+
+        return { type: "success" as const, updatedRecord, updatedBook };
+      });
+
+      if (result.type === "conflict") {
         throw new Error(CONFLICT_ERROR_MESSAGE);
       }
 
-      const updatedRecord = { id: result.record_id };
-      const updatedBook = {
-        availableCopies: result.available_copies,
-        reservedCount: result.reserved_count,
-        borrowedCount: result.borrowed_count,
-        version: result.version,
-      };
+      const { updatedRecord, updatedBook } = result;
 
       revalidatePath("/admin/borrow-records");
       revalidatePath("/my-profile");
