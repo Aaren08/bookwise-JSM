@@ -25,7 +25,6 @@ import { useEffect, useState, useMemo } from "react";
 interface Props extends Partial<Book> {
   type: "create" | "update";
   currentAdmin?: AdminActor;
-  lockToken?: string;
 }
 
 type BookFormValues = z.infer<typeof bookSchema>;
@@ -85,7 +84,7 @@ const BookForm = ({ type, currentAdmin, ...book }: Props) => {
 
   const rowIds = useMemo(() => (book.id ? [book.id] : []), [book.id]);
 
-  const { acquireRowLock, releaseRowLock } = useRowLock({
+  const { acquireRowLock, releaseRowLock, lockForRow } = useRowLock({
     entity: "books",
     rowIds,
     currentAdminId: currentAdmin?.id as string,
@@ -120,9 +119,11 @@ const BookForm = ({ type, currentAdmin, ...book }: Props) => {
       cancelled = true;
       void releaseRowLock(book.id as string);
     };
-  }, [book.id, currentAdmin?.id, acquireRowLock, releaseRowLock, type]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.id, currentAdmin?.id, type]);
 
   const onSubmit: SubmitHandler<BookFormValues> = async (values) => {
+    const lockToken = book.id ? lockForRow(book.id)?.token : undefined;
     const result =
       type === "create"
         ? await createBook(values)
@@ -130,7 +131,7 @@ const BookForm = ({ type, currentAdmin, ...book }: Props) => {
             ...values,
             id: book.id as string,
             expectedVersion: book.version as number,
-            lockToken: book.lockToken as string,
+            lockToken,
           });
 
     if (result.success) {

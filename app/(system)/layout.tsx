@@ -7,7 +7,7 @@ const SystemLayout = async ({ children }: { children: ReactNode }) => {
   const setupState = await refreshSetupStateCache();
 
   if (setupState.initialized) {
-    redirect("/");
+    redirect("/admin");
   }
 
   return children;

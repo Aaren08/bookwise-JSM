@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { CircleX } from "lucide-react";
 import dayjs from "dayjs";
 import { approveAccount, rejectAccount } from "@/lib/admin/actions/user";
@@ -31,6 +31,8 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"approve" | "deny">("approve");
   const [pinnedRowId, setPinnedRowId] = useState<string | null>(null);
+
+  const isConfirmingRef = useRef(false);
 
   const sortFn = useCallback(
     (a: PendingUser, b: PendingUser, order: "asc" | "desc") => {
@@ -124,6 +126,7 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
       setIsModalOpen(open);
 
       if (!open && selectedUser) {
+        if (isConfirmingRef.current) return;
         await rowLock.releaseRowLock(selectedUser.id);
         setPinnedRowId((current) =>
           current === selectedUser.id ? null : current,
@@ -136,6 +139,10 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
   const handleModalConfirm = useCallback(async () => {
     if (!selectedUser) return;
 
+    const lockToken = rowLock.lockForRow(selectedUser.id)?.token;
+
+    isConfirmingRef.current = true;
+
     const originalIndex = sortedUsers.findIndex(
       (user) => user.id === selectedUser.id,
     );
@@ -146,7 +153,7 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
         const res = await approveAccount({
           userId: selectedUser.id,
           expectedVersion: selectedUser.version,
-          lockToken: rowLock.lockForRow(selectedUser.id)?.token,
+          lockToken,
         });
         if (res.success) {
           showSuccessToast("Account approved successfully");
@@ -158,7 +165,7 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
         const res = await rejectAccount({
           userId: selectedUser.id,
           expectedVersion: selectedUser.version,
-          lockToken: rowLock.lockForRow(selectedUser.id)?.token,
+          lockToken,
         });
         if (res.success) {
           showSuccessToast("Account rejected successfully");
@@ -173,10 +180,10 @@ const AccountTable = ({ users, currentAdmin }: Props) => {
       showErrorToast("Failed to process account request");
     } finally {
       setIsModalOpen(false);
-      await rowLock.releaseRowLock(selectedUser.id);
       setPinnedRowId((current) =>
         current === selectedUser.id ? null : current,
       );
+      await rowLock.releaseRowLock(selectedUser.id);
     }
   }, [modalType, removeItem, restoreItem, rowLock, selectedUser, sortedUsers]);
 

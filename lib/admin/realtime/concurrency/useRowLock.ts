@@ -85,6 +85,11 @@ export const useRowLock = ({
   const activeTokenRef = useRef<string | null>(null);
   const heartbeatRowIdRef = useRef<string | null>(null);
   const activeRowIdRef = useRef<string | null>(null);
+  const locksRef = useRef<Record<string, AdminRowLock | null>>({});
+
+  useEffect(() => {
+    locksRef.current = locks;
+  }, [locks]);
 
   // Stable ref so the resync callback always has the latest rowIds
   const rowIdsRef = useRef(rowIds);
@@ -409,7 +414,7 @@ export const useRowLock = ({
       }
 
       // 3. Optimistic local clear
-      const previousLock = locks[entityId];
+      const previousLock = locksRef.current[entityId];
       setLocks((current) => {
         const c = { ...current };
         delete c[entityId];
@@ -461,7 +466,7 @@ export const useRowLock = ({
         return { success: false, reason: "network_error" };
       }
     },
-    [activeRowId, currentAdminId, entity, locks],
+    [activeRowId, currentAdminId, entity],
   );
 
   // ---------------------------------------------------------------------------
