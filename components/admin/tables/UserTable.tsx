@@ -110,10 +110,13 @@ const UserRowComponent = memo(
         {user.booksBorrowed || 0}
       </td>
       <td className="py-4 pr-4 text-sm text-dark-400 max-sm:pr-6">
-        {user.universityId}
+        {user.universityId ?? "N/A"}
       </td>
       <td className="py-4 pr-4 max-sm:pr-6">
-        <ViewCardButton onClick={() => onViewCard(user)} />
+        <ViewCardButton
+          onClick={() => onViewCard(user)}
+          disabled={!user.universityId}
+        />
       </td>
       <td className="relative py-4 pr-4 pl-3 max-sm:pr-6">
         <RowLockIndicator lock={lock} />
