@@ -131,6 +131,7 @@ interface FileUploadProps {
   placeholder?: string;
   folder?: string;
   accept?: string;
+  id?: string;
 }
 
 interface ReceiptButtonProps {

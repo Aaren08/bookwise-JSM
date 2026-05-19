@@ -210,18 +210,6 @@ const runBookSearch = async ({
   };
 };
 
-export const searchBooksCached = (options: SearchOptions) =>
-  unstable_cache(
-    async () => runBookSearch(options),
-    [
-      "search-books",
-      options.query.trim().toLowerCase(),
-      options.filter,
-      String(options.page),
-      String(options.limit),
-    ],
-    {
-      revalidate: CACHE_REVALIDATE.search,
-      tags: [CACHE_TAGS.books],
-    },
-  )();
+export const searchBooksCached = (options: SearchOptions) => {
+  return runBookSearch(options);
+};

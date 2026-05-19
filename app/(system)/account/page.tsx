@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import AdminAuthForm from "@/components/AdminAuthForm";
+import AdminAuthForm from "@/components/admin/AdminAuthForm";
 
 const SETUP_OWNER_STORAGE_KEY = "bookwise:setup-owner";
 

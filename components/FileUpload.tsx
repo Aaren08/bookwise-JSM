@@ -34,6 +34,7 @@ const FileUpload = ({
   placeholder = "Upload a file",
   folder = "",
   accept,
+  id,
 }: FileUploadProps) => {
   const [progress, setProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -245,6 +246,7 @@ const FileUpload = ({
     <div className="w-full">
       <input
         type="file"
+        id={id}
         ref={fileInputRef}
         onChange={handleFileChange}
         accept={accept || (type === "image" ? "image/*" : "video/*")}
@@ -295,6 +297,7 @@ const FileUpload = ({
               type="button"
               onClick={handleCancel}
               className="text-red-500 hover:text-red-400 ml-2 cursor-pointer"
+              aria-label="Cancel upload"
             >
               <X className="w-4 h-4" />
             </button>
@@ -338,6 +341,7 @@ const FileUpload = ({
             type="button"
             onClick={handleRemove}
             className="file-remove-btn"
+            aria-label="Remove file"
           >
             <X className="w-4 h-4" />
           </button>

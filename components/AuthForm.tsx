@@ -180,6 +180,7 @@ const AuthFormContent = <T extends AuthFormValues>({
         <form
           onSubmit={form.handleSubmit(handleSubmit)}
           className="space-y-6 w-full"
+          noValidate
         >
           {Object.keys(defaultValues).map((field) => (
             <FormField
@@ -191,32 +192,34 @@ const AuthFormContent = <T extends AuthFormValues>({
                   <FormLabel className="capitalize">
                     {FIELD_NAMES[field.name as keyof typeof FIELD_NAMES]}
                   </FormLabel>
-                  <FormControl>
                     {field.name === "universityCard" ? (
-                      <LazyFileUpload
-                        type="image"
-                        accept="image/*"
-                        placeholder="Upload your ID"
-                        folder="users/ids"
-                        variant="dark"
-                        onUploadComplete={(url) => {
-                          field.onChange(url);
-                          setUploadError("");
-                        }}
-                        onUploadError={(error) => {
-                          setUploadError(error);
-                          field.onChange("");
-                        }}
-                        value={field.value}
-                      />
+                      <FormControl>
+                        <LazyFileUpload
+                          type="image"
+                          accept="image/*"
+                          placeholder="Upload your ID"
+                          folder="users/ids"
+                          variant="dark"
+                          onUploadComplete={(url) => {
+                            field.onChange(url);
+                            setUploadError("");
+                          }}
+                          onUploadError={(error) => {
+                            setUploadError(error);
+                            field.onChange("");
+                          }}
+                          value={field.value}
+                        />
+                      </FormControl>
                     ) : field.name === "password" ? (
                       <div className="relative">
-                        <Input
-                          required
-                          type={showPassword ? "text" : "password"}
-                          {...field}
-                          className="form-input pr-10"
-                        />
+                        <FormControl>
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            {...field}
+                            className="form-input pr-10"
+                          />
+                        </FormControl>
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
@@ -233,16 +236,16 @@ const AuthFormContent = <T extends AuthFormValues>({
                         </button>
                       </div>
                     ) : (
-                      <Input
-                        required
-                        type={
-                          FIELD_TYPES[field.name as keyof typeof FIELD_TYPES]
-                        }
-                        {...field}
-                        className="form-input"
-                      />
+                      <FormControl>
+                        <Input
+                          type={
+                            FIELD_TYPES[field.name as keyof typeof FIELD_TYPES]
+                          }
+                          {...field}
+                          className="form-input"
+                        />
+                      </FormControl>
                     )}
-                  </FormControl>
                   {field.name === "universityCard" && uploadError && (
                     <p className="text-sm text-red-500 mt-1">{uploadError}</p>
                   )}
