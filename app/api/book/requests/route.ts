@@ -13,7 +13,10 @@ export const runtime = "nodejs";
 import { auth } from "@/auth";
 import { db } from "@/database/drizzle";
 import { books, borrowRecords, users } from "@/database/schema";
-import { broadcastBookAvailabilityUpdate } from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
+import {
+  broadcastAdminDashboardUpdate,
+  broadcastBookAvailabilityUpdate,
+} from "@/lib/admin/realtime/broadcast/dashboardSocketServer";
 import { revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/performance/cache";
 import { eq, and, sql } from "drizzle-orm";
@@ -177,6 +180,10 @@ export async function POST(request: Request) {
       updatedBook.version,
     ).catch((err) =>
       console.error("broadcastBookAvailabilityUpdate failed", err),
+    );
+
+    broadcastAdminDashboardUpdate().catch((err) =>
+      console.error("broadcastAdminDashboardUpdate failed", err),
     );
 
     try {

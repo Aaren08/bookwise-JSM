@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  addLocalAdminDashboardRealtimeListener,
   subscribeToAdminDashboardUpdates,
   type AdminDashboardRealtimeListener,
   type AdminDashboardRealtimeSubscription,
@@ -92,12 +93,14 @@ export const addAdminDashboardRealtimeListener = (
   listener: AdminDashboardRealtimeListener,
 ) => {
   const state = getBrokerState();
+  const removeLocalListener = addLocalAdminDashboardRealtimeListener(listener);
 
   clearIdleCleanup(state);
   state.listeners.add(listener);
   ensureRedisSubscription(state);
 
   return () => {
+    removeLocalListener();
     state.listeners.delete(listener);
 
     if (state.listeners.size === 0) {

@@ -31,7 +31,7 @@ export const test = base.extend<MyFixtures>({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          url: "https://ik.imagekit.io/placeholder/mock-id.png",
+          url: "/images/auth-illustration.png",
         }),
       });
     });

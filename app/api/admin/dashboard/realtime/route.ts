@@ -6,6 +6,7 @@ import {
   encodeDashboardSseEvent,
 } from "@/lib/admin/realtime/broadcast/dashboardRealtimeEvents";
 import { addAdminDashboardRealtimeListener } from "@/lib/admin/realtime/broadcast/dashboardRealtimeBroker";
+import { publishAdminDashboardUpdate } from "@/lib/admin/realtime/broadcast/dashboardRedisPubSub";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,4 +60,16 @@ export async function GET(request: Request) {
       "Content-Type": "text/event-stream; charset=utf-8",
     },
   });
+}
+
+export async function POST() {
+  const session = await auth();
+
+  if (!session?.user?.id || session.user.role !== "ADMIN") {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  await publishAdminDashboardUpdate();
+
+  return Response.json({ ok: true });
 }

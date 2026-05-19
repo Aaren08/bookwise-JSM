@@ -28,6 +28,43 @@ export type AdminDashboardRealtimeSubscription = ReturnType<
 
 export type BorrowBookRealtimeSubscription = ReturnType<typeof redis.subscribe>;
 
+declare global {
+  var adminDashboardLocalRealtimeListeners:
+    | Set<AdminDashboardRealtimeListener>
+    | undefined;
+}
+
+const getLocalDashboardListeners = () => {
+  if (!globalThis.adminDashboardLocalRealtimeListeners) {
+    globalThis.adminDashboardLocalRealtimeListeners = new Set();
+  }
+
+  return globalThis.adminDashboardLocalRealtimeListeners;
+};
+
+export const addLocalAdminDashboardRealtimeListener = (
+  listener: AdminDashboardRealtimeListener,
+) => {
+  const listeners = getLocalDashboardListeners();
+  listeners.add(listener);
+
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const publishLocalAdminDashboardUpdate = (
+  message: AdminDashboardRealtimeMessage,
+) => {
+  for (const listener of getLocalDashboardListeners()) {
+    try {
+      listener(message);
+    } catch (error) {
+      console.error("Admin dashboard local realtime listener failed:", error);
+    }
+  }
+};
+
 const parsePubSubMessage = (value: unknown) => {
   if (typeof value !== "string") {
     return value;
@@ -39,10 +76,16 @@ const parsePubSubMessage = (value: unknown) => {
 export const publishAdminDashboardUpdate = async () => {
   const message = createDashboardRefreshMessage();
 
-  await redis.publish(
-    ADMIN_DASHBOARD_REALTIME_CHANNEL,
-    JSON.stringify(message),
-  );
+  publishLocalAdminDashboardUpdate(message);
+
+  try {
+    await redis.publish(
+      ADMIN_DASHBOARD_REALTIME_CHANNEL,
+      JSON.stringify(message),
+    );
+  } catch (error) {
+    console.warn("Failed to publish dashboard realtime update to Redis:", error);
+  }
 };
 
 const publishBorrowBookRealtimeMessage = async (

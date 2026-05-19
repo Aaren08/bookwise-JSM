@@ -1,35 +1,49 @@
+import { Suspense } from "react";
 import DashboardLayout from "@/components/admin/dashboard/DashboardLayout";
-import { StatisticsSection } from "@/components/admin/dashboard/StatisticsSection";
-import { RequestsSection } from "@/components/admin/dashboard/RequestsSection";
-import { RecentBooksSection } from "@/components/admin/dashboard/RecentBooksSection";
+import AdminDashboardRealtime from "@/components/admin/dashboard/AdminDashboardRealtime";
 import { getAdminDashboardSnapshot } from "@/lib/admin/stats";
 import {
   StatisticsSkeleton,
   RequestsSkeleton,
   RecentBooksSkeleton,
 } from "@/components/admin/skeleton/DashboardSkeleton";
-import { Suspense } from "react";
 
-export default async function DashboardPage() {
-  // Single fetch — all three sections below will hit React.cache and get
-  // the same result without additional DB round-trips.
-  await getAdminDashboardSnapshot();
+async function DashboardRealtimeSection() {
+  const snapshot = await getAdminDashboardSnapshot();
 
   return (
+    <AdminDashboardRealtime
+      initialSnapshot={{
+        stats: snapshot.data.stats ?? {
+          totalBooks: 0,
+          totalUsers: 0,
+          borrowedBooks: 0,
+        },
+        latestBorrowRequests: snapshot.data.latestBorrowRequests ?? [],
+        latestAccountRequests: snapshot.data.latestAccountRequests ?? [],
+        recentBooks: snapshot.data.recentBooks ?? [],
+      }}
+    />
+  );
+}
+
+const DashboardFallback = () => (
+  <>
+    <StatisticsSkeleton />
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-10">
+      <RequestsSkeleton />
+      <RecentBooksSkeleton />
+    </div>
+  </>
+);
+
+export default function DashboardPage() {
+  return (
     <DashboardLayout>
-      <Suspense fallback={<StatisticsSkeleton />}>
-        <StatisticsSection />
+      <Suspense fallback={<DashboardFallback />}>
+        <DashboardRealtimeSection />
       </Suspense>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-10">
-        <Suspense fallback={<RequestsSkeleton />}>
-          <RequestsSection />
-        </Suspense>
-
-        <Suspense fallback={<RecentBooksSkeleton />}>
-          <RecentBooksSection />
-        </Suspense>
-      </div>
     </DashboardLayout>
   );
 }
