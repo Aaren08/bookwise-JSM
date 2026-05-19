@@ -39,7 +39,11 @@ test.describe("Search Pagination", () => {
     await searchPage.goToPage(2);
 
     expect(await searchPage.getPageFromUrl()).toBe(2);
-    expect(await searchPage.hasResults()).toBe(true);
+
+    // Poll until the result cards actually render (SSR may take a moment).
+    await expect(async () => {
+      expect(await searchPage.hasResults()).toBe(true);
+    }).toPass({ timeout: 10_000, intervals: [500] });
   });
 
   test("page 2 has fewer or equal results than page 1 (last partial page)", async ({
@@ -52,6 +56,11 @@ test.describe("Search Pagination", () => {
     expect(page1Count).toBeGreaterThan(0);
 
     await searchPage.goToPage(2);
+
+    // Poll until page-2 results render.
+    await expect(async () => {
+      expect(await searchPage.getResultCount()).toBeGreaterThan(0);
+    }).toPass({ timeout: 10_000, intervals: [500] });
 
     const page2Count = await searchPage.getResultCount();
     expect(page2Count).toBeGreaterThan(0);
@@ -67,6 +76,11 @@ test.describe("Search Pagination", () => {
     const page1Titles = await searchPage.getResultTitles();
 
     await searchPage.goToPage(2);
+
+    await expect(async () => {
+      expect(await searchPage.hasResults()).toBe(true);
+    }).toPass({ timeout: 10_000, intervals: [500] });
+
     const page2Titles = await searchPage.getResultTitles();
 
     for (const title of page2Titles) {
@@ -91,6 +105,11 @@ test.describe("Search Pagination", () => {
   }) => {
     await searchPage.search(searchTestId);
     await searchPage.goToPage(2);
+
+    // Poll until the pagination component renders for the new page.
+    await expect(searchPage.paginationContainer).toBeVisible({
+      timeout: 10_000,
+    });
 
     // On the last page the next button is always a disabled <button>
     const next = searchPage.page.locator("#pagination > :last-child");

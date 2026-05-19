@@ -6,7 +6,10 @@ import {
 } from "../../fixtures/search-fixture";
 
 test.describe("Search Edge Cases", () => {
-  test.setTimeout(60_000);
+  // Raised from 60 s → 120 s so that the first test in the worker survives
+  // Next.js Fast Refresh compilation time (~50 s in dev mode) plus sign-in
+  // plus the actual test assertion window.
+  test.setTimeout(120_000);
 
   test.beforeEach(async ({ page, searchTestId }) => {
     await signIn(page);
@@ -21,13 +24,15 @@ test.describe("Search Edge Cases", () => {
     await searchPage.goto();
     await expect(
       searchPage.page.getByRole("heading", { name: "All Books" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("special characters in search gracefully show no results", async ({
     searchPage,
   }) => {
-    await searchPage.page.goto("/search?query=%21%40%23%24%25%5E%26*()_%2B");
+    await searchPage.page.goto("/search?query=%21%40%23%24%25%5E%26*()_%2B", {
+      waitUntil: "domcontentloaded",
+    });
     await expect(searchPage.page.locator("body")).toBeVisible();
     // Should show either no results or some results — either is acceptable
     // as long as the page does not crash.
@@ -47,6 +52,7 @@ test.describe("Search Edge Cases", () => {
   }) => {
     const response = await searchPage.page.goto(
       "/search?query=%3Cscript%3Ealert('xss')%3C%2Fscript%3E",
+      { waitUntil: "domcontentloaded" },
     );
     expect(response?.ok()).toBe(true);
     await expect(searchPage.page.locator("body")).toBeVisible();
@@ -75,7 +81,9 @@ test.describe("Search Edge Cases", () => {
     await searchPage.search("Newport");
 
     await searchPage.page.goBack();
-    await searchPage.page.goForward();
+    // Next.js handles forward navigation client-side via its router — no full
+    // load event fires. waitUntil:"commit" resolves as soon as the URL changes.
+    await searchPage.page.goForward({ waitUntil: "commit" });
 
     await expect(async () => {
       const q = await searchPage.getSearchQueryFromUrl();
@@ -90,7 +98,7 @@ test.describe("Search Edge Cases", () => {
     await searchPage.search(searchTestId);
     await searchPage.selectFilter("Rating");
 
-    await searchPage.page.reload();
+    await searchPage.page.reload({ waitUntil: "domcontentloaded" });
 
     await expect(async () => {
       expect(await searchPage.getFilterFromUrl()).toBe("rating");
@@ -109,7 +117,12 @@ test.describe("Search Edge Cases", () => {
     await searchPage.selectFilter("Author");
     await searchPage.selectFilter("Availability");
 
-    expect(await searchPage.hasResults()).toBe(true);
+    // Poll for results in case there is a brief rendering delay after the
+    // final filter transition.
+    await expect(async () => {
+      expect(await searchPage.hasResults()).toBe(true);
+    }).toPass({ timeout: 10_000, intervals: [500] });
+
     expect(await searchPage.getFilterFromUrl()).toBe("availability");
   });
 
@@ -117,6 +130,7 @@ test.describe("Search Edge Cases", () => {
     const longQuery = "a".repeat(500);
     const response = await searchPage.page.goto(
       `/search?query=${encodeURIComponent(longQuery)}`,
+      { waitUntil: "domcontentloaded" },
     );
     expect(response?.ok()).toBe(true);
     await expect(searchPage.page.locator("body")).toBeVisible();

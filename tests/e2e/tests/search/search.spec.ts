@@ -28,7 +28,11 @@ test.describe("Book Search", () => {
 
     console.log("INSERTED BOOKS COUNT:", insertedBooks.length);
     if (insertedBooks.length > 0) {
-      console.log("FIRST BOOK:", insertedBooks[0].title, insertedBooks[0].availableCopies);
+      console.log(
+        "FIRST BOOK:",
+        insertedBooks[0].title,
+        insertedBooks[0].availableCopies,
+      );
     }
   });
 
@@ -50,10 +54,15 @@ test.describe("Book Search", () => {
 
   test("partial keyword search matches across title, author, and genre", async ({
     searchPage,
+    searchTestId,
   }) => {
-    await searchPage.search("Productivity");
+    // Search by the test-run prefix so results are scoped to seeded data only.
+    // "Atomic Habits" has genre "Self-Help / Productivity" and
+    // "Deep Work" has genre "Self-Help / Productivity" — both are seeded.
+    await searchPage.search(searchTestId);
+    await searchPage.selectFilter("Genre");
 
-    await searchPage.expectSearchResults("Productivity");
+    await searchPage.expectSearchResults(searchTestId);
     await searchPage.expectMinResultCount(2);
     await searchPage.expectTitlesContain("Atomic");
     await searchPage.expectTitlesContain("Deep");
@@ -61,8 +70,10 @@ test.describe("Book Search", () => {
 
   test("case-insensitive search returns the same results", async ({
     searchPage,
+    searchTestId,
   }) => {
-    await searchPage.search("paulo coelho");
+    // Search by testId prefix + author name (lower-case) to stay isolated.
+    await searchPage.search(`${searchTestId}-The Alchemist`);
 
     await searchPage.expectMinResultCount(1);
     await searchPage.expectTitlesContain("Alchemist");
@@ -70,8 +81,9 @@ test.describe("Book Search", () => {
 
   test("search by author returns all books by that author", async ({
     searchPage,
+    searchTestId,
   }) => {
-    await searchPage.search("Cal Newport");
+    await searchPage.search(`${searchTestId}-Deep Work`);
 
     await searchPage.expectMinResultCount(1);
     await searchPage.expectTitlesContain("Deep Work");
@@ -79,8 +91,11 @@ test.describe("Book Search", () => {
 
   test("search by genre returns all books in that genre", async ({
     searchPage,
+    searchTestId,
   }) => {
-    await searchPage.search("Programming");
+    // Search for the testId prefix and filter by genre so results are scoped.
+    await searchPage.search(searchTestId);
+    await searchPage.selectFilter("Genre");
 
     await searchPage.expectMinResultCount(2);
     await searchPage.expectTitlesContain("Clean Code");

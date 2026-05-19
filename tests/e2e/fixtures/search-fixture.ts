@@ -58,6 +58,10 @@ export async function seedSearchBooks(
   { includePagination = false, paginationCount = 0 } = {},
 ) {
   const seedData = sampleBooks.map((book) => {
+    // Strip `id` (DB auto-generates it) and `availableCopies` (it is a
+    // GENERATED ALWAYS AS column in Postgres — inserting it directly causes
+    // an error or is silently ignored; the DB derives it automatically from
+    // total_copies - borrowed_count - reserved_count).
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, availableCopies, ...rest } = book;
     return {
