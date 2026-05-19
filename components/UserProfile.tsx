@@ -132,12 +132,14 @@ const UserProfile = ({
         {/* University Card */}
         <div className="profile-info_item">
           <div className="profile-university_card">
-            <Image
-              src={universityCard}
-              alt="university card"
-              fill
-              className="object-cover"
-            />
+            {universityCard ? (
+              <Image
+                src={universityCard}
+                alt="university card"
+                fill
+                className="object-cover"
+              />
+            ) : null}
           </div>
         </div>
       </div>

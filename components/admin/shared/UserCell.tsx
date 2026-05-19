@@ -5,7 +5,7 @@ const UserCell = ({ fullName, email, image }: UserCellProps) => {
   return (
     <div className="flex items-center gap-3">
       <Avatar className="size-10">
-        <AvatarImage src={image || ""} alt={fullName} />
+        {image ? <AvatarImage src={image} alt={fullName} /> : null}
         <AvatarFallback className="bg-light-100 font-bold text-dark-100">
           {getInitials(fullName)}
         </AvatarFallback>

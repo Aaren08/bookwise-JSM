@@ -13,7 +13,7 @@ import dayjs from "dayjs";
 import Image from "next/image";
 import { cn, includes } from "@/lib/utils";
 import { useSortedData } from "@/lib/admin/essentials/useSortedData";
-import { showSuccessToast, showErrorToast } from "@/lib/essentials/toast-utils";
+import { showErrorToast } from "@/lib/essentials/toast-utils";
 import { useSearch } from "@/components/admin/context/SearchContext";
 import UserCell from "../shared/UserCell";
 import TableRow from "../shared/TableRow";
@@ -228,7 +228,7 @@ const BorrowTableRow = memo(function BorrowTableRow({
 
 const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
   const { query, sortOrder } = useSearch();
-  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [pendingIds] = useState<Set<string>>(new Set());
   const pendingIdsRef = useRef<Set<string>>(new Set());
   const [pinnedRowId, setPinnedRowId] = useState<string | null>(null);
 
@@ -331,20 +331,19 @@ const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
         record.status,
         newStatus,
       );
+      if (!endpoint) return;
 
-      if (!endpoint) {
-        if (record.status !== newStatus) {
-          showErrorToast("Invalid status transition");
-        }
-        return;
-      }
+      let lockToken = rowLock.lockForRow(record.id)?.token;
 
       if (!rowLock.isLockedByCurrentAdmin(record.id)) {
         const lockResult = await rowLock.acquireRowLock(record.id);
+
         if (!lockResult.success) {
           showErrorToast(lockResult.message || "Unable to lock row");
           return;
         }
+
+        lockToken = lockResult.lock?.token;
       }
 
       const optimisticStatus = getOptimisticStatus(record, newStatus);
@@ -353,9 +352,6 @@ const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
           ? dayjs().format("YYYY-MM-DD")
           : null;
 
-      setPinnedRowId(record.id);
-      pendingIdsRef.current.add(record.id);
-      setPendingIds(new Set(pendingIdsRef.current));
       const previousRecord = updateItem(record.id, (item) => ({
         ...item,
         status: optimisticStatus,
@@ -366,38 +362,25 @@ const BorrowTable = ({ borrowRecords, currentAdmin }: Props) => {
         const response = await fetch(endpoint, {
           method: "PATCH",
           cache: "no-store",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             expectedVersion: record.version,
-            lockToken: rowLock.lockForRow(record.id)?.token,
+            lockToken,
           }),
         });
+
         const result = await response.json();
 
         if (response.ok && result.success && result.data) {
-          showSuccessToast(`Status updated to ${result.data.status}`);
           updateItem(record.id, () => result.data as BorrowRecord);
         } else {
-          if (previousRecord) {
-            updateItem(record.id, () => previousRecord);
-          }
+          if (previousRecord) updateItem(record.id, () => previousRecord);
           showErrorToast(
             result.error || result.message || "Failed to update status",
           );
         }
-      } catch (error) {
-        if (previousRecord) {
-          updateItem(record.id, () => previousRecord);
-        }
-        console.error(error);
-        showErrorToast("Failed to update borrow status");
       } finally {
-        pendingIdsRef.current.delete(record.id);
-        setPendingIds(new Set(pendingIdsRef.current));
         await rowLock.releaseRowLock(record.id);
-        setPinnedRowId((current) => (current === record.id ? null : current));
       }
     },
     [rowLock, updateItem],
