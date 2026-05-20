@@ -2,6 +2,7 @@ import { Page, expect } from "@playwright/test";
 
 export const ADMIN_DASHBOARD_SSE_URL = "/api/admin/dashboard/realtime";
 export const ADMIN_REALTIME_ROWS_URL = "/api/admin/realtime/rows";
+export const ADMIN_SESSION_SSE_URL = "/api/admin/session/realtime";
 
 export function createSseInterceptorScript(): string {
   return `
@@ -144,6 +145,61 @@ export function createNetworkDiagnostics(page: Page): string[] {
   });
 
   return errors;
+}
+
+export async function waitForSessionInvalidation(
+  page: Page,
+  timeout = 15_000,
+) {
+  await waitForSseEvent(
+    page,
+    (e) =>
+      e.type === "message" &&
+      e.url.includes(ADMIN_SESSION_SSE_URL) &&
+      typeof e.data === "object" &&
+      e.data !== null &&
+      (e.data as Record<string, unknown>).type === "session:invalidated",
+    timeout,
+  );
+}
+
+export async function waitForSessionInvalidationOrRedirect(
+  page: Page,
+  timeout = 20_000,
+) {
+  await expect
+    .poll(
+      async () => {
+        const events = await getSseEvents(page);
+        const hasInvalidationEvent = events.some(
+          (e) =>
+            e.type === "message" &&
+            e.url.includes(ADMIN_SESSION_SSE_URL) &&
+            typeof e.data === "object" &&
+            e.data !== null &&
+            (e.data as Record<string, unknown>).type === "session:invalidated",
+        );
+        if (hasInvalidationEvent) return true;
+        try {
+          return page.url().includes("/sign-in");
+        } catch {
+          return false;
+        }
+      },
+      {
+        timeout,
+        message:
+          "Should receive session:invalidated SSE event or redirect to /sign-in",
+      },
+    )
+    .toBe(true);
+}
+
+export async function isSessionSseConnected(page: Page): Promise<boolean> {
+  const connections = await getSseConnections(page);
+  return connections.some(
+    (c) => c.url.includes(ADMIN_SESSION_SSE_URL) && c.readyState === 1,
+  );
 }
 
 export interface SSEEventRecord {
