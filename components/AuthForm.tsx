@@ -25,6 +25,15 @@ import { signInSchema, signUpSchema } from "@/lib/validations";
 
 type AuthFormType = "SIGN_IN" | "SIGN_UP";
 
+const isRedirectError = (error: unknown): error is Error & { digest: string } => {
+  if (typeof error !== "object" || error === null || !("digest" in error)) {
+    return false;
+  }
+
+  const { digest } = error as { digest: unknown };
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT");
+};
+
 type SignInValues = z.infer<typeof signInSchema>;
 type SignUpValues = z.infer<typeof signUpSchema>;
 type AuthFormValues = SignInValues | SignUpValues;
@@ -112,6 +121,9 @@ const AuthFormContent = <T extends AuthFormValues>({
         showErrorToast(errorMessage);
       }
     } catch (error) {
+      if (isRedirectError(error)) {
+        throw error;
+      }
       console.log(error);
       const errorMessage = normalizeError(error);
       showErrorToast(errorMessage);

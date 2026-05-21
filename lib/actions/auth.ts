@@ -6,7 +6,7 @@ import { users } from "@/database/schema";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
-import { ratelimit, safeRateLimit } from "../essentials/rateLimit";
+import { authEndpointRateLimit, safeRateLimit } from "../essentials/rateLimit";
 import { redirect } from "next/navigation";
 import config from "../config";
 import { workflowClient } from "../workflow";
@@ -20,7 +20,7 @@ export const signInWithCredentials = async (
   const { email, password } = credentials;
 
   const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
-  const { success } = await safeRateLimit(ratelimit, ip);
+  const { success } = await safeRateLimit(authEndpointRateLimit, ip);
 
   if (!success) {
     return redirect("/too-fast");
@@ -71,7 +71,7 @@ export const signUp = async (credentials: AuthCredentials) => {
     credentials;
 
   const ip = (await headers()).get("x-forwarded-for") || "127.0.0.1";
-  const { success } = await safeRateLimit(ratelimit, ip);
+  const { success } = await safeRateLimit(authEndpointRateLimit, ip);
 
   if (!success) {
     return redirect("/too-fast");
