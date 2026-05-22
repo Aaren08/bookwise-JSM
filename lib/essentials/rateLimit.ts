@@ -38,6 +38,10 @@ export const safeRateLimit = async (
   key: string,
   opts?: Parameters<Ratelimit["limit"]>[1],
 ) => {
+  if (process.env.SKIP_RATE_LIMIT === "true") {
+    return fallbackResponse;
+  }
+
   try {
     return await rateLimitClient.limit(key, opts);
   } catch (error) {

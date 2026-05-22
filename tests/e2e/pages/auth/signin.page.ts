@@ -17,6 +17,7 @@ export class SigninPage {
     await emailInput.fill(email);
     await passwordInput.fill(password);
     await this.page.getByRole("button", { name: "Login", exact: true }).click();
+
     await this.page.waitForFunction(
       () => !window.location.pathname.includes("/sign-in"),
       { timeout: 15_000 },
