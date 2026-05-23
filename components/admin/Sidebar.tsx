@@ -1,3 +1,6 @@
+import { db } from "@/database/drizzle";
+import { appSettings } from "@/database/schema";
+import { eq } from "drizzle-orm";
 import { adminSideBarLinks } from "@/constants";
 import { getInitials } from "@/lib/utils";
 import Image from "next/image";
@@ -6,10 +9,18 @@ import { Session } from "next-auth";
 import { handleSignOut } from "@/lib/actions/auth";
 import { AdminSidebarLink } from "@/components/navigation/AdminSidebarLink";
 
-const Sidebar = ({ session }: { session: Session }) => {
+const Sidebar = async ({ session }: { session: Session }) => {
   const displayName = session.user?.name || session.user?.email || "Admin";
   const displayEmail = session.user?.email || "";
   const displayImage = session.user?.image || "";
+
+  const [settings] = await db
+    .select({ universityName: appSettings.universityName })
+    .from(appSettings)
+    .where(eq(appSettings.id, true))
+    .limit(1);
+
+  const universityName = settings?.universityName || "BookWise";
 
   return (
     <div className="admin-sidebar">
@@ -21,7 +32,7 @@ const Sidebar = ({ session }: { session: Session }) => {
             height={37}
             width={37}
           />
-          <h1>BookWise</h1>
+          <h1 className="truncate">{universityName}</h1>
         </div>
 
         <div className="mt-10 flex flex-col gap-5">
