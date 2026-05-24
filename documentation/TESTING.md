@@ -506,7 +506,7 @@ Use semantic locators in this order of preference:
 6. page.getByTitle() — title attributes
 7. page.locator('.css-class') — ONLY when semantic locators are impossible
 
-` typescript
+```typescript
 // GOOD — semantic, stable, accessible
 page.getByRole("button", { name: "Sign Up", exact: true });
 page.getByLabel("Email", { exact: true });
@@ -516,33 +516,33 @@ page.getByPlaceholder("Search for books...");
 page.locator("button.btn-primary");
 page.locator("div > form > input:nth-child(2)");
 page.locator('[data-testid="submit-btn"]');
-`
+```
 
 ### Avoid Brittle Locators
 
-` typescript
+```typescript
 // GOOD — resilient to DOM restructuring
 page.getByRole("combobox").filter({ hasText: "Pending" });
 
 // BAD — fragile, depends on exact structure
 page.locator("tbody tr:nth-child(3) td:nth-child(2) .status-badge");
-`
+```
 
 ### Avoid Arbitrary Timeouts
 
-` typescript
+```typescript
 // GOOD — web-first assertion with built-in waiting
 await expect(page.getByText("Success")).toBeVisible({ timeout: 10_000 });
 
 // BAD — arbitrary sleep
 await page.waitForTimeout(3000); // Never do this for synchronization
-`
+```
 
 ### Web-First Assertions
 
 Always prefer Playwright's auto-retrying assertions over manual waiting:
 
-` typescript
+```typescript
 // GOOD — auto-retries until condition is met
 await expect(locator).toBeVisible();
 await expect(locator).toContainText("Expected");
@@ -552,11 +552,11 @@ await expect(locator).toHaveCount(3);
 await page.waitForSelector(".result");
 const text = await page.textContent(".result");
 expect(text).toBe("Expected");
-`
+```
 
 ### Deterministic Tests
 
-` typescript
+```typescript
 // GOOD — explicit test data with unique prefix
 const testRunId = e2e--;
 await seedSearchBooks(testRunId);
@@ -564,26 +564,30 @@ await seedSearchBooks(testRunId);
 // BAD — depends on existing database state
 await page.goto("/search?query=test");
 expect(await page.locator(".book-card").count()).toBe(5); // Unknown state
-`
+```
 
 ### Independent Tests
 
 Every test must be able to run alone, in any order, and in parallel:
 
-` typescript
+```typescript
 // GOOD — self-contained setup and teardown
 test.beforeEach(async ({ searchTestId }) => {
-await signIn(page);
-await seedSearchBooks(searchTestId);
+  await signIn(page);
+  await seedSearchBooks(searchTestId);
 });
 test.afterEach(async ({ searchTestId }) => {
-await cleanupSearchBooks(searchTestId);
+  await cleanupSearchBooks(searchTestId);
 });
 
 // BAD — depends on previous test's side effects
-test("create user", async () => { /_ ... _/ });
-test("login as that user", async () => { /_ ... _/ }); // FAILS alone
-`
+test("create user", async () => {
+  /_ ... _/;
+});
+test("login as that user", async () => {
+  /_ ... _/;
+}); // FAILS alone
+```
 
 Exception: Serial test suites ( est.describe.configure({ mode: "serial" })) are permitted for setup flows where each step builds on the previous. Used in system-setup.spec.ts and avatar-upload.spec.ts.
 
@@ -628,30 +632,36 @@ Exception: Serial test suites ( est.describe.configure({ mode: "serial" })) are 
 
 ### Waiting Strategies
 
-` typescript
+```typescript
 // GOOD — web-first assertion (auto-waits up to timeout)
 await expect(locator).toBeVisible({ timeout: 15_000 });
 
 // GOOD — poll-based wait for dynamic content (SSE, URL changes)
-await expect.poll(async () => {
-const events = await getSseEvents(page);
-return events.some(e => e.type === "message");
-}, { timeout: 15_000 }).toBe(true);
+await expect
+  .poll(
+    async () => {
+      const events = await getSseEvents(page);
+      return events.some((e) => e.type === "message");
+    },
+    { timeout: 15_000 },
+  )
+  .toBe(true);
 
 // GOOD — wait for specific network response (upload completion)
 await page.waitForResponse(
-(response) => response.url().includes("upload.imagekit.io") && response.status() === 200,
-{ timeout: 30_000 },
+  (response) =>
+    response.url().includes("upload.imagekit.io") && response.status() === 200,
+  { timeout: 30_000 },
 );
 
 // GOOD — wait for URL change via History API (router.replace)
 await expect(() => {
-expect(new URL(page.url()).searchParams.get("page")).toBe("2");
+  expect(new URL(page.url()).searchParams.get("page")).toBe("2");
 }).toPass({ timeout: 10_000, intervals: [500] });
 
 // BAD — arbitrary sleep
 await page.waitForTimeout(5000);
-`
+```
 
 ### Race Condition Prevention
 
@@ -665,12 +675,12 @@ await page.waitForTimeout(5000);
 
 When the app updates the UI before the server confirms:
 
-`	typescript
+```typescript
 // Assert local optimism AND server persistence
 await expect(locator).toBeVisible();           // immediate optimistic update
 await page.waitForResponse(...);               // server confirmation
 await expect(locator).toBeVisible();           // still there after server response
-`
+```
 
 ### Debugging Methodology
 
@@ -691,7 +701,7 @@ When a test fails:
 
 ### Required Environment Variables
 
-`bash
+```bash
 
 # Auth / Session
 
@@ -729,11 +739,11 @@ ADMIN_TEST_EMAIL= # Override admin test user email
 ADMIN_TEST_PASSWORD= # Override admin test user password
 USER_TEST_EMAIL= # Override user test email
 USER_TEST_PASSWORD= # Override user test password
-`
+```
 
 ### Local Setup
 
-`bash
+```bash
 
 # 1. Install dependencies
 
@@ -766,7 +776,7 @@ npx playwright test tests/e2e/tests/borrowing/borrowing-lifecycle.spec.ts
 # 8. Run tests matching a pattern
 
 npx playwright test -g "session invalidation"
-`
+```
 
 ### CI Setup
 
