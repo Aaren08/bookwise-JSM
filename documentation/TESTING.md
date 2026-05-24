@@ -98,7 +98,8 @@ BookWise is a library management system handling authentication, role-based acce
 
 ### Folder Structure
 
-`tests/e2e/
+```txt
+tests/e2e/
 ├── config/
 │   └── users.ts                      # Test user credentials for different roles
 ├── data/
@@ -186,26 +187,29 @@ BookWise is a library management system handling authentication, role-based acce
     ├── keyboard.ts                         # Keyboard navigation class (tab, focus)
     ├── lock.ts                             # Admin row lock API helpers + SSE lock events
     ├── rate-limit.ts                       # Redis reset, header validation, diagnostics
-    └── sse.ts                              # SSE interceptor script, event/connection queries`
+    └── sse.ts                              # SSE interceptor script, event/connection queries
+```
 
 ### Fixture Architecture
 
 Fixtures follow an inheritance chain. Each layer adds capabilities:
 
-`@playwright/test (base)
-  └── base-fixture.ts
-        ├── signupPage (with ImageKit mocks)
-        └── homePage
-        ├── a11y-fixture.ts
-        │     ├── makeAxeBuilder (WCAG 2.0/2.1 AA)
-        │     └── keyboard
-        ├── search-fixture.ts
-        │     ├── searchTestId (unique per test)
-        │     └── searchPage
-        └── setup-fixture.ts
-              ├── accountPage (with ImageKit + next/image mocks)
-              ├── setupPage
-              └── dashboardPage`
+```txt
+@playwright/test (base)
+└── base-fixture.ts
+    ├── signupPage (with ImageKit mocks)
+    ├── homePage
+    ├── a11y-fixture.ts
+    │   ├── makeAxeBuilder (WCAG 2.0/2.1 AA)
+    │   └── keyboard
+    ├── search-fixture.ts
+    │   ├── searchTestId (unique per test)
+    │   └── searchPage
+    └── setup-fixture.ts
+        ├── accountPage (with ImageKit + next/image mocks)
+        ├── setupPage
+        └── dashboardPage
+```
 
 resilience-fixture.ts and upload-fixture.ts extend directly from @playwright/test (not base-fixture) because they need different mock combinations.
 
