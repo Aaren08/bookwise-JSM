@@ -1,6 +1,6 @@
 export default function notFound() {
   return (
-    <main className="root-container flex min-h-screen flex-col items-center justify-center">
+    <main className="flex min-h-[60vh] flex-col items-center justify-center">
       {/* eslint-disable @next/next/no-img-element */}
       <img
         src="/icons/404.svg"
