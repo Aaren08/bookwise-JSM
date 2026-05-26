@@ -46,7 +46,11 @@ export async function GET(request: Request) {
         clearInterval(keepAlive);
         request.signal.removeEventListener("abort", close);
         removeListener();
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Controller may already be closed by the runtime
+        }
       };
 
       request.signal.addEventListener("abort", close);

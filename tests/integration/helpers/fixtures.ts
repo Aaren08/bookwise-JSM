@@ -18,6 +18,7 @@ type UserSeed = {
   universityId?: string;
   universityCard?: string;
   userAvatar?: string | null;
+  userAvatarFileId?: string | null;
   sessionVersion?: number;
   version?: number;
   createdAt?: Date;
@@ -47,6 +48,7 @@ export const createUser = (overrides: UserSeed = {}) => {
     universityId: overrides.universityId ?? `UNIV${String(userCounter).padStart(5, "0")}`,
     universityCard: overrides.universityCard ?? `https://img.test.edu/cards/${id}`,
     userAvatar: overrides.userAvatar ?? null,
+    userAvatarFileId: overrides.userAvatarFileId ?? null,
     sessionVersion: overrides.sessionVersion ?? 1,
     version: overrides.version ?? 1,
     createdAt: overrides.createdAt ?? now,

@@ -82,7 +82,11 @@ export async function GET(request: Request) {
         void subscription.unsubscribe().catch((error) => {
           devLog("Failed to unsubscribe admin realtime stream:", error);
         });
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Controller may already be closed by the runtime
+        }
       };
 
       request.signal.addEventListener("abort", close);
