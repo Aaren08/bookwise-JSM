@@ -274,7 +274,7 @@ describe("safeRateLimit", () => {
   });
 
   it("passes opts to rateLimitClient.limit", async () => {
-    const opts = { resources: 5 };
+    const opts = { rate: 5 };
     const mockClient = {
       limit: vi.fn().mockResolvedValue(mockSuccess),
     };
