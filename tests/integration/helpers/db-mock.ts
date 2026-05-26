@@ -198,6 +198,56 @@ function extractFlatConditions(
     conditions.push((row) => inList.includes(String(getRowValue(row, col))));
   }
 
+  // Pattern: "table"."col" IN ($N) — param is an array of values
+  const inParamRegex = /"([^"]+)"\."([^"]+)"\s+IN\s+\(\$(\d+)\)/gi;
+  while ((match = inParamRegex.exec(sqlPart)) !== null) {
+    const col = match[2];
+    const paramIdx = parseInt(match[3]) - 1;
+    const paramValue = params[paramIdx];
+    const rawValues = Array.isArray(paramValue)
+      ? paramValue.map((v: unknown) =>
+          v && typeof v === "object" && "value" in (v as Record<string, unknown>)
+            ? (v as Record<string, unknown>).value
+            : v,
+        )
+      : [paramValue];
+    conditions.push((row) => rawValues.includes(String(getRowValue(row, col))));
+  }
+
+  // Pattern: "table"."col" IN $N  (no parens, param is array, e.g. Drizzle inArray)
+  const inArrayRawRegex = /"([^"]+)"\."([^"]+)"\s+in\s+\$(\d+)/gi;
+  while ((match = inArrayRawRegex.exec(sqlPart)) !== null) {
+    const col = match[2];
+    const paramIdx = parseInt(match[3]) - 1;
+    const paramValue = params[paramIdx];
+    // Drizzle wraps each value in a Param object — unwrap to get primitive values
+    const rawValues = Array.isArray(paramValue)
+      ? paramValue.map((v: unknown) =>
+          v && typeof v === "object" && "value" in (v as Record<string, unknown>)
+            ? (v as Record<string, unknown>).value
+            : v,
+        )
+      : [paramValue];
+    conditions.push((row) =>
+      rawValues.includes(String(getRowValue(row, col))),
+    );
+  }
+
+  // Pattern: "table"."col" ILIKE $N  (param is a pattern like "%query%")
+  const ilikeRegex = /"([^"]+)"\."([^"]+)"\s+ilike\s+\$(\d+)/gi;
+  while ((match = ilikeRegex.exec(sqlPart)) !== null) {
+    const col = match[2];
+    const paramIdx = parseInt(match[3]) - 1;
+    const pattern = String(params[paramIdx] ?? "");
+    const regexStr = "^" + pattern.replace(/%/g, ".*").replace(/_/g, ".") + "$";
+    try {
+      const re = new RegExp(regexStr, "i");
+      conditions.push((row) => re.test(String(getRowValue(row, col) ?? "")));
+    } catch {
+      conditions.push(() => false);
+    }
+  }
+
   // Pattern: $N = "table"."col"  (param on left side)
   const paramEqRegex = /\$(\d+)\s*=\s*"([^"]+)"\."([^"]+)"/g;
   while ((match = paramEqRegex.exec(sqlPart)) !== null) {
