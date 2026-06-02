@@ -20,7 +20,7 @@ BookWise is designed for seamless deployment to Vercel, with support for modern 
 
 ### Infrastructure
 
-- **Upstash Redis** - Serverless Redis for caching and rate limiting
+- **Upstash Redis** - Serverless Redis for caching, rate limiting, and realtime pub/sub
 - **Upstash QStash** - Workflow orchestration
 - **ImageKit** - Media CDN and optimization
 
@@ -32,9 +32,9 @@ BookWise is designed for seamless deployment to Vercel, with support for modern 
 # Database
 DATABASE_URL=postgresql://user:password@host/database
 
-# Authentication
-NEXTAUTH_SECRET=your-nextauth-secret
-NEXTAUTH_URL=https://your-domain.vercel.app
+# Authentication (NextAuth v5)
+AUTH_SECRET=your-nextauth-secret
+AUTH_URL=https://your-domain.vercel.app
 
 # EmailJS
 EMAILJS_SERVICE_ID=your-service-id
@@ -51,17 +51,49 @@ IMAGEKIT_PUBLIC_KEY=your-public-key
 IMAGEKIT_PRIVATE_KEY=your-private-key
 IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/your-id
 
-# Upstash Redis
+# Upstash Redis (required — used for rate limiting, caching, and realtime pub/sub)
 UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your-token
 
-# Upstash QStash
+# Upstash QStash (required — used for workflow orchestration and return reminders)
 UPSTASH_QSTASH_URL=https://qstash.upstash.io
 UPSTASH_QSTASH_TOKEN=your-token
 
-# Application
+# Application URL (used in email templates and internal API calls)
 APP_URL=https://your-domain.vercel.app
 ```
+
+### Optional Environment Variables
+
+```env
+# Guards the reservation-expiry cron endpoint.
+# If set, all requests to /api/book/cron/expire-reservations must include:
+#   Authorization: Bearer <CRON_SECRET>
+# If not set, the endpoint is unguarded — only do this in trusted environments.
+CRON_SECRET=your-cron-secret
+```
+
+### Development-Only Variables
+
+```env
+# Set to "true" to bypass Upstash rate limiting during automated testing.
+# This variable MUST be absent or set to "false" in production deployments.
+SKIP_RATE_LIMIT=true
+```
+
+### Removed / Legacy Variables
+
+The following variables from earlier versions of BookWise have been **removed** and must not be set. They were part of a standalone WebSocket server that has been replaced by the Redis pub/sub + SSE realtime architecture:
+
+```env
+# REMOVED — do not use
+NEXT_PUBLIC_ADMIN_DASHBOARD_WS_PORT=
+NEXT_PUBLIC_ADMIN_DASHBOARD_WS_URL=
+ADMIN_DASHBOARD_WS_SECRET=
+ADMIN_DASHBOARD_WS_ORIGINS=
+```
+
+Setting these variables has no effect but can cause confusion. Remove them from any `.env` files carried over from older deployments.
 
 ### Environment Variable Management
 
@@ -70,9 +102,9 @@ Vercel provides secure environment variable management:
 ```bash
 # Set environment variables via Vercel CLI
 vercel env add DATABASE_URL
-vercel env add NEXTAUTH_SECRET
+vercel env add AUTH_SECRET
 
-# Or via Vercel dashboard
+# Or via Vercel dashboard:
 # Project Settings → Environment Variables
 ```
 
@@ -82,22 +114,10 @@ vercel env add NEXTAUTH_SECRET
 
 Deploy directly from GitHub to Vercel:
 
-1. **Connect Repository**
-   - Import GitHub repository to Vercel
-   - Configure project settings
-
-2. **Environment Setup**
-   - Add all required environment variables
-   - Configure build settings
-
-3. **Database Setup**
-   - Create Neon database
-   - Run initial migrations
-   - Seed database
-
-4. **Deploy**
-   - Automatic deployment on push to main branch
-   - Preview deployments for pull requests
+1. **Connect Repository** — Import your GitHub repository to Vercel and configure project settings.
+2. **Environment Setup** — Add all required environment variables via the Vercel dashboard.
+3. **Database Setup** — Create a Neon database, run initial migrations, and seed data.
+4. **Deploy** — Automatic deployment triggers on push to the main branch. Pull requests receive preview deployments.
 
 ### Manual Deployment
 
@@ -108,10 +128,10 @@ npm i -g vercel
 # Login to Vercel
 vercel login
 
-# Deploy project
+# Deploy to preview
 vercel
 
-# Set production domain
+# Deploy to production
 vercel --prod
 ```
 
@@ -119,22 +139,24 @@ vercel --prod
 
 ### Neon Database Creation
 
-1. **Create Account** - Sign up at neon.tech
-2. **Create Project** - New PostgreSQL database
-3. **Get Connection String** - Copy database URL
-4. **Configure Environment** - Add DATABASE_URL to Vercel
+1. **Create Account** — Sign up at neon.tech
+2. **Create Project** — Create a new PostgreSQL database
+3. **Get Connection String** — Copy the database URL
+4. **Configure Environment** — Add `DATABASE_URL` to Vercel
 
 ### Database Migrations
 
 ```bash
-# Generate migrations (local development)
+# Generate migration files (local development)
 npm run db:generate
 
-# Run migrations on deployment
+# Apply migrations
 npm run db:migrate
+```
 
-# For production deployment, add to build script
-# package.json
+To run migrations automatically on each production deployment, add to `package.json`:
+
+```json
 {
   "scripts": {
     "postbuild": "npm run db:migrate"
@@ -145,18 +167,17 @@ npm run db:migrate
 ### Database Seeding
 
 ```bash
-# Seed database with initial data
+# Seed the database with initial sample data
 npm run seed
 ```
 
-**Note**: Seeding should be done manually after first deployment, not automatically.
+Seeding should be done manually after the first deployment, not automatically. The setup wizard (`/account` → `/setup`) handles initial system configuration and admin account creation.
 
 ## Build Configuration
 
 ### Vercel Configuration
 
 ```json
-// vercel.json
 {
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
@@ -175,16 +196,11 @@ npm run seed
 ```typescript
 // next.config.ts
 const nextConfig = {
-  // Image optimization
   images: {
     domains: ["ik.imagekit.io"],
     formats: ["image/webp", "image/avif"],
   },
-
-  // Compression
   compress: true,
-
-  // Experimental features
   experimental: {
     serverComponentsExternalPackages: ["@upstash/workflow"],
   },
@@ -197,29 +213,29 @@ export default nextConfig;
 
 ### Image Optimization
 
-- **ImageKit Integration** - Automatic image optimization
-- **Next.js Image Component** - Built-in optimization
-- **Responsive Images** - Multiple breakpoints
+- **ImageKit Integration** — Automatic format conversion and resizing
+- **Next.js Image Component** — Built-in `<Image>` optimization
+- **Responsive Images** — Multiple breakpoints served automatically
 
 ### Caching Strategy
 
 ```typescript
-// API Routes - Cache control
-export const revalidate = 3600; // 1 hour
+// API Routes — revalidate hourly
+export const revalidate = 3600;
 
-// Static pages - ISR
-export const revalidate = 86400; // 24 hours
+// Static pages — revalidate daily
+export const revalidate = 86400;
 
-// Dynamic data - On-demand revalidation
+// On-demand invalidation after mutations
 revalidatePath("/books");
 revalidateTag("books");
 ```
 
 ### CDN Configuration
 
-- **Vercel Edge Network** - Global CDN
-- **ImageKit CDN** - Media delivery
-- **Static Asset Caching** - Long-term caching for assets
+- **Vercel Edge Network** — Global CDN for all static assets
+- **ImageKit CDN** — Dedicated media delivery
+- **Static Asset Caching** — Long-term browser caching for hashed assets
 
 ## Monitoring and Analytics
 
@@ -245,20 +261,15 @@ export default function RootLayout({ children }) {
 
 ```typescript
 // lib/error-tracking.ts
-export const logError = (error: Error, context?: any) => {
-  // Log to Vercel logs
+export const logError = (error: Error, context?: unknown) => {
   console.error("Application Error:", error, context);
-
-  // Send to error tracking service (future)
-  // sendToErrorTracker(error, context);
 };
 ```
 
 ### Performance Monitoring
 
-- **Vercel Speed Insights** - Performance metrics
-- **Core Web Vitals** - User experience metrics
-- **Real User Monitoring** - Actual user performance
+- **Vercel Speed Insights** — Core Web Vitals tracking
+- **Real User Monitoring** — Actual user performance data
 
 ## Security Configuration
 
@@ -273,11 +284,8 @@ const nextConfig = {
         source: "/api/:path*",
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET,POST,PUT,DELETE" },
-          {
-            key: "Access-Control-Allow-Headers",
-            value: "Content-Type,Authorization",
-          },
+          { key: "Access-Control-Allow-Methods", value: "GET,POST,PUT,PATCH,DELETE" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type,Authorization" },
         ],
       },
     ];
@@ -292,7 +300,6 @@ const nextConfig = {
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
-  // Security headers
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -301,54 +308,54 @@ export function middleware(request: NextRequest) {
 }
 ```
 
+## Realtime Infrastructure
+
+The admin dashboard and public book availability stream use Upstash Redis pub/sub. Ensure your Upstash Redis instance supports pub/sub (available on all paid plans and the free tier with connection limits).
+
+For high-traffic deployments, the per-instance broker architecture means Redis subscription counts scale with the number of deployed app instances, not with the number of connected admin users. Monitor Redis connection counts via the Upstash dashboard.
+
+See [Admin Dashboard Realtime](../documentation/Admin_Dashboard_Realtime.md) for architecture details.
+
 ## Backup and Recovery
 
 ### Database Backups
 
 Neon provides automatic backups:
 
-- **Daily Backups** - Automatic daily snapshots
-- **Point-in-Time Recovery** - Restore to any point
-- **Branching** - Create database branches for testing
+- **Continuous Backups** — Point-in-time recovery to any moment
+- **Branching** — Create isolated database branches for staging and testing
 
 ### Application Backups
 
 ```bash
-# Backup environment variables
+# Export environment variables for safekeeping
 vercel env pull .env.local
 
-# Backup database schema
+# Export database schema
 npm run db:generate
-
-# Backup static assets (if any)
-# Assets are stored in ImageKit, backed up automatically
 ```
 
 ## Scaling Considerations
 
 ### Serverless Scaling
 
-- **Automatic Scaling** - Vercel handles traffic spikes
-- **Edge Functions** - Global distribution
-- **Connection Pooling** - Neon handles database connections
+- **Automatic Scaling** — Vercel handles traffic spikes automatically
+- **Edge Functions** — Global distribution for latency-sensitive routes
+- **Connection Pooling** — Neon's serverless driver manages database connections
 
 ### Resource Limits
 
 ```typescript
-// API Route limits
-export const maxDuration = 30; // 30 seconds for API routes
-export const dynamic = "force-dynamic"; // Disable static generation for dynamic routes
+// Increase timeout for long-running API routes (max 30s on hobby plan)
+export const maxDuration = 30;
+
+// Force dynamic rendering for routes that must not be statically cached
+export const dynamic = "force-dynamic";
 ```
-
-### Cost Optimization
-
-- **Function Optimization** - Minimize function execution time
-- **Caching** - Reduce database queries
-- **Image Optimization** - Reduce bandwidth usage
 
 ## Continuous Integration
 
-### GitHub Integration
+### GitHub Actions
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -364,94 +371,46 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
       - run: npm ci
       - run: npm run build
-      - run: npm run db:migrate
+      - name: Run migrations (production only)
         if: github.ref == 'refs/heads/main'
-```
-
-### Automated Testing
-
-```yaml
-# Add to CI pipeline
-- run: npm run lint
-- run: npm run test
-- run: npm run test:e2e
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 ```
 
 ## Troubleshooting
 
 ### Common Deployment Issues
 
-1. **Build Failures**
-   - Check environment variables
-   - Verify database connectivity
-   - Check for TypeScript errors
-
-2. **Runtime Errors**
-   - Check server logs in Vercel dashboard
-   - Verify API endpoints
-   - Check database connection
-
-3. **Performance Issues**
-   - Monitor function duration
-   - Check database query performance
-   - Optimize images and assets
+1. **Build Failures** — Check all required environment variables are set; look for TypeScript errors in build output.
+2. **Runtime Errors** — Review server logs in the Vercel dashboard; verify database connectivity and Redis availability.
+3. **Realtime Not Working** — Confirm `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are correct; check that your Redis plan supports pub/sub.
+4. **Cron Not Running** — If `CRON_SECRET` is set, ensure your cron caller sends `Authorization: Bearer <CRON_SECRET>` in the request header.
 
 ### Debugging Tools
 
 ```bash
-# View deployment logs
+# View recent deployment logs
 vercel logs
 
-# Check environment variables
+# List configured environment variables
 vercel env ls
 
-# Test functions locally
+# Run the app locally with production-like env
 vercel dev
 ```
-
-## Maintenance Tasks
-
-### Regular Maintenance
-
-- **Update Dependencies** - Keep packages updated
-- **Monitor Performance** - Track Core Web Vitals
-- **Database Optimization** - Monitor query performance
-- **Security Updates** - Apply security patches
-
-### Automated Tasks
-
-```typescript
-// Scheduled functions for maintenance
-export const revalidate = 86400; // Daily revalidation
-
-// Clean up old data
-export async function cleanupOldData() {
-  // Remove old borrow records
-  // Clean up temporary files
-  // Update statistics
-}
-```
-
-## Future Enhancements
-
-### Planned Improvements
-
-- **Multi-region Deployment** - Global edge deployment
-- **Blue-Green Deployments** - Zero-downtime updates
-- **Automated Rollbacks** - Quick recovery from issues
-- **Advanced Monitoring** - Detailed performance insights
-- **Disaster Recovery** - Automated backup restoration
 
 ## Related Documentation
 
 - [Vercel Deployment Guide](https://vercel.com/docs/deployments/overview)
 - [Next.js Deployment](https://nextjs.org/docs/deployment)
 - [Neon Database Docs](https://neon.tech/docs/)
-- [Upstash Documentation](https://docs.upstash.com/)</content>
-  <parameter name="filePath">d:\Full Stack\Next.js\bookwise\documentation\Deployment.md
+- [Upstash Documentation](https://docs.upstash.com/)
+- [Admin Dashboard Realtime](../documentation/Admin_Dashboard_Realtime.md)
+- [Rate Limiting](../documentation/Rate_Limiting.md)

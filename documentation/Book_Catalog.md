@@ -10,21 +10,36 @@ BookWise features a comprehensive book catalog system that allows users to brows
 
 ```typescript
 interface Book {
-  id: string; // UUID primary key
-  title: string; // Book title (max 255 chars)
-  author: string; // Author name (max 255 chars)
-  genre: string; // Book category/genre (max 255 chars)
-  rating: number; // Average rating (0-5 scale)
-  totalCopies: number; // Total physical copies owned
-  availableCopies: number; // Currently available copies
-  description: string; // Short description/synopsis
-  coverColor: string; // Hex color for card background
-  coverUrl: string; // Book cover image URL
-  videoUrl: string; // Promotional video/trailer URL
-  summary: string; // Detailed book summary
-  createdAt: Date; // Creation timestamp
+  id: string;           // UUID primary key
+  title: string;        // Book title (max 255 chars)
+  author: string;       // Author name (max 255 chars)
+  genre: string;        // Book category/genre (max 255 chars)
+  rating: number;       // Average rating (0–5 scale)
+  totalCopies: number;  // Total physical copies owned
+  borrowedCount: number;  // Active approved loans
+  reservedCount: number;  // Pending borrow requests holding a copy
+  availableCopies: number; // Generated: totalCopies - borrowedCount - reservedCount
+  description: string;  // Short description/synopsis
+  coverColor: string;   // Hex color for card background
+  coverUrl: string;     // Book cover image URL
+  videoUrl: string;     // Promotional video/trailer URL
+  summary: string;      // Detailed book summary
+  createdAt: Date;      // Creation timestamp
 }
 ```
+
+### Availability Model
+
+`availableCopies` is a **generated database column** — it is never written directly by application code. Its value is always computed by PostgreSQL as:
+
+```
+availableCopies = totalCopies - borrowedCount - reservedCount
+```
+
+- `borrowedCount` — incremented when a pending request is approved; decremented when a book is returned.
+- `reservedCount` — incremented when a user creates a new borrow request; decremented when the request is approved, rejected, or expires.
+
+This design ensures inventory consistency under concurrent requests. See [Borrowing System](Borrowing_System.md) for the full lifecycle.
 
 ## Book Display Components
 
@@ -53,12 +68,12 @@ The primary component for displaying books in grid/list layouts:
 
 ### BookCover Component
 
-Handles book cover display with fallback to colored SVG:
+Handles book cover display with fallback to a colored SVG:
 
 ```tsx
 <BookCover
-  coverColor="#1e40af" // Hex color
-  coverImage="/covers/book.jpg" // Optional image URL
+  coverColor="#1e40af"
+  coverImage="/covers/book.jpg"
 />
 ```
 
@@ -73,7 +88,7 @@ Detailed book information display with borrowing functionality:
 **Includes:**
 
 - Full book metadata
-- Availability status
+- Real-time availability status (via `/api/book/stream`)
 - Borrow request button
 - Rating display
 - Video trailer (if available)
@@ -82,13 +97,7 @@ Detailed book information display with borrowing functionality:
 
 ### Search Functionality
 
-Users can search books by:
-
-- Title (case-insensitive)
-- Author (case-insensitive)
-- Genre (case-insensitive)
-
-**Implementation:**
+Users can search books by title, author, or genre (case-insensitive):
 
 ```typescript
 const results = await db
@@ -103,6 +112,8 @@ const results = await db
   );
 ```
 
+Search results are served through the `searchBooksCached` helper defined in `lib/performance/cache.ts`, which caches responses and revalidates on book mutations.
+
 ### SearchFilter Component
 
 Advanced filtering options:
@@ -115,10 +126,9 @@ Advanced filtering options:
 
 ### Creating Books
 
-Admins can add new books through the admin dashboard:
+Admins add new books through the admin dashboard. Required fields:
 
 ```typescript
-// Required fields for book creation
 const newBookData = {
   title: "Book Title",
   author: "Author Name",
@@ -132,61 +142,85 @@ const newBookData = {
 };
 ```
 
+`borrowedCount` and `reservedCount` default to `0` on creation. `availableCopies` is automatically computed.
+
 ### Updating Books
 
-Admins can modify book information:
-
-- Update metadata
-- Change cover images/videos
-- Adjust copy counts
-- Update availability
+Admins can modify book metadata, cover images, and total copy counts. Reducing `totalCopies` below the current `borrowedCount + reservedCount` is rejected by the server to prevent negative availability.
 
 ### Deleting Books
 
-Book deletion with confirmation:
-
-- Checks for active borrow records
-- Prevents deletion if books are currently borrowed
-- Updates related borrow records
+Book deletion is blocked when any active borrow records (`PENDING` or `BORROWED`) exist for that book. Once all records are resolved, deletion removes the book and all associated historical borrow records.
 
 ## Book Availability Tracking
 
-### Copy Management
+### Counter Mutations
+
+Application code targets the individual counters, never `availableCopies` directly:
 
 ```typescript
-// When a book is borrowed
-await db
+// User creates a borrow request — reserve one copy atomically
+const [updatedBook] = await db
   .update(books)
-  .set({ availableCopies: sql`${books.availableCopies} - 1` })
-  .where(eq(books.id, bookId));
+  .set({ reservedCount: sql`${books.reservedCount} + 1` })
+  .where(
+    and(
+      eq(books.id, bookId),
+      // Only succeeds if capacity exists
+      sql`${books.reservedCount} + ${books.borrowedCount} < ${books.totalCopies}`,
+    ),
+  )
+  .returning();
 
-// When a book is returned
-await db
-  .update(books)
-  .set({ availableCopies: sql`${books.availableCopies} + 1` })
-  .where(eq(books.id, bookId));
+// Admin approves a request — convert reservation to active loan
+await db.update(books).set({
+  reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
+  borrowedCount: sql`${books.borrowedCount} + 1`,
+});
+
+// User or admin returns a book — release the active loan
+await db.update(books).set({
+  borrowedCount: sql`GREATEST(0, ${books.borrowedCount} - 1)`,
+});
 ```
 
 ### Availability Status
 
-Books show different states:
+```typescript
+// availableCopies is derived from counters — read it, never write it
+const isAvailable = book.availableCopies > 0;
+const isLimited   = book.availableCopies > 0 && book.availableCopies <= 2;
+const isUnavailable = book.availableCopies === 0;
+```
 
-- **Available**: `availableCopies > 0`
-- **Unavailable**: `availableCopies = 0`
-- **Limited**: `availableCopies ≤ 2` (warning state)
+### Real-Time Availability Updates
+
+Users on a book detail page receive live inventory updates via Server-Sent Events without refreshing. The client connects to `/api/book/stream?bookId=<id>` and updates the displayed count whenever a `BOOK_UPDATED` event arrives.
+
+```typescript
+// Payload emitted on every counter change
+type BookUpdatedMessage = {
+  type: "BOOK_UPDATED";
+  timestamp: string;
+  bookId: string;
+  availableCount: number;
+  reservedCount: number;
+  borrowedCount: number;
+};
+```
+
+See [Book Availability Realtime](Book_Availability_Realtime.md) for full stream documentation.
 
 ## Book Ratings
 
 ### Rating System
 
 - 5-star rating scale
-- Calculated as average of user ratings
 - Displayed in book cards and detail views
 
 ### Rating Display
 
 ```tsx
-// Visual star rating component
 <StarRating rating={book.rating} readonly />
 ```
 
@@ -196,11 +230,11 @@ Books show different states:
 
 - Stored on ImageKit CDN
 - Optimized for different screen sizes
-- Fallback to colored SVG covers
+- Fallback to colored SVG covers using `coverColor`
 
 ### Video Trailers
 
-- Hosted on external platforms (YouTube, Vimeo)
+- Hosted on external platforms (YouTube, Vimeo, etc.)
 - Embedded in book detail pages
 - Optional promotional content
 
@@ -211,7 +245,7 @@ Books show different states:
 - Featured books section
 - Recently added books
 - Popular genres
-- Search bar with autocomplete
+- Search bar
 
 ### Category Browsing
 
@@ -221,17 +255,26 @@ Books show different states:
 
 ## Performance Optimizations
 
+### Caching
+
+Book queries are served through helpers in `lib/performance/cache.ts`:
+
+```typescript
+// Cached helpers — revalidated on book mutations via revalidateTag("books")
+getLatestBooksCached()
+getBookByIdCached(id)
+getSimilarBooksCached(bookId)
+getBorrowingEligibilityCached(bookId, userId)
+searchBooksCached(query, filters)
+```
+
+Tags are revalidated in `lib/admin/actions/book.ts` after any create, update, or delete operation.
+
 ### Database Indexing
 
 - Primary key on `id`
-- Composite indexes for search queries
-- Optimized for title/author/genre searches
-
-### Caching Strategy
-
-- Static generation for book pages
-- Revalidation on updates
-- CDN caching for images
+- `available_copies_idx` — supports availability-heavy filtering
+- Optimized for title/author/genre search queries
 
 ### Lazy Loading
 
@@ -241,39 +284,32 @@ Books show different states:
 
 ## Related Components
 
-- `BookCard.tsx` - Book display card
-- `BookCover.tsx` - Cover image/SVG component
-- `BookList.tsx` - Book grid/list layout
-- `BookOverview.tsx` - Detailed book view
-- `BookVideo.tsx` - Video trailer component
-- `SearchFilter.tsx` - Search and filter controls
+- `BookCard.tsx` — Book display card
+- `BookCover.tsx` — Cover image/SVG component
+- `BookList.tsx` — Book grid/list layout
+- `BookOverview.tsx` — Detailed book view with real-time availability
+- `BookVideo.tsx` — Video trailer component
+- `SearchFilter.tsx` — Search and filter controls
 
 ## API Endpoints
 
 ### Book Retrieval
 
 ```typescript
-// Get all books with pagination
-GET /api/books?page=1&limit=20
-
-// Search books
-GET /api/books/search?q=query&genre=fiction
+// Get all books (cached, paginated)
+GET /api/books
 
 // Get single book
 GET /api/books/[id]
 ```
 
+`availableCopies` in the response is always a computed value derived from `totalCopies - borrowedCount - reservedCount`. Clients should treat it as read-only.
+
 ### Admin Operations
 
-````typescript
-// Create book
-POST /admin/api/books
+Admin book mutations are implemented as **Next.js server actions** in `lib/admin/actions/book.ts`, not as standalone REST endpoints. They are invoked directly from admin form components and are protected by `requireAdminActor()`.
 
-// Update book
-PUT /admin/api/books/[id]
-
-// Delete book
-DELETE /admin/api/books/[id]
-```</content>
-<parameter name="filePath">d:\Full Stack\Next.js\bookwise\documentation\Book_Catalog.md
-````
+```typescript
+// Server actions (not direct API calls)
+import { createBook, updateBook, deleteBook } from "@/lib/admin/actions/book";
+```

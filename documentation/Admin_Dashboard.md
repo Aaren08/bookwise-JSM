@@ -12,12 +12,12 @@ Admin routes are organized under `/admin` with role-based protection:
 
 ```
 admin/
-├── layout.tsx          # Admin layout with sidebar
-├── page.tsx           # Dashboard home
-├── users/             # User management
-├── books/             # Book catalog management
-├── borrow-records/    # Borrowing oversight
-└── account-requests/  # Account approval queue
+├── layout.tsx          # Admin layout with sidebar and SessionGuard
+├── page.tsx            # Dashboard home
+├── users/              # User management
+├── books/              # Book catalog management
+├── borrow-records/     # Borrowing oversight
+└── account-requests/   # Account approval queue
 ```
 
 ### Layout Components
@@ -27,37 +27,40 @@ admin/
 ```tsx
 // app/admin/layout.tsx
 const Layout = async ({ children }) => {
-  // Role verification
-  const isAdmin = await verifyAdminRole(session.user.id);
+  const session = await auth();
+  if (!session?.user?.id) redirect("/sign-in");
+
+  // Re-verify role from database on every request
+  const isAdmin = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1)
+    .then((res) => res[0]?.role === "ADMIN");
 
   if (!isAdmin) redirect("/");
 
   return (
     <main>
       <Sidebar session={session} />
+      <SessionGuard />
       {children}
     </main>
   );
 };
 ```
 
+`SessionGuard` mounts the `useSessionInvalidation` hook which holds an open SSE connection to `/api/admin/session/realtime`. When an admin's role is revoked, this stream receives a `session:invalidated` event and signs the user out immediately — no need to wait for the JWT to expire. See [Admin Session Invalidation](Admin_Session_Invalidation.md).
+
 #### Sidebar Navigation
 
 ```tsx
 const adminSideBarLinks = [
-  { img: "/icons/admin/home.svg", route: "/admin", text: "Home" },
-  { img: "/icons/admin/users.svg", route: "/admin/users", text: "All Users" },
-  { img: "/icons/admin/book.svg", route: "/admin/books", text: "All Books" },
-  {
-    img: "/icons/admin/borrow.svg",
-    route: "/admin/borrow-records",
-    text: "Borrow Records",
-  },
-  {
-    img: "/icons/admin/request.svg",
-    route: "/admin/account-requests",
-    text: "Account Requests",
-  },
+  { img: "/icons/admin/home.svg",    route: "/admin",               text: "Home" },
+  { img: "/icons/admin/users.svg",   route: "/admin/users",         text: "All Users" },
+  { img: "/icons/admin/book.svg",    route: "/admin/books",         text: "All Books" },
+  { img: "/icons/admin/borrow.svg",  route: "/admin/borrow-records",text: "Borrow Records" },
+  { img: "/icons/admin/request.svg", route: "/admin/account-requests", text: "Account Requests" },
 ];
 ```
 
@@ -65,7 +68,7 @@ const adminSideBarLinks = [
 
 ### Statistics Overview
 
-The main dashboard displays key metrics:
+The main dashboard displays key metrics via the `Statistics` component. Data is fetched from `GET /api/admin/dashboard` and refreshed via the realtime SSE stream. The component animates stat changes with a 3000 ms delay window.
 
 ```tsx
 <Statistics
@@ -75,12 +78,18 @@ The main dashboard displays key metrics:
 />
 ```
 
-**Metrics Tracked:**
+**Metrics tracked:**
 
 - Total books in catalog
 - Total registered users
 - Currently borrowed books
 - Pending account approvals
+
+### Real-Time Refresh
+
+The admin dashboard uses Upstash Redis pub/sub and a per-instance broker to keep all open admin sessions synchronized. After any mutation, connected admin clients receive an SSE signal and re-fetch the dashboard snapshot after a 3000 ms batching window.
+
+See [Admin Dashboard Realtime](Admin_Dashboard_Realtime.md) for full architecture details.
 
 ### Recent Activity
 
@@ -98,13 +107,12 @@ Fast access to common tasks:
 - Approve pending accounts
 - Add new books
 - View overdue books
-- Generate reports
 
 ## User Management
 
 ### User List View
 
-Comprehensive user management interface:
+Comprehensive user management interface. The `UserTable` component uses shared search context (`SearchContext`) and the `useRealtimeUpdates` hook so changes made by another admin are reflected without a page reload.
 
 ```tsx
 <UserTable
@@ -118,10 +126,9 @@ Comprehensive user management interface:
 **Features:**
 
 - Search and filter users
-- Bulk status updates
 - Role management (USER ↔ ADMIN)
-- Account deletion
-- Export user data
+- Account deletion (blocked while active borrows exist)
+- Status updates with optimistic UI and rollback
 
 ### Account Approval
 
@@ -135,30 +142,24 @@ Dedicated interface for account requests:
 />
 ```
 
-**Approval Process:**
+**Approval process:**
 
-1. Review user details and university card
-2. Approve or reject account
-3. Send notification email
-4. Update user status
+1. Review user details and uploaded university card
+2. Approve or reject the account
+3. Notification email is triggered automatically
+4. User status updates in real time across all admin sessions
 
-### User Details Modal
+### Row-Level Locking
 
-Detailed user information view:
+Before editing a user record, the admin dashboard acquires a distributed Redis lock on that row. Other admins see a "Currently being edited by Jane Admin" indicator and cannot edit the same row simultaneously. Locks expire after 60 seconds and are refreshed every 20 seconds while the edit form is open.
 
-```tsx
-<UserDetailsModal
-  user={selectedUser}
-  borrowHistory={userBorrowHistory}
-  onStatusChange={handleStatusChange}
-/>
-```
+See [Admin Row Concurrency](Admin_Row_Concurrency.md) for full details.
 
 ## Book Management
 
 ### Book Catalog Administration
 
-Full CRUD operations for books:
+Full CRUD operations for books. The `BookTable` uses `useRealtimeUpdates` for live row updates and `useRowLock` for concurrent edit protection.
 
 ```tsx
 <BookTable
@@ -171,43 +172,57 @@ Full CRUD operations for books:
 
 ### Book Creation Form
 
-Comprehensive book addition form:
-
 ```tsx
 <BookForm onSubmit={handleCreateBook} initialData={null} />
 ```
 
-**Required Fields:**
+**Required fields:**
 
 - Title, author, genre
-- Copy count and availability
-- Cover image and color
+- Total copy count
+- Cover image URL and cover color
 - Description and summary
-- Video trailer URL
+- Video trailer URL (optional)
+
+`borrowedCount` and `reservedCount` are initialized to `0`. `availableCopies` is a generated column computed automatically by the database — it is never set manually.
 
 ### Book Editing
 
-In-place editing or modal forms:
+Editing a book record follows the lock-acquire → edit → version-checked save flow:
 
-```tsx
-<BookEditModal
-  book={selectedBook}
-  onSave={handleUpdateBook}
-  onCancel={handleCancel}
-/>
+1. Admin opens edit form → lock acquired via `POST /api/admin/locks`
+2. Admin makes changes locally
+3. Admin submits form → `updateBook()` server action runs `updateWithVersionCheck()`
+4. If another admin saved changes in the meantime, a version conflict error is returned
+5. Lock released in a `finally` block regardless of outcome
+
+### Availability Counter Updates
+
+When borrow statuses change, the counters on the `books` table are updated atomically — never `availableCopies` directly, as it is a generated column:
+
+```typescript
+// Admin approves a request
+await db.update(books).set({
+  reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
+  borrowedCount: sql`${books.borrowedCount} + 1`,
+});
+
+// Admin rejects a request
+await db.update(books).set({
+  reservedCount: sql`GREATEST(0, ${books.reservedCount} - 1)`,
+});
+
+// Book returned
+await db.update(books).set({
+  borrowedCount: sql`GREATEST(0, ${books.borrowedCount} - 1)`,
+});
 ```
-
-### Bulk Operations
-
-- Bulk delete books
-- Bulk update availability
-- Import books from CSV
 
 ## Borrow Records Management
 
 ### Borrow Records Table
 
-Complete borrowing oversight:
+Complete borrowing oversight. `BorrowTable` supports the full `BorrowStatus` set including `REJECTED` and `LATE_RETURN`, and performs optimistic per-row status updates with rollback on failure.
 
 ```tsx
 <BorrowRecordsTable
@@ -221,37 +236,24 @@ Complete borrowing oversight:
 
 - Filter by status, user, book, date
 - Sort by borrow date, due date
-- Bulk status updates
+- Optimistic status updates (row updates immediately; rolls back on conflict)
+- Per-row pending state (one request does not block the whole table)
 - Receipt generation
 
-### Status Management
+### Status Lifecycle
 
-Update borrow statuses:
-
-```typescript
-const updateBorrowStatus = async (
-  recordId: string,
-  newStatus: BorrowStatus,
-) => {
-  // Update record status
-  await db
-    .update(borrowRecords)
-    .set({ borrowStatus: newStatus })
-    .where(eq(borrowRecords.id, recordId));
-
-  // Update book availability if needed
-  if (newStatus === "BORROWED") {
-    await db
-      .update(books)
-      .set({ availableCopies: sql`${books.availableCopies} - 1` })
-      .where(eq(books.id, bookId));
-  }
-};
 ```
+PENDING  → BORROWED     (admin approves via PATCH /api/book/requests/:id/approve)
+PENDING  → REJECTED     (admin rejects via PATCH /api/book/requests/:id/reject)
+BORROWED → RETURNED     (returned on time via PATCH /api/book/requests/:id/return)
+BORROWED → LATE_RETURN  (returned after due date via same return endpoint)
+```
+
+Invalid transitions are filtered out of the dropdown menu before being sent to the server.
 
 ### Receipt Generation
 
-Generate and download receipts:
+Approving a borrow request and generating its receipt are the same operation. The `generateReceipt()` server action transitions a `PENDING` record to `BORROWED`, sets the `borrowDate` to now, recalculates `dueDate` from the current `borrowDurationDays` setting, and returns a formatted `Receipt` object.
 
 ```tsx
 <GenerateReceipt borrowRecordId={record.id} status={record.borrowStatus} />
@@ -259,44 +261,34 @@ Generate and download receipts:
 
 ## Analytics and Reporting
 
-### Dashboard Statistics
+The dashboard home provides real-time metrics refreshed via the SSE signal-and-fetch pattern.
 
-Real-time metrics with change indicators:
+> **Note:** Advanced reporting features (monthly borrowing trends, CSV/JSON export, PDF reports) are **planned but not yet implemented**. The sections below describe intended future behavior.
 
-```tsx
-const Statistics = ({ totalBooks, totalUsers, borrowedBooks }) => {
-  // Calculate changes from previous values
-  const booksChange = totalBooks - previousStats.totalBooks;
-  // Display with trend indicators
-};
-```
-
-### Usage Reports
+### Planned: Usage Reports
 
 - Monthly borrowing trends
 - Popular books analytics
 - User activity reports
-- System performance metrics
+
+### Planned: Data Export
+
+- CSV for spreadsheet analysis
+- JSON for API integration
 
 ## Search and Filtering
 
 ### Global Search
 
-Search across all entities:
+Admin pages share search state through `SearchContext`, provided by `AdminSearchClient`. Search input updates are debounced before triggering data fetches.
 
-```tsx
-<AdminSearch onSearch={handleSearch} searchType={searchType} />
-```
+**Search types:**
 
-**Search Types:**
-
-- Users (by name, email, university ID)
-- Books (by title, author, genre)
-- Borrow records (by user, book, status)
+- Users — by name, email, university ID
+- Books — by title, author, genre
+- Borrow records — by user, book, status
 
 ### Advanced Filtering
-
-Filter tables by multiple criteria:
 
 ```tsx
 <FilterData
@@ -306,94 +298,63 @@ Filter tables by multiple criteria:
 />
 ```
 
-## Data Export
+### Skeleton Loading
 
-### Export Functionality
+`PartialTableWrapper` keeps table headers visible while body rows are suspended, reducing layout shift during data fetches and pagination:
 
-Export data in various formats:
-
-```typescript
-const exportUsers = async (format: "csv" | "json") => {
-  const users = await getAllUsers();
-  if (format === "csv") {
-    return generateCSV(users);
-  }
-  return JSON.stringify(users);
-};
+```tsx
+<PartialTableWrapper header={<BookTableHeader />}>
+  <Suspense fallback={<RowSkeleton columns={["image-text","badge","date","actions"]} />}>
+    <BookTableBody />
+  </Suspense>
+</PartialTableWrapper>
 ```
-
-### Supported Formats
-
-- CSV for spreadsheet analysis
-- JSON for API integration
-- PDF reports for printing
 
 ## Security and Permissions
 
 ### Role-Based Access
 
-Strict admin role verification:
+Admin role is re-verified from the database on every admin layout render. JWT role alone is not sufficient — the live database value is authoritative.
 
 ```typescript
-const verifyAdminAccess = async (userId: string) => {
-  const user = await db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+const isAdmin = await db
+  .select({ role: users.role })
+  .from(users)
+  .where(eq(users.id, session.user.id))
+  .limit(1)
+  .then((res) => res[0]?.role === "ADMIN");
 
-  return user[0]?.role === "ADMIN";
-};
+if (!isAdmin) redirect("/");
 ```
 
-### Audit Logging
+### Session Invalidation
 
-All admin actions are logged:
+When an admin is downgraded to `USER`, a `RoleChangeEvent` is published to Redis and fanned out to that admin's open SSE connections. All their active browser tabs sign out and redirect to `/sign-in` immediately — no waiting for JWT expiry. See [Admin Session Invalidation](Admin_Session_Invalidation.md).
 
-```typescript
-const logAdminAction = async (
-  adminId: string,
-  action: string,
-  targetId: string,
-  details: object,
-) => {
-  await db.insert(adminLogs).values({
-    adminId,
-    action,
-    targetId,
-    details: JSON.stringify(details),
-    timestamp: new Date(),
-  });
-};
-```
+### Lock Ownership Enforcement
+
+All admin mutation endpoints call `assertLockOwnership()` before performing any database change. If the lock has expired or is held by another admin, the endpoint returns `409 Conflict`.
 
 ## Performance Optimizations
 
-### Data Pagination
+### Paginated Queries
 
-Large datasets are paginated:
+The admin borrow records query pages `borrow_records` first, then joins `books` and `users` only for the current page. This reduces join cost under larger datasets:
 
 ```typescript
-const getUsersPaginated = async (
-  page: number,
-  limit: number,
-  filters: UserFilters,
-) => {
-  const offset = (page - 1) * limit;
-  return await db
-    .select()
-    .from(users)
-    .where(buildWhereClause(filters))
-    .limit(limit)
-    .offset(offset);
-};
+// lib/admin/actions/borrow.ts
+// Page the hot table first, then join related data
 ```
 
 ### Caching Strategy
 
-- API responses cached with revalidation
-- Static dashboard data cached
-- Real-time updates for critical metrics
+- Dashboard snapshot cached and revalidated via `revalidatePath("/admin")`
+- Static dashboard sections use server components
+- Non-critical dashboard sections are lazy-loaded via dynamic imports (`AdminDashboardRealtime.tsx`)
+
+### Memoized Table Rows
+
+Borrow rows are memoized to avoid full-table re-renders when a single row's status changes during an optimistic update.
 
 ## Mobile Responsiveness
 
@@ -401,71 +362,67 @@ Admin dashboard is fully responsive:
 
 - Collapsible sidebar for mobile
 - Touch-friendly interface
-- Optimized table layouts
-- Mobile-specific navigation
+- Optimized table layouts for narrow viewports
 
 ## Related Components
 
-- `AdminSearch.tsx` - Global search component
-- `BookOverview.tsx` - Book management interface
-- `UserApprovalModal.tsx` - Account approval modal
-- `FilterData.tsx` - Filtering controls
-- `GenerateReceipt.tsx` - Receipt generation
-- `DashboardLayout.tsx` - Dashboard layout wrapper
-- `Statistics.tsx` - Metrics display component
+- `AdminSearchClient.tsx` — Global search input with shared context
+- `SearchContext.tsx` — Shared query and sort state across admin pages
+- `PartialTableWrapper.tsx` — Suspense wrapper preserving table headers
+- `RowSkeleton.tsx` — Row-level loading skeleton
+- `BookTableHeader.tsx`, `UserTableHeader.tsx`, `BorrowTableHeader.tsx`, `AccountTableHeader.tsx` — Stable table headers
+- `BookTable.tsx`, `UserTable.tsx`, `BorrowTable.tsx`, `AccountTable.tsx` — Table body components
+- `GenerateReceipt.tsx` — Receipt generation trigger
+- `Statistics.tsx` — Dashboard metrics display
+- `Sidebar.tsx` — Admin navigation sidebar
+- `SessionGuard.tsx` — Mounts session invalidation hook
+- `RowLockIndicator.tsx` — "Currently being edited by" badge
 
 ## API Endpoints
 
 ### Dashboard Data
 
 ```typescript
-// Get dashboard statistics
-GET / admin / api / dashboard / stats;
+// Get admin dashboard snapshot (statistics, recent activity)
+GET /api/admin/dashboard
 
-// Get recent activity
-GET / admin / api / dashboard / activity;
+// Admin-only SSE stream for dashboard refresh signals
+GET /api/admin/dashboard/realtime
 ```
 
-### User Management
+### Borrow Record Management
 
 ```typescript
-// Get users with pagination
-GET /admin/api/users?page=1&limit=20
+// Approve a pending request (transitions PENDING → BORROWED)
+PATCH /api/book/requests/[id]/approve
 
-// Update user status
-PUT /admin/api/users/[id]/status
+// Reject a pending request (transitions PENDING → REJECTED)
+PATCH /api/book/requests/[id]/reject
 
-// Delete user
-DELETE /admin/api/users/[id]
+// Return a borrowed book (transitions BORROWED → RETURNED or LATE_RETURN)
+PATCH /api/book/requests/[id]/return
+
+// Expire stale pending reservations (cron job)
+GET /api/book/cron/expire-reservations
 ```
 
-### Book Management
+### Realtime Infrastructure
 
 ```typescript
-// Get books with pagination
-GET /admin/api/books?page=1&limit=20
+// Admin row-level SSE stream (CREATE/UPDATE/DELETE events + lock events)
+GET /api/admin/realtime/rows
 
-// Create book
-POST /admin/api/books
+// Post-reconnect state resync
+GET /api/admin/sync
 
-// Update book
-PUT /admin/api/books/[id]
+// Row lock management
+GET    /api/admin/locks   // Fetch current locks
+POST   /api/admin/locks   // Acquire a lock
+PATCH  /api/admin/locks   // Heartbeat refresh
+DELETE /api/admin/locks   // Release a lock
 
-// Delete book
-DELETE /admin/api/books/[id]
+// Session invalidation SSE stream
+GET /api/admin/session/realtime
 ```
 
-### Borrow Management
-
-````typescript
-// Get borrow records
-GET /admin/api/borrow-records
-
-// Update borrow status
-PUT /admin/api/borrow-records/[id]/status
-
-// Generate receipt
-POST /admin/api/receipts/generate
-```</content>
-<parameter name="filePath">d:\Full Stack\Next.js\bookwise\documentation\Admin_Dashboard.md
-````
+For full endpoint documentation see [API Reference](API_Reference.md) and [Admin Realtime API Routes](Admin_Realtime_API_Routes.md).
