@@ -1,4 +1,6 @@
-# BookWise: Components, Actions & Client Systems that Powers the BookWise Application
+# Components, Actions & Client Systems
+
+> **Note on document title:** This document was previously titled "BookWise: Components, Actions & Client Systems that Powers the BookWise Application". The content covers the component layer, server actions, and client-side state systems. For environment configuration see [Deployment](Deployment.md); for system initialization see [Bookwise Setup Feature](Bookwise_Setup_Feature.md).
 
 ## Overview
 
@@ -26,7 +28,7 @@ A self-contained form used during the setup flow to create the initial admin acc
 
 Validation runs on submit via a Zod schema (`adminAuthFormSchema`). All field errors are shown inline beneath their respective inputs with `aria-invalid` and `aria-describedby` for accessibility.
 
-The avatar field is powered by the `useAvatarUpload` hook with `onUploadComplete` wired to update local state. The avatar URL is included in the Zod parse so the form cannot be submitted until an image has been successfully uploaded.
+The avatar field is powered by `useAvatarUpload` with `onUploadComplete` wired to update local state. The avatar URL is included in the Zod parse so the form cannot be submitted until an image has been successfully uploaded.
 
 The password field has a show/hide toggle rendered as an accessible button with an `aria-label` that reflects the current visibility state.
 
@@ -34,7 +36,7 @@ The submit button is disabled while either the form is submitting (`isSubmitting
 
 **Props:**
 
-```ts
+```typescript
 interface AdminAuthFormProps {
   onSubmit: (
     values: AdminAuthFormValues,
@@ -46,7 +48,7 @@ interface AdminAuthFormProps {
 
 **`AdminAuthFormValues`:**
 
-```ts
+```typescript
 interface AdminAuthFormValues {
   firstName: string;
   lastName: string;
@@ -66,13 +68,13 @@ interface AdminAuthFormValues {
 A smart wrapper that selects between two avatar upload modes based on context:
 
 - **Setup mode** — when an external `avatarUpload` instance (from `useAvatarUpload`) is passed as a prop, the component renders `AvatarUploadControls` directly using that instance. No API call is made on upload complete; the result is handled by the caller.
-- **Profile mode** — when no `avatarUpload` prop is provided, the component creates its own `useAvatarUpload` instance internally (via `ProfileImageCropper`) that is wired to `POST /api/avatar` on upload complete. It also updates the NextAuth session via `update()` and triggers `router.refresh()`.
+- **Profile mode** — when no `avatarUpload` prop is provided, the component creates its own `useAvatarUpload` instance internally (via `ProfileImageCropper`) that calls `PUT /api/avatar` on upload complete. It also updates the NextAuth session via `update()` and triggers `router.refresh()`.
 
 This design lets the same visual component be used in both the setup wizard (where no session exists yet) and the user profile page (where a live session must be updated).
 
 **Props:**
 
-```ts
+```typescript
 interface ImageCropperProps {
   userAvatar?: string | null; // Initial avatar URL (profile mode only)
   avatarUpload?: UseAvatarUploadReturn; // If provided, uses setup mode
@@ -94,7 +96,7 @@ interface ImageCropperProps {
 The pure presentational layer of the avatar upload system. It renders:
 
 1. A hidden `<input type="file" accept="image/*">` controlled via a ref
-2. A circular avatar trigger button that shows the current avatar, a loading spinner during upload, and a hover overlay with a camera/edit icon
+2. A circular avatar trigger button showing the current avatar, a loading spinner during upload, and a hover overlay with a camera/edit icon
 3. A full-screen crop modal (rendered via `createPortal` into `document.body`) containing a `react-easy-crop` canvas, a zoom slider, and Cancel/Save buttons
 
 The component is entirely controlled — it receives a `UseAvatarUploadReturn` object and calls its methods directly. It holds no state of its own.
@@ -103,7 +105,7 @@ The crop modal is only mounted when `isCropperOpen` is `true` and a `previewImag
 
 **Props:**
 
-```ts
+```typescript
 interface AvatarUploadControlsProps {
   avatarUpload: UseAvatarUploadReturn;
   ariaLabel?: string;
@@ -123,7 +125,7 @@ interface AvatarUploadControlsProps {
 
 Displays the authenticated user's profile card, including their avatar (with inline upload), status badge, name, email, university info, student ID, and university card image.
 
-The avatar upload is wired directly (not via `ImageCropper`) using `useAvatarUpload` with `onUploadComplete` posting to `POST /api/avatar`, updating the session, and refreshing the page.
+The avatar upload is wired directly using `useAvatarUpload` with `onUploadComplete` posting to `PUT /api/avatar`, updating the NextAuth session, and refreshing the page.
 
 The status badge renders one of three states:
 
@@ -133,7 +135,7 @@ The status badge renders one of three states:
 | `REJECTED` | `unapproved.svg` | Account Rejected   |
 | `PENDING`  | `unverified.svg` | Unverified Student |
 
-The institute name displayed in the university info section is pulled from the `useSystemConfig` hook (Zustand store), not hardcoded, so it reflects whatever was set during setup.
+The institute name displayed in the university info section is pulled from `useSystemConfig()` (Zustand store), not hardcoded, so it reflects whatever was set during setup.
 
 ---
 
@@ -141,29 +143,29 @@ The institute name displayed in the university info section is pulled from the `
 
 **File:** `components/ReceiptModal.tsx`
 
-A modal dialog that displays a formatted borrow receipt for a library transaction. It has two columns:
+A modal dialog that displays a formatted borrow receipt. It has two columns:
 
 - **Left:** receipt header (logo, receipt ID, date issued), book details (title, author, genre, borrowed on, due date, duration)
 - **Right:** terms and conditions, footer with website URL and support email
 
 When `borrowStatus === "PENDING"`, all date fields are replaced with `"--/--/----"` placeholders and the download button is hidden. This prevents generating a misleading receipt before the borrow is confirmed.
 
-The website URL and support email in the footer are read from `useSystemConfig()` (Zustand), so they always reflect the live system configuration.
+The website URL and support email in the footer are read from `useSystemConfig()` (Zustand store), so they always reflect the live system configuration.
 
 The download button calls `downloadReceiptAsPDF(receipt)` and shows a toast on failure.
 
 **Types:**
 
-```ts
+```typescript
 type Receipt = {
-  receiptId: string;
-  issuedAt: string;
+  receiptId: string; // First 8 chars of UUID, uppercased
+  issuedAt: string; // "DD/MM/YYYY, hh:mm A"
   title: string;
   author: string;
   genre: string;
-  borrowedOn: string;
-  dueDate: string;
-  duration: string;
+  borrowedOn: string; // "DD/MM/YYYY"
+  dueDate: string; // "DD/MM/YYYY"
+  duration: string; // e.g. "14 Days"
   userName?: string;
   userEmail?: string;
 };
@@ -175,9 +177,9 @@ type Receipt = {
 
 **File:** `components/SystemConfigProvider.tsx`
 
-A thin client component that hydrates the Zustand system config store from a server-fetched `SystemConfig` object. It should be rendered near the root of the component tree, wrapping the application, so that all client components can access the system config without making their own DB calls.
+A thin client component that hydrates the Zustand system config store from a server-fetched `SystemConfig` object. It must be rendered near the root of the component tree so that all client components can access the system config without making their own database calls.
 
-It uses a `useEffect` to call `setSystemConfig` whenever the `config` prop changes, keeping the store in sync with any server-side revalidation.
+It uses a `useEffect` to call `setSystemConfig` whenever the `config` prop changes, keeping the store in sync with server-side revalidation.
 
 ```tsx
 // Usage in a server layout:
@@ -203,13 +205,13 @@ The avatar falls back to initials (via `getInitials`) when no image is available
 
 **File:** `lib/global/essentials/use-avatar-upload.ts`
 
-The central hook managing the full avatar upload lifecycle. It is designed to be composed into any component that needs avatar selection, cropping, and upload.
+The central hook managing the full avatar upload lifecycle. Designed to be composed into any component that needs avatar selection, cropping, and upload. See [File Uploads](File_Uploads.md) for the complete upload flow.
 
 **State managed:**
 
 | State               | Type             | Description                            |
 | ------------------- | ---------------- | -------------------------------------- |
-| `selectedImage`     | `File \| null`   | The raw file selected from disk        |
+| `selectedImage`     | `File \| null`   | Raw file selected from disk            |
 | `previewImage`      | `string \| null` | Base64 data URL for the cropper        |
 | `croppedImage`      | `string \| null` | Object URL of the cropped result       |
 | `uploadedImage`     | `string \| null` | Final CDN URL after successful upload  |
@@ -225,30 +227,13 @@ The central hook managing the full avatar upload lifecycle. It is designed to be
 uploadedImage → initialAvatar → fallbackAvatar
 ```
 
-**Upload flow:**
-
-```
-User clicks trigger
-  → openFilePicker() → <input>.click()
-  → handleImageChange() → MIME type check → FileReader → setPreviewImage + setIsCropperOpen(true)
-  → User adjusts crop → handleCropComplete() → setCroppedAreaPixels()
-  → User clicks "Save & Upload" → uploadCroppedImage()
-    → getCroppedImg() (canvas crop to data URL)
-    → fetch data URL → Blob → MIME re-check
-    → generateSafeFilename()
-    → authenticateImageKit() → GET /api/auth/imagekit
-    → upload() (ImageKit SDK)
-    → onUploadComplete(result)
-    → setUploadedImage() + setCroppedImage()
-```
-
 **Options:**
 
-```ts
+```typescript
 interface UseAvatarUploadOptions {
-  initialAvatar?: string | null; // Pre-existing avatar URL
-  fallbackAvatar?: string; // Shown when no avatar exists
-  folder?: string; // ImageKit upload folder (default: "/users/avatars")
+  initialAvatar?: string | null;
+  fallbackAvatar?: string;
+  folder?: string; // ImageKit folder (default: "/users/avatars")
   fileNamePrefix?: string; // Filename prefix (default: "avatar")
   onUploadComplete?: (
     result: AvatarUploadResult,
@@ -270,7 +255,7 @@ A Zustand store with `persist` middleware that caches the system configuration i
 
 **Store shape:**
 
-```ts
+```typescript
 interface SystemConfigState {
   systemConfig: SystemConfig;
   setSystemConfig: (config: Partial<SystemConfig>) => void;
@@ -280,24 +265,24 @@ interface SystemConfigState {
 
 **Convenience selectors:**
 
-```ts
-// Access the full config object
-const config = useSystemConfig();
-
-// Access only the borrow duration
-const days = useBorrowDuration();
+```typescript
+const config = useSystemConfig(); // Full config object
+const days = useBorrowDuration(); // borrowDurationDays only
 ```
 
-The store is populated in two places: by `SystemConfigProvider` on initial page load (server-fetched values), and directly by the setup wizard on completion (to reflect new settings immediately without a refresh).
+The store is populated in two places:
+
+1. By `SystemConfigProvider` on initial page load (server-fetched values)
+2. Directly by the setup wizard on completion (reflects new settings immediately without a refresh)
 
 **Default values** (used before any config is loaded):
 
-```ts
+```typescript
 const DEFAULT_SYSTEM_CONFIG = {
   instituteName: "BookWise",
   websiteUrl: "",
   supportEmail: "",
-  borrowDurationDays: 14,
+  borrowDurationDays: borrowDurationDays,
 };
 ```
 
@@ -311,22 +296,22 @@ const DEFAULT_SYSTEM_CONFIG = {
 
 #### `borrowBook(params: BorrowBookParams)`
 
-Creates a borrow request for a user. Designed to be race-condition safe without a serializable transaction by using atomic conditional SQL.
+Creates a borrow request for a user. Race-condition safe via atomic conditional SQL — no serializable transaction required.
 
 **Steps:**
 
 1. **Duplicate guard** — checks for an existing `PENDING` or `BORROWED` record for the same user+book pair.
-2. **Lazy expiry** — scans for stale `PENDING` records (older than 15 minutes) for this book and rejects them, reclaiming their `reservedCount` slots before checking availability.
-3. **Atomic reservation** — performs a conditional `UPDATE` on `books` that only increments `reservedCount` if `reservedCount + borrowedCount < totalCopies`. If no row is updated, the book is unavailable.
-4. **Borrow record insert** — creates a new record with `borrowStatus = 'PENDING'` and `reservedAt = NOW()`. The `dueDate` is calculated from the system config's `borrowDurationDays`.
+2. **Lazy expiry** — scans for stale `PENDING` records older than 15 minutes for this book and rejects them, reclaiming their `reservedCount` slots before checking availability.
+3. **Atomic reservation** — conditional `UPDATE` on `books` that only increments `reservedCount` if `reservedCount + borrowedCount < totalCopies`. If no row is updated, the book is at capacity.
+4. **Borrow record insert** — creates a new record with `borrowStatus = "PENDING"`, `reservedAt = NOW()`, and `dueDate = today + borrowDurationDays`.
 5. **Cache revalidation** — revalidates `CACHE_TAGS.books` and `CACHE_TAGS.users`.
-6. **Real-time broadcast** — fires `broadcastBookAvailabilityUpdate` and `broadcastAdminDashboardUpdate` (fire-and-forget), then publishes a `CREATE` event to the `borrow_requests` channel via `publishEvent`.
+6. **Realtime broadcasts** — fires `broadcastBookAvailabilityUpdate` and `broadcastAdminDashboardUpdate` (fire-and-forget), then publishes a `CREATE` event to the `borrow_requests` channel via `publishEvent`.
 
-**Why `reservedCount` and not `borrowedCount`?** A borrow request starts as `PENDING` — the book hasn't physically left the library yet. `borrowedCount` is only incremented when the admin generates a receipt (i.e., marks it `BORROWED`). This two-count design accurately reflects physical availability.
+For the full lifecycle see [Borrowing System](Borrowing_System.md).
 
 #### `dismissBorrowRecord(borrowRecordId: string)`
 
-Marks a borrow record as dismissed (sets `dismissed = 1`) after verifying the calling user owns the record or is an admin. Revalidates the users cache.
+Sets `dismissed = 1` on a borrow record after verifying the calling user owns the record or is an admin. Revalidates the users cache.
 
 #### `getSimilarBooks(bookId: string)`
 
@@ -346,15 +331,15 @@ Admin-only action (guarded by `requireAdminActor()`). Transitions a `PENDING` bo
 
 1. Fetches the borrow record joined with book and user data.
 2. Rejects if the record is already `RETURNED` or `LATE_RETURN`.
-3. Updates the record: sets `borrowStatus = 'BORROWED'`, updates `borrowDate` to `NOW()`, and recalculates `dueDate` from the current `borrowDurationDays` setting.
+3. Updates the record: sets `borrowStatus = "BORROWED"`, `borrowDate = NOW()`, recalculates `dueDate` from the current `borrowDurationDays` setting, increments `version`.
 4. Revalidates `/admin/borrow-records` and broadcasts a dashboard update.
-5. Publishes an `UPDATE` event to the `borrow_requests` realtime channel.
-6. Returns a `Receipt` object with formatted dates and a shortened `receiptId` (first 8 chars of the UUID, uppercased).
+5. Publishes an `UPDATE` event to the `borrow_requests` realtime channel (best-effort).
+6. Returns a `Receipt` object.
 
 **Receipt format:**
 
-```ts
-{
+```typescript
+type Receipt = {
   receiptId: string; // First 8 chars of UUID, uppercased
   issuedAt: string; // "DD/MM/YYYY, hh:mm A"
   title: string;
@@ -362,15 +347,15 @@ Admin-only action (guarded by `requireAdminActor()`). Transitions a `PENDING` bo
   genre: string;
   borrowedOn: string; // "DD/MM/YYYY"
   dueDate: string; // "DD/MM/YYYY"
-  duration: string; // e.g., "14 Days"
-  userName: string;
-  userEmail: string;
-}
+  duration: string; // e.g. "14 Days"
+  userName?: string;
+  userEmail?: string;
+};
 ```
 
 #### `getReceipt(borrowRecordId: string)`
 
-Fetches a receipt for any borrow record (no admin guard). Computes the `duration` dynamically from the difference between `dueDate` and `borrowDate` stored in the DB, rather than reading from system config. This ensures receipts for historical borrows reflect the duration at the time of borrowing, not the current setting.
+Fetches a receipt for any borrow record (no admin guard). Computes `duration` from the difference between the stored `dueDate` and `borrowDate` so historical receipts reflect the duration at the time of borrowing, not the current system setting.
 
 ---
 
@@ -378,7 +363,7 @@ Fetches a receipt for any borrow record (no admin guard). Computes the `duration
 
 **File:** `lib/admin/actions/user.ts`
 
-All write actions require `requireAdminActor()` and use optimistic concurrency via `expectedVersion` to prevent lost-update conflicts.
+All write actions require `requireAdminActor()` and pass `expectedVersion` and `lockToken` to `assertLockOwnership()` and `updateWithVersionCheck()`.
 
 #### `getApprovedUsers({ page, limit })` / `getApprovedUserById(userId)`
 
@@ -386,20 +371,21 @@ Fetches approved users with a left join on `borrowRecords` (status `BORROWED`) t
 
 #### `getPendingUsers({ page, limit })` / `getPendingUserById(userId)`
 
-Fetches users with `status = 'PENDING'`. No borrow record join needed.
+Fetches users with `status = "PENDING"`.
 
 #### `approveAccount({ userId, expectedVersion, lockToken })`
 
-1. Acquires and asserts a distributed lock via `assertLockOwnership`.
-2. Verifies the user is still pending.
-3. Updates `status = 'APPROVED'` via `updateWithVersionCheck` (optimistic lock).
-4. Revalidates paths and broadcasts.
+1. Asserts distributed lock ownership via `assertLockOwnership`.
+2. Verifies the user is still `PENDING`.
+3. Updates `status = "APPROVED"` via `updateWithVersionCheck`.
+4. Revalidates paths and broadcasts dashboard update.
 5. Publishes a `DELETE` event to `account_requests` and a `CREATE` event to `users`.
-6. Releases the lock in a `finally` block.
+6. Sends approval email (fire-and-forget).
+7. Releases the lock in a `finally` block.
 
 #### `rejectAccount({ userId, expectedVersion, lockToken })`
 
-Same flow as `approveAccount` but sets `status = 'REJECTED'`. Publishes only a `DELETE` to `account_requests` (rejected users don't appear in the users list).
+Same flow as `approveAccount` but sets `status = "REJECTED"`. Publishes only a `DELETE` to `account_requests`. Sends rejection email (fire-and-forget).
 
 #### `deleteUser({ userId, expectedVersion, lockToken })`
 
@@ -408,16 +394,17 @@ Runs inside a transaction:
 1. Checks for active borrow records (`BORROWED` or `LATE_RETURN`) with a `FOR UPDATE` lock. Blocks deletion if any exist.
 2. Re-fetches the user row with a version check and `FOR UPDATE` lock (TOCTOU protection).
 3. Deletes all borrow records for the user, then deletes the user.
-4. Returns `{ type: "active-borrows" }`, `{ type: "conflict" }`, or `{ type: "success" }` to allow the caller to surface the right error message.
+
+Returns `{ type: "active-borrows" }`, `{ type: "conflict" }`, or `{ type: "success" }`.
 
 #### `updateUserRole({ userId, role, expectedVersion, lockToken })`
 
-Updates a user's role with two notable behaviors:
+Updates a user's role with two safety behaviors:
 
-- **Last-admin protection:** when downgrading to `USER`, the `WHERE` clause includes a subquery that aborts the update if this is the last admin: `(role != 'ADMIN' OR (SELECT count(*) FROM users WHERE role = 'ADMIN') > 1)`.
-- **Selective session invalidation:** `sessionVersion` is only incremented on an `ADMIN → USER` downgrade. Upgrading a user to admin doesn't require invalidation since the user gains access rather than losing it.
+- **Last-admin protection** — the `WHERE` clause includes a subquery that aborts the update if this is the last admin.
+- **Selective session invalidation** — `sessionVersion` is incremented only on `ADMIN → USER` downgrade. After decrement, `publishRoleChangeEvent` is called to force the demoted user's active sessions to sign out via SSE.
 
-After a downgrade, `publishRoleChangeEvent` is called to push a server-sent event that forces the demoted user's session to refresh on their active client.
+See [Admin Session Invalidation](Admin_Session_Invalidation.md) for the full invalidation flow.
 
 ---
 
@@ -427,14 +414,14 @@ After a downgrade, `publishRoleChangeEvent` is called to push a server-sent even
 
 **File:** `lib/essentials/imageCrop.ts`
 
-A canvas-based utility that crops an image to the pixel coordinates provided by `react-easy-crop`. It:
+A canvas-based utility that crops an image to the pixel coordinates provided by `react-easy-crop`:
 
 1. Loads the image via `createImage` (sets `crossOrigin = "anonymous"` to avoid CORS issues).
 2. Creates an off-screen canvas sized to the crop region.
 3. Uses `ctx.drawImage` to extract the crop.
 4. Returns an object URL via `canvas.toBlob` (JPEG format).
 
-Returns `null` if the canvas context is unavailable (e.g., in a non-browser environment).
+Returns `null` if the canvas context is unavailable (non-browser environment).
 
 ---
 
@@ -458,7 +445,7 @@ lib/
     receipt.ts               # generateReceipt, getReceipt
     user.ts                  # CRUD + role management for users
   essentials/
-    imageCrop.ts             # Canvas crop utility
+    imageCrop.ts             # Canvas crop utility (getCroppedImg)
   global/
     essentials/
       use-avatar-upload.ts   # Core avatar upload hook

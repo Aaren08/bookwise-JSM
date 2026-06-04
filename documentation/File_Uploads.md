@@ -2,145 +2,214 @@
 
 ## Overview
 
-BookWise implements a robust file upload system for handling user avatars, university ID cards, and book cover images. The system uses ImageKit for cloud storage and optimization, with client-side upload capabilities and comprehensive security measures.
+BookWise handles three categories of file uploads: user profile avatars, university ID cards (during registration), and book cover images (admin only). All uploads go to ImageKit CDN via client-side direct upload using signed authentication parameters fetched from the server.
+
+---
 
 ## Technology Stack
 
-### Image Storage & CDN
+### Image Storage and CDN
 
-- **ImageKit** - Cloud image storage and optimization
-- **ImageKit SDK** - Client-side upload functionality
-- **CDN Delivery** - Global content delivery
+- **ImageKit** — cloud image storage, transformation, and CDN delivery
+- **ImageKit SDK** (`imagekitio-next` / `imagekit-javascript`) — client-side upload with progress tracking
+- **Signed authentication** — short-lived `signature`, `expire`, and `token` fetched from `GET /api/auth/imagekit` before each upload
 
 ### Upload Components
 
-- **FileUpload** - Generic file upload component
-- **ImageCropper** - Avatar cropping interface
-- **react-easy-crop** - Image cropping library
+- **`AvatarUploadControls`** — presentational layer: file picker trigger, crop modal, zoom slider, save/cancel buttons
+- **`ImageCropper`** — smart wrapper that selects between setup mode and profile mode
+- **`FileUpload`** — generic file upload component used for university ID cards and book cover images
+- **`react-easy-crop`** — interactive crop UI for avatar images
 
-### Security & Validation
+### Validation
 
-- **File Type Validation** - MIME type checking
-- **Size Limits** - File size restrictions
-- **Filename Sanitization** - Safe filename generation
+- **MIME type checking** — validated client-side before upload and re-validated after canvas crop
+- **Filename sanitization** — safe filenames generated via `generateSafeFilename()` before upload
 
-## Upload Configuration
+---
 
-### ImageKit Setup
+## ImageKit Configuration
 
 ```typescript
 // lib/config.ts
-export const imagekitConfig = {
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY!,
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY!,
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT!,
+export const config = {
+  env: {
+    imagekit: {
+      publicKey:   process.env.IMAGEKIT_PUBLIC_KEY!,
+      privateKey:  process.env.IMAGEKIT_PRIVATE_KEY!,
+      urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT!,
+    },
+  },
 };
 ```
 
 ### Authentication Endpoint
 
 ```typescript
-// app/api/auth/imagekit/route.ts
+// GET /api/auth/imagekit
 export async function GET() {
   return NextResponse.json({
-    ...imagekit.getAuthenticationParameters(),
+    ...imagekit.getAuthenticationParameters(), // { signature, expire, token }
     publicKey: config.env.imagekit.publicKey,
   });
 }
 ```
 
-## File Upload Component
+This endpoint requires no authentication. Parameters are short-lived and validated server-side by ImageKit on upload. The `useAvatarUpload` hook calls this endpoint automatically before each upload attempt.
 
-### Core Upload Logic
+---
 
-```tsx
-// components/FileUpload.tsx
-const FileUpload = ({
-  onUploadComplete,
-  onUploadError,
-  value,
-  type = "image",
-  accept,
-  folder = "",
-}: FileUploadProps) => {
-  // State management
-  const [progress, setProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
+## Avatar Upload System
 
-  // Authentication
-  const authenticator = async () => {
-    const response = await fetch("/api/auth/imagekit");
-    const data = await response.json();
-    return {
-      signature: data.signature,
-      expire: data.expire,
-      token: data.token,
-      publicKey: data.publicKey,
-    };
-  };
+The avatar upload pipeline is managed entirely by `useAvatarUpload` (`lib/global/essentials/use-avatar-upload.ts`). The hook handles file selection, validation, cropping, ImageKit upload, and result delivery via an `onUploadComplete` callback.
 
-  // Upload handler
-  const handleUpload = async (file: File) => {
-    const authParams = await authenticator();
-    const safeFileName = generateSafeFilename(
-      `upload-${Date.now()}`,
-      file.type,
-    );
+### Full Upload Flow
 
-    const uploadResponse = await upload({
-      expire: authParams.expire,
-      token: authParams.token,
-      signature: authParams.signature,
-      publicKey: authParams.publicKey,
-      file,
-      fileName: safeFileName,
-      folder,
-      onProgress: (event) => {
-        setProgress((event.loaded / event.total) * 100);
-      },
-    });
+```
+1. User clicks the avatar trigger button
+   → useAvatarUpload.openFilePicker() → hidden <input type="file"> click
 
-    onUploadComplete?.(uploadResponse);
-  };
-};
+2. User selects a file
+   → handleImageChange()
+   → MIME type validated against allowlist
+   → File read as base64 data URL via FileReader
+   → previewImage set, crop modal opens (isCropperOpen = true)
+
+3. User adjusts the crop region and zoom
+   → handleCropComplete() → croppedAreaPixels updated
+
+4. User clicks "Save & Upload"
+   → uploadCroppedImage()
+   → getCroppedImg() — canvas crop to data URL
+   → data URL fetched as Blob, MIME re-validated
+   → generateSafeFilename() builds a safe filename
+   → GET /api/auth/imagekit — fetch signed auth params
+   → ImageKit SDK upload() with onProgress callback
+   → onUploadComplete(result) called with { url, fileId, fileName }
+   → uploadedImage state updated
 ```
 
-## File Types and Validation
+### `useAvatarUpload` Options
 
-### Supported File Types
+```typescript
+interface UseAvatarUploadOptions {
+  initialAvatar?:     string | null;  // Pre-existing avatar URL to display
+  fallbackAvatar?:    string;         // Shown when no avatar exists
+  folder?:            string;         // ImageKit folder (default: "/users/avatars")
+  fileNamePrefix?:    string;         // Filename prefix (default: "avatar")
+  onUploadComplete?:  (result: AvatarUploadResult) => Promise<boolean | void> | boolean | void;
+}
+```
+
+If `onUploadComplete` returns `false`, the hook does not update its internal `uploadedImage` state — the caller takes full control of whether the result is persisted.
+
+### `currentAvatar` Resolution
+
+The hook resolves the displayed avatar in this order:
+
+```
+uploadedImage → initialAvatar → fallbackAvatar
+```
+
+### Two Modes via `ImageCropper`
+
+`ImageCropper` selects between two contexts:
+
+| Mode | When | Behaviour |
+|---|---|---|
+| **Setup mode** | `avatarUpload` prop is provided | Uses the passed `useAvatarUpload` instance; no API call on complete |
+| **Profile mode** | No `avatarUpload` prop | Creates its own instance internally; calls `PUT /api/avatar` on complete, updates NextAuth session, triggers `router.refresh()` |
+
+This allows the same visual component to serve both the setup wizard (no session yet) and the live user profile page (session must be updated).
+
+---
+
+## University ID Card Upload
+
+During registration (`/sign-up`), users upload a photo of their university ID card. This uses the generic `FileUpload` component:
+
+```tsx
+<FileUpload
+  type="document"
+  accept="image/*,.pdf"
+  folder="university-cards"
+  placeholder="Upload University ID Card"
+  onUploadComplete={(response) => {
+    setValue("universityCard", response.url);
+  }}
+/>
+```
+
+The uploaded URL is stored in the `universityCard` field on the `users` table. Admins view this image when reviewing account requests.
+
+---
+
+## Book Cover Upload (Admin)
+
+Admins upload book cover images when creating or editing books through the `BookForm` component:
+
+```tsx
+<FileUpload
+  type="image"
+  accept="image/*"
+  folder="book-covers"
+  placeholder="Upload Book Cover"
+  onUploadComplete={(response) => {
+    setCoverUrl(response.url);
+  }}
+/>
+```
+
+The cover URL is stored in the `coverUrl` field on the `books` table. The `coverColor` hex is set separately by the admin via a color picker.
+
+---
+
+## Generic FileUpload Component
+
+`components/FileUpload.tsx` is used for university cards and book covers. It handles its own state, validation, and upload internally:
+
+```typescript
+interface FileUploadProps {
+  onUploadComplete?: (response: { url: string; fileId: string }) => void;
+  onUploadError?:    (error: Error) => void;
+  value?:            string;
+  type?:             "image" | "document";
+  accept?:           string;
+  folder?:           string;
+  placeholder?:      string;
+}
+```
+
+### Upload Progress
+
+```tsx
+{isUploading && (
+  <div className="upload-progress">
+    <div className="progress-bar" style={{ width: `${progress}%` }} />
+    <span>{Math.round(progress)}%</span>
+  </div>
+)}
+```
+
+---
+
+## File Validation
+
+### Allowed MIME Types
 
 ```typescript
 const ALLOWED_MIME_TYPES = {
-  image: ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"],
+  image:    ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"],
   document: ["application/pdf", "image/jpeg", "image/jpg", "image/png"],
 };
 ```
 
-### File Size Limits
+For avatar uploads, MIME type is checked twice: once when the file is selected, and again after the canvas crop produces a new Blob — this catches cases where the canvas serialization changes the MIME type.
+
+### Filename Sanitization
 
 ```typescript
-const FILE_SIZE_LIMITS = {
-  avatar: 5 * 1024 * 1024, // 5MB
-  universityCard: 10 * 1024 * 1024, // 10MB
-  bookCover: 15 * 1024 * 1024, // 15MB
-};
-```
-
-### Validation Functions
-
-```typescript
-// lib/essentials/sanitizeFileExt.ts
-export const isAllowedMimeType = (
-  file: File,
-  type: "image" | "document",
-): boolean => {
-  return ALLOWED_MIME_TYPES[type].includes(file.type);
-};
-
-export const isValidFileSize = (file: File, maxSize: number): boolean => {
-  return file.size <= maxSize;
-};
-
+// lib/essentials/sanitizeFileExt.ts (or similar)
 export const generateSafeFilename = (
   baseName: string,
   mimeType: string,
@@ -151,163 +220,30 @@ export const generateSafeFilename = (
 };
 ```
 
-## Avatar Upload System
+---
 
-### Profile Picture Upload
+## Rate Limiting
 
-Users can upload and crop profile pictures:
+| Operation | Limit | Enforced by |
+|---|---|---|
+| Avatar upload (ImageKit) | 10 per day per user | `uploadAvatarRateLimit` |
+| Avatar profile update (`PUT /api/avatar`) | 5 per day per user | `updateAvatarRateLimit` |
 
-```tsx
-// Avatar upload flow
-1. File selection
-2. Validation (type, size)
-3. Optional cropping
-4. Upload to ImageKit
-5. Update user profile
-6. Display new avatar
-```
+Both limits are defined in `lib/essentials/rateLimit.ts` using Upstash Redis fixed windows. The upload limit (`uploadAvatarRateLimit`) is checked in the avatar upload API flow; the update limit (`updateAvatarRateLimit`) is checked in `PUT /api/avatar` before the database write.
 
-### Image Cropping
+There are no documented rate limits for university card or book cover uploads beyond general API request limits.
 
-```tsx
-// components/ImageCropper.tsx
-const ImageCropper = ({
-  imageSrc,
-  onCropComplete,
-  aspect = 1,
-}: ImageCropperProps) => {
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
-
-  const onCropAreaChange = (croppedArea, croppedAreaPixels) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  };
-
-  const handleCropComplete = () => {
-    // Generate cropped image blob
-    const croppedImage = await getCroppedImg(imageSrc, croppedAreaPixels);
-    onCropComplete(croppedImage);
-  };
-};
-```
-
-### Avatar Update API
-
-```typescript
-// app/api/avatar/route.ts
-export async function PUT(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Rate limiting
-  const { success } = await updateAvatarRateLimit.limit(session.user.id);
-  if (!success) {
-    return NextResponse.json(
-      {
-        error: "You can only update your avatar 5 times per day.",
-      },
-      { status: 429 },
-    );
-  }
-
-  const { avatar, fileId } = await request.json();
-
-  // Update user profile
-  await db
-    .update(users)
-    .set({
-      userAvatar: avatar,
-      userAvatarFileId: fileId,
-    })
-    .where(eq(users.id, session.user.id));
-
-  // Update session
-  await auth.api.updateSession({
-    user: {
-      image: avatar,
-    },
-  });
-
-  return NextResponse.json({ success: true });
-}
-```
-
-## University Card Upload
-
-### Registration Upload
-
-During sign-up, users upload university ID cards:
-
-```tsx
-// components/AuthForm.tsx - Sign up form
-const universityCardUpload = (
-  <FileUpload
-    type="document"
-    accept="image/*,.pdf"
-    folder="university-cards"
-    placeholder="Upload University ID Card"
-    onUploadComplete={(response) => {
-      setValue("universityCard", response.url);
-    }}
-  />
-);
-```
-
-### Admin Verification
-
-Admins review uploaded university cards during account approval:
-
-```tsx
-// Admin user approval modal
-<Image
-  src={user.universityCard}
-  alt="University Card"
-  width={300}
-  height={200}
-  className="rounded-lg"
-/>
-```
-
-## Book Cover Upload
-
-### Admin Book Management
-
-Admins can upload book covers when adding/editing books:
-
-```tsx
-// Admin book form
-<FileUpload
-  type="image"
-  accept="image/*"
-  folder="book-covers"
-  placeholder="Upload Book Cover"
-  onUploadComplete={(response) => {
-    setCoverUrl(response.url);
-    setCoverColor(generateColorFromImage(response.url));
-  }}
-/>
-```
-
-### Cover Color Generation
-
-Automatically generate accent colors from uploaded covers:
-
-```typescript
-const generateColorFromImage = (imageUrl: string): string => {
-  // Extract dominant color from image
-  // Return hex color code
-};
-```
+---
 
 ## Error Handling
 
-### Upload Errors
+### ImageKit Upload Errors
 
 ```typescript
-const handleUploadError = (error: ImageKitError) => {
+try {
+  const result = await upload({ ... });
+  await onUploadComplete(result);
+} catch (error) {
   if (error instanceof ImageKitAbortError) {
     showErrorToast("Upload was cancelled");
   } else if (error instanceof ImageKitInvalidRequestError) {
@@ -316,172 +252,78 @@ const handleUploadError = (error: ImageKitError) => {
     showErrorToast("Server error during upload");
   } else if (error instanceof ImageKitUploadNetworkError) {
     showErrorToast("Network error during upload");
+  } else {
+    showErrorToast("Upload failed");
   }
-};
+}
 ```
 
 ### Validation Errors
 
+Validation errors are displayed inline in the upload component before the upload is attempted:
+
 ```typescript
-const validateFile = (file: File): string | null => {
-  if (!isAllowedMimeType(file, type)) {
-    return `File type not allowed. Allowed types: ${ALLOWED_MIME_TYPES[type].join(", ")}`;
-  }
-
-  if (!isValidFileSize(file, FILE_SIZE_LIMITS[type])) {
-    return `File size too large. Maximum size: ${FILE_SIZE_LIMITS[type] / (1024 * 1024)}MB`;
-  }
-
-  return null;
-};
-```
-
-## Progress Tracking
-
-### Upload Progress
-
-```tsx
-const [progress, setProgress] = useState(0);
-
-// During upload
-onProgress: (event) => {
-  const percentage = (event.loaded / event.total) * 100;
-  setProgress(percentage);
-};
-
-// UI feedback
-{
-  isUploading && (
-    <div className="upload-progress">
-      <div className="progress-bar" style={{ width: `${progress}%` }} />
-      <span>{Math.round(progress)}%</span>
-    </div>
-  );
+const error = validateFile(file, type);
+if (error) {
+  showErrorToast(error);
+  return;
 }
 ```
 
-## Rate Limiting
-
-### Upload Limits
-
-```typescript
-// lib/essentials/rateLimit.ts
-export const uploadAvatarRateLimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.fixedWindow(10, "1 d"), // 10 uploads per day
-  analytics: true,
-  prefix: "ratelimit:uploadAvatar:daily",
-});
-
-export const updateAvatarRateLimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.fixedWindow(5, "1 d"), // 5 updates per day
-  analytics: true,
-  prefix: "ratelimit:updateAvatar:daily",
-});
-```
+---
 
 ## Security Considerations
 
-### File Sanitization
-
-- Remove potentially dangerous characters from filenames
-- Validate file extensions match MIME types
-- Strip metadata that could contain exploits
-
 ### Access Control
 
-- Authenticated users only for avatar uploads
-- Admin-only access for book cover uploads
-- Public read access for uploaded files
+- **Avatar uploads** — authenticated users only; rate limited per user
+- **Book cover uploads** — admin only (enforced by the admin layout and `requireAdminActor()` in `BookForm`)
+- **University card uploads** — anonymous (during sign-up before a session exists); files land in a private ImageKit folder
 
-### Storage Security
+### Storage
 
-- Files stored in private folders when sensitive
-- Signed URLs for temporary access
-- Automatic cleanup of old/unused files
+- All uploads go to ImageKit; no files are stored on the Next.js server or in the database
+- Only the CDN URL and ImageKit file ID are persisted in the database
+- When a user updates their avatar, the old file's `userAvatarFileId` can be used to delete the previous file from ImageKit, freeing storage
+
+### Filename Safety
+
+`generateSafeFilename()` strips all characters outside `[a-zA-Z0-9-_]` and appends the correct extension from the MIME type, preventing path traversal or injection via filenames.
+
+---
 
 ## Performance Optimization
 
-### Image Optimization
+### ImageKit Transformations
 
-ImageKit automatically optimizes uploaded images:
+ImageKit applies automatic transformations on delivery:
 
-- Multiple formats (WebP, AVIF)
-- Responsive breakpoints
-- Lazy loading support
-- CDN caching
+- Format conversion (WebP, AVIF) based on browser `Accept` header
+- Responsive resizing via URL parameters
+- CDN caching with long TTLs for hashed filenames
 
-### Upload Chunking
+### Lazy Loading
 
-For large files, implement resumable uploads:
-
-```typescript
-// Future enhancement
-const uploadInChunks = async (file: File) => {
-  const chunkSize = 1024 * 1024; // 1MB chunks
-  const chunks = Math.ceil(file.size / chunkSize);
-
-  for (let i = 0; i < chunks; i++) {
-    const chunk = file.slice(i * chunkSize, (i + 1) * chunkSize);
-    await uploadChunk(chunk, i, chunks);
-  }
-};
-```
-
-## Cost Management
-
-### ImageKit Pricing
-
-- Free tier: 20GB storage, 20GB bandwidth
-- Paid plans based on usage
-- Optimize storage with automatic format conversion
-
-### Storage Optimization
-
-- Delete old/unused files
-- Compress images on upload
-- Use appropriate image sizes
-
-## Testing and Development
-
-### Upload Testing
+Heavy upload components (`FileUpload`, `ImageCropper`, `LazyColorPicker`) are lazy-loaded via `lib/performance/bundle.tsx` to avoid including them in the initial bundle:
 
 ```typescript
-// Test file validation
-const testFile = new File(["test"], "test.jpg", { type: "image/jpeg" });
-console.log(isAllowedMimeType(testFile, "image")); // true
-console.log(isValidFileSize(testFile, 1024 * 1024)); // true
+// lib/performance/bundle.tsx
+export const LazyFileUpload     = dynamic(() => import("@/components/FileUpload"));
+export const LazyImageCropper   = dynamic(() => import("@/components/ImageCropper"));
+export const LazyColorPicker    = dynamic(() => import("@/components/ColorPicker"));
 ```
 
-### Mock Uploads
-
-```typescript
-// Development mock for ImageKit
-const mockUpload = async (file: File) => {
-  return {
-    url: `https://mock-imagekit.com/${file.name}`,
-    fileId: `mock-${Date.now()}`,
-  };
-};
-```
-
-## Future Enhancements
-
-### Planned Features
-
-- **Bulk Upload** - Multiple file uploads
-- **Drag & Drop** - Enhanced UX for file selection
-- **Video Upload** - Support for book trailers
-- **Image Editing** - Basic editing tools
-- **Cloud Migration** - Multi-cloud storage support
+---
 
 ## Related Files
 
-- `components/FileUpload.tsx` - Main upload component
-- `components/ImageCropper.tsx` - Avatar cropping interface
-- `lib/essentials/sanitizeFileExt.ts` - File validation utilities
-- `app/api/auth/imagekit/route.ts` - Upload authentication
-- `app/api/avatar/route.ts` - Avatar update API
-- `lib/essentials/rateLimit.ts` - Upload rate limiting</content>
-  <parameter name="filePath">d:\Full Stack\Next.js\bookwise\documentation\File_Uploads.md
+- `components/AvatarUploadControls.tsx` — presentational crop modal and file picker
+- `components/ImageCropper.tsx` — smart wrapper (setup mode vs. profile mode)
+- `components/FileUpload.tsx` — generic file upload for ID cards and book covers
+- `lib/global/essentials/use-avatar-upload.ts` — `useAvatarUpload` hook
+- `lib/essentials/imageCrop.ts` — `getCroppedImg()` canvas crop utility
+- `lib/essentials/sanitizeFileExt.ts` — `generateSafeFilename()`, MIME validation
+- `lib/performance/bundle.tsx` — lazy-loaded component exports
+- `app/api/auth/imagekit/route.ts` — signed upload auth endpoint
+- `app/api/avatar/route.ts` — avatar CDN URL persistence endpoint
+- `lib/essentials/rateLimit.ts` — `uploadAvatarRateLimit`, `updateAvatarRateLimit`

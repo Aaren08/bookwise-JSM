@@ -2,168 +2,91 @@
 
 ## Overview
 
-BookWise includes a comprehensive receipt generation system that creates PDF receipts for completed book borrowing transactions. The system uses client-side PDF generation with modern web technologies to provide users and admins with official borrowing records.
+BookWise generates PDF receipts for book borrowing transactions. Receipts are produced on demand from a server action that also transitions the borrow record from `PENDING` to `BORROWED`. The PDF is rendered client-side from a formatted receipt object and downloaded directly in the browser — no files are stored on the server.
 
 ## Technology Stack
 
 ### PDF Generation
 
-- **jsPDF** - PDF document creation
-- **html2canvas** - HTML to canvas conversion
-- **modern-screenshot** - Enhanced screenshot capabilities
+- **modern-screenshot** — DOM-to-image capture (replaces html2canvas for better fidelity)
+- **jsPDF** — PDF document assembly from the captured image
 
 ### Receipt Components
 
-- **ReceiptModal** - Receipt display and download interface
-- **GenerateReceipt** - Receipt generation trigger
-- **ReceiptButton** - Download button component
+- **`ReceiptModal`** — receipt display and PDF download interface
+- **`GenerateReceipt`** — receipt generation trigger button (admin-facing)
+- **`downloadReceiptAsPDF`** — client-side PDF creation utility
+
+---
 
 ## Receipt Data Structure
 
-### Receipt Interface
+The canonical `Receipt` type used across components and server actions:
 
 ```typescript
-interface Receipt {
-  borrowRecordId: string;
-  userName: string;
-  userEmail: string;
-  universityId: string;
-  bookTitle: string;
-  bookAuthor: string;
-  bookGenre: string;
-  borrowDate: Date;
-  dueDate: Date;
-  returnDate?: Date;
-  borrowStatus: BorrowStatus;
-  generatedAt: Date;
-  receiptNumber: string;
-}
+type Receipt = {
+  receiptId: string;   // First 8 characters of the borrow record UUID, uppercased
+  issuedAt: string;    // Formatted: "DD/MM/YYYY, hh:mm A"
+  title: string;       // Book title
+  author: string;      // Book author
+  genre: string;       // Book genre
+  borrowedOn: string;  // Formatted: "DD/MM/YYYY"
+  dueDate: string;     // Formatted: "DD/MM/YYYY"
+  duration: string;    // e.g. "14 Days"
+  userName?: string;   // Borrower's full name
+  userEmail?: string;  // Borrower's email address
+};
 ```
 
-### Receipt Generation Process
+### Key Notes
 
-1. **Data Fetching**: Retrieve borrow record with user and book details
-2. **Data Formatting**: Format dates and generate receipt number
-3. **HTML Rendering**: Create styled HTML receipt template
-4. **Canvas Conversion**: Convert HTML to canvas image
-5. **PDF Creation**: Add canvas to PDF document
-6. **Download**: Trigger browser download
+- `receiptId` is derived, not stored. It is the first 8 characters of the borrow record UUID, uppercased (e.g. `"A3F9C1B2"`).
+- `duration` is computed differently depending on context:
+  - `generateReceipt()` — reads from the current `borrowDurationDays` system setting
+  - `getReceipt()` — computes the difference between `dueDate` and `borrowDate` stored in the database, so historical receipts reflect the duration at the time of borrowing rather than the current setting
+- When `borrowStatus === "PENDING"`, all date fields in `ReceiptModal` display as `"--/--/----"` and the download button is hidden to prevent generating a misleading receipt before approval.
 
-## Receipt Template
+---
 
-### HTML Structure
+## Server Actions
 
-```html
-<div class="receipt-container">
-  <header class="receipt-header">
-    <h1>BookWise Library</h1>
-    <h2>Borrowing Receipt</h2>
-  </header>
+Both actions live in `lib/admin/actions/receipt.ts`.
 
-  <section class="receipt-details">
-    <div class="receipt-info">
-      <p><strong>Receipt #:</strong> {receiptNumber}</p>
-      <p><strong>Generated:</strong> {generatedAt}</p>
-    </div>
+### `generateReceipt(borrowRecordId: string)`
 
-    <div class="user-info">
-      <h3>Borrower Information</h3>
-      <p><strong>Name:</strong> {userName}</p>
-      <p><strong>Email:</strong> {userEmail}</p>
-      <p><strong>University ID:</strong> {universityId}</p>
-    </div>
+Admin-only. Transitions a `PENDING` borrow record to `BORROWED` and returns a formatted `Receipt` object.
 
-    <div class="book-info">
-      <h3>Book Information</h3>
-      <p><strong>Title:</strong> {bookTitle}</p>
-      <p><strong>Author:</strong> {bookAuthor}</p>
-      <p><strong>Genre:</strong> {bookGenre}</p>
-    </div>
+**Steps:**
 
-    <div class="borrow-info">
-      <h3>Borrowing Details</h3>
-      <p><strong>Borrow Date:</strong> {borrowDate}</p>
-      <p><strong>Due Date:</strong> {dueDate}</p>
-      <p><strong>Return Date:</strong> {returnDate || 'Not returned'}</p>
-      <p><strong>Status:</strong> {borrowStatus}</p>
-    </div>
-  </section>
-
-  <footer class="receipt-footer">
-    <p>Thank you for using BookWise Library!</p>
-    <p>This receipt was generated on {generatedAt}</p>
-  </footer>
-</div>
-```
-
-### Styling
-
-Receipts use custom CSS for professional appearance:
-
-```css
-.receipt-container {
-  font-family: "Arial", sans-serif;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-  border: 2px solid #333;
-  background: white;
-}
-
-.receipt-header {
-  text-align: center;
-  border-bottom: 2px solid #333;
-  padding-bottom: 20px;
-  margin-bottom: 30px;
-}
-
-.receipt-header h1 {
-  color: #1e40af;
-  font-size: 24px;
-  margin: 0;
-}
-
-.receipt-details {
-  margin-bottom: 30px;
-}
-
-.receipt-info,
-.user-info,
-.book-info,
-.borrow-info {
-  margin-bottom: 20px;
-}
-
-.receipt-footer {
-  text-align: center;
-  border-top: 1px solid #ccc;
-  padding-top: 20px;
-  font-size: 12px;
-  color: #666;
-}
-```
-
-## Generation Workflow
-
-### Server-Side Data Preparation
+1. Calls `requireAdminActor()` — rejects with an error if the caller is not an admin
+2. Fetches the borrow record joined with book and user data
+3. Rejects if the record is already `RETURNED` or `LATE_RETURN`
+4. Updates the record:
+   - `borrowStatus = "BORROWED"`
+   - `borrowDate = NOW()`
+   - `dueDate = NOW() + borrowDurationDays` (from current system config)
+   - `version` incremented via `updateWithVersionCheck()`
+5. Revalidates `/admin/borrow-records` path cache
+6. Broadcasts admin dashboard update
+7. Publishes an `UPDATE` event to the `borrow_requests` realtime channel (best-effort, wrapped in try/catch)
+8. Returns a `Receipt` object with all fields formatted
 
 ```typescript
 // lib/admin/actions/receipt.ts
 export const generateReceipt = async (borrowRecordId: string) => {
-  // Fetch borrow record with joins
+  const admin = await requireAdminActor();
+
   const record = await db
     .select({
-      id: borrowRecords.id,
-      borrowDate: borrowRecords.borrowDate,
-      dueDate: borrowRecords.dueDate,
-      returnDate: borrowRecords.returnDate,
+      id:           borrowRecords.id,
+      borrowDate:   borrowRecords.borrowDate,
+      dueDate:      borrowRecords.dueDate,
       borrowStatus: borrowRecords.borrowStatus,
-      userName: users.fullName,
-      userEmail: users.email,
-      universityId: users.universityId,
-      bookTitle: books.title,
-      bookAuthor: books.author,
-      bookGenre: books.genre,
+      userName:     users.fullName,
+      userEmail:    users.email,
+      bookTitle:    books.title,
+      bookAuthor:   books.author,
+      bookGenre:    books.genre,
     })
     .from(borrowRecords)
     .innerJoin(users, eq(borrowRecords.userId, users.id))
@@ -175,241 +98,195 @@ export const generateReceipt = async (borrowRecordId: string) => {
     return { success: false, error: "Borrow record not found" };
   }
 
-  // Generate receipt number
-  const receiptNumber = `BW-${borrowRecordId.slice(-8).toUpperCase()}`;
+  if (["RETURNED", "LATE_RETURN"].includes(record[0].borrowStatus)) {
+    return { success: false, error: "Cannot generate receipt for a completed record" };
+  }
+
+  // Transition PENDING → BORROWED and set dates
+  // ... updateWithVersionCheck and counter updates ...
+
+  const receiptId = borrowRecordId.slice(0, 8).toUpperCase();
+  const duration  = `${borrowDurationDays} Days`;
 
   return {
     success: true,
     data: {
-      ...record[0],
-      receiptNumber,
-      generatedAt: new Date(),
-    },
+      receiptId,
+      issuedAt:   format(new Date(), "dd/MM/yyyy, hh:mm a"),
+      title:      record[0].bookTitle,
+      author:     record[0].bookAuthor,
+      genre:      record[0].bookGenre,
+      borrowedOn: format(new Date(), "dd/MM/yyyy"),
+      dueDate:    format(dueDate, "dd/MM/yyyy"),
+      duration,
+      userName:   record[0].userName,
+      userEmail:  record[0].userEmail,
+    } satisfies Receipt,
   };
 };
 ```
 
-### Client-Side PDF Creation
+### `getReceipt(borrowRecordId: string)`
+
+Fetches a receipt for any borrow record. No admin requirement — used by the user-facing receipt download flow.
 
 ```typescript
-// components/admin/GenerateReceipt.tsx
-const handleGenerate = async () => {
-  const res = await generateReceipt(borrowRecordId);
-  if (res.success && res.data) {
-    setReceipt(res.data as Receipt);
-    setIsModalOpen(true);
-  }
+export const getReceipt = async (borrowRecordId: string) => {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  // Fetch record with joins ...
+
+  // Duration is computed from stored dates, not current system config
+  // This ensures historical receipts are accurate even if borrowDurationDays changes
+  const durationDays = differenceInDays(
+    new Date(record[0].dueDate),
+    new Date(record[0].borrowDate),
+  );
+  const duration = `${durationDays} Days`;
+
+  return { success: true, data: { receiptId, /* ... */ } satisfies Receipt };
 };
 ```
 
-### PDF Generation Function
-
-```typescript
-// lib/essentials/downloadReceipt.ts
-export const downloadReceipt = async (receipt: Receipt) => {
-  // Create HTML content
-  const htmlContent = generateReceiptHTML(receipt);
-
-  // Convert to canvas
-  const canvas = await html2canvas(htmlContent, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: false,
-  });
-
-  // Create PDF
-  const pdf = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
-
-  const imgData = canvas.toDataURL("image/png");
-  const imgWidth = 210; // A4 width in mm
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-  pdf.save(`receipt-${receipt.receiptNumber}.pdf`);
-};
-```
+---
 
 ## Receipt Modal
 
-### Modal Interface
+`ReceiptModal` displays the receipt in two columns and provides a PDF download button.
 
 ```tsx
 <ReceiptModal
   isOpen={isModalOpen}
   onClose={() => setIsModalOpen(false)}
   receipt={receipt}
-  borrowStatus={status}
+  borrowStatus={borrowStatus}
 />
 ```
 
-### Modal Features
+### Layout
 
-- **Preview**: Shows receipt content before download
-- **Download Button**: Triggers PDF generation and download
-- **Print Option**: Browser print functionality
-- **Responsive Design**: Works on mobile and desktop
+- **Left column:** receipt header (logo, receipt ID, date issued), book details (title, author, genre, borrowed on, due date, duration)
+- **Right column:** terms and conditions, footer with website URL and support email
+
+The website URL and support email are read from `useSystemConfig()` (Zustand store) so they always reflect the live system configuration set during the setup wizard.
+
+### Pending State
+
+When `borrowStatus === "PENDING"`:
+
+- All date fields display as `"--/--/----"`
+- The download button is hidden
+- This prevents generating a misleading receipt before admin approval
+
+### Download
+
+The download button calls `downloadReceiptAsPDF(receipt)`. Errors are caught and surfaced as toast notifications via Sonner.
+
+---
+
+## PDF Generation
+
+`downloadReceiptAsPDF` is defined in `lib/essentials/downloadReceipt.ts`:
+
+```typescript
+export const downloadReceiptAsPDF = async (receipt: Receipt) => {
+  // 1. Find the rendered receipt DOM node
+  const receiptElement = document.getElementById("receipt-modal-content");
+  if (!receiptElement) throw new Error("Receipt element not found");
+
+  // 2. Capture DOM node as image using modern-screenshot
+  const dataUrl = await domToPng(receiptElement, {
+    scale: 2,
+    backgroundColor: "#ffffff",
+  });
+
+  // 3. Create PDF with jsPDF
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const imgWidth  = 210;  // A4 width in mm
+  const imgHeight = (receiptElement.offsetHeight * imgWidth) / receiptElement.offsetWidth;
+
+  pdf.addImage(dataUrl, "PNG", 0, 0, imgWidth, imgHeight);
+  pdf.save(`receipt-${receipt.receiptId}.pdf`);
+};
+```
+
+---
+
+## GenerateReceipt Component
+
+Admin-facing trigger that calls `generateReceipt()` and opens the receipt modal:
+
+```tsx
+// components/admin/GenerateReceipt.tsx (or similar)
+const handleGenerate = async () => {
+  const result = await generateReceipt(borrowRecordId);
+  if (result.success && result.data) {
+    setReceipt(result.data);
+    setIsModalOpen(true);
+  }
+};
+```
+
+The component is only rendered when `borrowStatus !== "PENDING"` is false — i.e., it is shown for `PENDING` records (to allow approval + receipt in one step) and hidden for already-terminal statuses.
+
+---
 
 ## Rate Limiting
 
-### Download Limits
-
-Receipt downloads are rate limited to prevent abuse:
+Receipt downloads are rate limited per user + receipt combination to prevent abuse:
 
 ```typescript
-// Per user + receipt combination
-const key = `receipt-download:user:${session.user.id}:receipt:${receiptId}`;
+// lib/essentials/rateLimit.ts
+export const receiptMinuteRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "1 m"),
+  prefix:  "ratelimit:receipt:minute",
+});
 
-// Minute limit: 5 downloads
-const minuteLimit = await receiptMinuteRateLimit.limit(key);
-
-// Daily limit: 10 downloads
-const dailyLimit = await receiptDailyRateLimit.limit(key);
+export const receiptDailyRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(10, "1 d"),
+  prefix:  "ratelimit:receipt:daily",
+});
 ```
 
-### Rate Limit Response
+The download API route (`app/api/receipt/download/route.ts`) checks both limits using the key `receipt-download:user:<userId>:receipt:<receiptId>`. Exceeding either limit returns `429 Too Many Requests`.
 
-```typescript
-if (!minuteLimit.success) {
-  return NextResponse.json(
-    {
-      error: "You are downloading this receipt too frequently.",
-      reset: minuteLimit.reset,
-    },
-    { status: 429 },
-  );
-}
-```
+---
 
-## Receipt Storage
+## Authorization
 
-### Database Tracking
+| Action | Who can perform it |
+|---|---|
+| Generate receipt (PENDING → BORROWED) | Admin only (`requireAdminActor()`) |
+| Fetch receipt data | Any authenticated user |
+| Download PDF | Any authenticated user (rate limited) |
 
-Receipt generation is tracked but not stored:
+There is no ownership check on `getReceipt()` — any authenticated user can fetch receipt data for any record ID they know. The PDF download endpoint applies rate limiting per user but does not restrict by ownership. If stricter access control is needed for receipt data, add a `userId` check in `getReceipt()`.
 
-- Generation timestamps logged
-- Download counts tracked (future feature)
-- No persistent receipt storage
-
-### File Management
-
-- PDFs generated on-demand
-- No server-side storage
-- Client-side download only
-
-## Security Considerations
-
-### Authorization Checks
-
-```typescript
-// Only admins or record owner can generate receipts
-if (!session?.user?.id || session.user.role !== "ADMIN") {
-  // Check if user owns the borrow record
-  const isOwner = await db
-    .select()
-    .from(borrowRecords)
-    .where(
-      and(
-        eq(borrowRecords.id, borrowRecordId),
-        eq(borrowRecords.userId, session.user.id),
-      ),
-    )
-    .limit(1);
-
-  if (!isOwner.length) {
-    return { success: false, error: "Unauthorized" };
-  }
-}
-```
-
-### Data Validation
-
-- Server-side validation of borrow record existence
-- Sanitization of user input data
-- XSS protection in HTML generation
-
-## Error Handling
-
-### Generation Errors
-
-```typescript
-try {
-  const pdf = await downloadReceipt(receipt);
-} catch (error) {
-  console.error("Receipt generation failed:", error);
-  showErrorToast("Failed to generate receipt");
-}
-```
-
-### Common Issues
-
-- Canvas rendering failures
-- Memory limits for large receipts
-- Browser compatibility issues
-- Network timeouts
-
-## Performance Optimization
-
-### Lazy Loading
-
-- Receipt modal loads on demand
-- PDF generation triggered by user action
-- No pre-rendering of receipts
-
-### Memory Management
-
-- Canvas cleanup after PDF generation
-- Garbage collection of large images
-- Chunked processing for large receipts
+---
 
 ## Browser Compatibility
 
-### Supported Browsers
+PDF generation relies on `modern-screenshot` (canvas-based DOM capture) and `jsPDF`. Both require a browser environment — they cannot run in server components or API routes.
 
-- Chrome 80+
-- Firefox 75+
-- Safari 13+
-- Edge 80+
+Supported browsers: Chrome 80+, Firefox 75+, Safari 13+, Edge 80+.
 
-### Fallback Options
-
-- Print functionality as alternative
-- Email receipts (future feature)
-- Download restrictions for unsupported browsers
-
-## Analytics and Monitoring
-
-### Usage Tracking
-
-- Receipt generation counts
-- Download success/failure rates
-- User engagement metrics
-
-### Performance Monitoring
-
-- Generation time tracking
-- Error rate monitoring
-- Resource usage statistics
-
-## Future Enhancements
-
-### Planned Features
-
-- **Email Receipts**: Send receipts via email
-- **Digital Signatures**: Cryptographic signing
-- **QR Codes**: Quick access codes
-- **Bulk Generation**: Multiple receipts at once
-- **Custom Templates**: User-customizable designs
+---
 
 ## Related Files
 
-- `components/ReceiptModal.tsx` - Receipt display modal
-- `components/ReceiptButton.tsx` - Download button component
-- `lib/admin/actions/receipt.ts` - Receipt generation logic
-- `lib/essentials/downloadReceipt.ts` - PDF creation utilities
-- `styles/receipt.css` - Receipt styling
-- `app/api/receipt/download/route.ts` - Download API endpoint</content>
-  <parameter name="filePath">d:\Full Stack\Next.js\bookwise\documentation\Receipt_Generation.md
+- `lib/admin/actions/receipt.ts` — `generateReceipt()`, `getReceipt()`
+- `lib/essentials/downloadReceipt.ts` — `downloadReceiptAsPDF()`
+- `components/ReceiptModal.tsx` — receipt display and download modal
+- `components/admin/GenerateReceipt.tsx` — admin-facing trigger
+- `app/api/receipt/download/route.ts` — download API endpoint
+- `lib/essentials/rateLimit.ts` — `receiptMinuteRateLimit`, `receiptDailyRateLimit`
+- `lib/store/system-config-store.ts` — `useSystemConfig()` for website URL and support email
+- `database/schema.ts` — `borrow_records` table
