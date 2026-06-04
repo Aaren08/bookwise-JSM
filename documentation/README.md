@@ -1,251 +1,233 @@
-# BookWise Documentation - Realtime System
+# BookWise Documentation
 
-## 📚 Quick Navigation
+Welcome to the BookWise documentation. This index covers every document in the suite, organized by domain. Use the section headings to find what you need, or jump to [By Use Case](#by-use-case) for task-oriented navigation.
 
-### Start Here
+---
 
-- **[Realtime System Guide](Realtime_System_Guide.md)** – Complete overview with diagrams and examples
+## Quick Start
 
-### Core Implementation Updates (Latest)
+If you are new to the codebase, read these four documents in order:
 
-#### Error Handling & Resilience
+1. [Architecture](Architecture.md) — tech stack, project structure, design patterns, data flow
+2. [Database](Database.md) — all tables, columns, migrations, and query patterns
+3. [Authentication](Authentication.md) — NextAuth v5 config, JWT, session flow
+4. [Borrowing System](Borrowing_System.md) — the core business domain: reservation, approval, return
 
-- **Lock Ownership Errors** – New `LockOwnershipError` class for type-safe lock conflicts (returns 409 Conflict)
-- **Best-Effort Publishing** – All realtime events wrapped in try-catch to prevent operation failures
-- **Graceful Lock Cleanup** – Finally blocks ensure locks are always released, with fallback error logging
+---
 
-#### API Route Improvements
+## Documentation Index
 
-- **Approve/Reject/Return Endpoints** – Now validate lock ownership early, return 409 on conflicts
-- **Avatar Upload** – Returns updated user status for proper realtime event routing
-- **Cron Job** – Batch-fetches full records with version increments for efficient realtime broadcasts
+### Architecture and Infrastructure
 
-#### Component & Hook Updates
+| Document                        | What it covers                                                                                                                                                                               |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Architecture](Architecture.md) | Full tech stack, complete project structure tree, all route groups, design patterns, realtime signal-and-refresh model, security layers, caching strategy                                    |
+| [Database](Database.md)         | All tables (`users`, `books`, `borrow_records`, `app_settings`, `setup_events`, `admin_audit_logs`), enums, version columns, migration history, query patterns, Neon HTTP driver constraints |
+| [Deployment](Deployment.md)     | All environment variables (required, optional, removed), Vercel setup, database migrations, CI/CD, scaling considerations                                                                    |
 
-- **useRealtimeUpdates** – Now requires `items` prop for proper state tracking
-- **Table Components** – Pass filtered items to hooks to avoid unnecessary lock checks
-- **RowLockIndicator** – Enhanced with ARIA attributes for accessibility
-- **BookForm** – Type-safe admin actor passing with early session validation
-- **DeleteBook** – Try-catch error handling with guaranteed lock release
+---
 
-#### Auth & Account Management
+### Authentication and Authorization
 
-- **Signup Flow** – Non-blocking fire-and-forget patterns for realtime updates and workflows
-- **Account Request Publishing** – IIFE pattern for independent async operations
+| Document                            | What it covers                                                                                                                           |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [Authentication](Authentication.md) | NextAuth v5 config, sign-up/sign-in flows, JWT callbacks, `sessionVersion`, type extensions, security features                           |
+| [Authorization](Authorization.md)   | RBAC roles and status, route layout protection, `requireAdminActor()`, lock ownership guard, all permission tables, role-change security |
 
-### Documentation Files Created
+---
 
-#### Core Architecture
+### Core Features
 
-- **[Realtime_Client_SSE.md](Realtime_Client_SSE.md)** – Singleton EventSource, connection lifecycle, heartbeats
-- **[Admin_Row_Concurrency.md](Admin_Row_Concurrency.md)** – Distributed locking, version conflict detection
-- **[Admin_Realtime_Events.md](Admin_Realtime_Events.md)** – Event types, channels, encoding, type guards
-- **[Admin_Realtime_API_Routes.md](Admin_Realtime_API_Routes.md)** – SSE stream, sync, lock endpoints
-- **[Realtime_Hooks.md](Realtime_Hooks.md)** – useRealtimeCore, useRowLock, useRealtimeUpdates, useOptimisticUpdate
-- **[Book_Availability_Realtime.md](Book_Availability_Realtime.md)** – Public inventory stream with replay
+| Document                                      | What it covers                                                                                                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Borrowing System](Borrowing_System.md)       | Reservation-first lifecycle, counter model, all status transitions, lazy expiry, cron expiry, eligibility checks, realtime behavior, admin UI behavior, record dismissal                   |
+| [Book Catalog](Book_Catalog.md)               | Book data model, counter-based availability, display components, search and filtering, admin CRUD, real-time availability, caching                                                         |
+| [User Profile](User_Profile.md)               | Profile data model, avatar upload, account status flow, borrow history, dismissal, activity tracking, admin user management                                                                |
+| [Receipt Generation](Receipt_Generation.md)   | `Receipt` type, `generateReceipt()` vs `getReceipt()`, `ReceiptModal`, PDF generation, rate limits, authorization                                                                          |
+| [Email Notifications](Email_Notifications.md) | EmailJS setup, all five email templates and their triggers, Upstash Workflow return reminder, fire-and-forget pattern                                                                      |
+| [File Uploads](File_Uploads.md)               | ImageKit config, `useAvatarUpload` hook, full upload flow, `AvatarUploadControls`/`ImageCropper` two-mode architecture, university card upload, book cover upload, validation, rate limits |
 
-### Updated Existing Docs
+---
 
-- **[Admin_Dashboard.md](Admin_Dashboard.md)** – New UI improvements, lock handling, navigation patterns
-- **[Admin_Dashboard_Optimization.md](Admin_Dashboard_Optimization.md)** – Cron job enhancements, batch operations
-- **[Admin_Dashboard_Realtime.md](Admin_Dashboard_Realtime.md)** – Links to row-level realtime docs
-- **[Authentication.md](Authentication.md)** – Signup flow improvements, async patterns
-- **[Borrowing_System.md](Borrowing_System.md)** – Atomic operations with realtime events
-- **[User_Profile.md](User_Profile.md)** – Avatar update error handling, rate limits
-- **[API_Reference.md](API_Reference.md)** – References to realtime API endpoints
+### Admin Dashboard
 
-## 🔄 Recent Changes Summary
+| Document                                                        | What it covers                                                                                                                                            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Admin Dashboard](Admin_Dashboard.md)                           | Dashboard layout, `SessionGuard`, statistics, user/book/borrow management, row locking overview, correct API endpoint paths, aspirational features marked |
+| [Admin Dashboard Optimization](Admin_Dashboard_Optimization.md) | `PartialTableWrapper`, `RowSkeleton`, table header components, `SearchContext`, optimistic borrow updates, paginated borrow query                         |
+| [Admin Dashboard Realtime](Admin_Dashboard_Realtime.md)         | Redis pub/sub signal-and-refresh pattern, per-instance broker, SSE stream, `useAdminDashboardRealtime` hook, environment variables, failure modes         |
 
-### Breaking Changes
+---
 
-- `useRealtimeUpdates` now requires `items` prop (was optional)
+### Realtime System
 
-### Non-Breaking Improvements
+| Document                                                    | What it covers                                                                                                                                                                   |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Realtime System Guide](Realtime_System_Guide.md)           | Complete overview with architecture diagram, all three subsystems, key concepts, event flow examples, configuration, troubleshooting                                             |
+| [Realtime Client SSE](Realtime_Client_SSE.md)               | Singleton `EventSource`, reference counting, exponential backoff, heartbeat detection, periodic resync, connection state machine                                                 |
+| [Admin Row Concurrency](Admin_Row_Concurrency.md)           | Redis-backed distributed locks, `acquireLock`/`refreshLock`/`releaseLock`, Lua scripts, `assertLockOwnership`, `LockOwnershipError`, `updateWithVersionCheck`, `useRowLock` hook |
+| [Admin Realtime Events](Admin_Realtime_Events.md)           | `AdminRealtimeRowEvent`, `AdminRealtimeLockEvent`, `AdminRealtimeHeartbeatEvent`, channels, SSE encoding, type guards, event flow                                                |
+| [Admin Realtime API Routes](Admin_Realtime_API_Routes.md)   | `GET /api/admin/realtime/rows`, `GET /api/admin/sync`, `GET\|POST\|PATCH\|DELETE /api/admin/locks` — full request/response documentation                                         |
+| [Realtime Hooks](Realtime_Hooks.md)                         | `useRealtimeCore`, `useRowLock`, `useRealtimeUpdates`, `useOptimisticUpdate` — signatures, lifecycle, usage examples                                                             |
+| [Realtime Book Availability](Realtime_Book_Availability.md) | Supplementary detail on the public book stream — SSE wire format, `Last-Event-ID` replay, server architecture, client-side usage                                                 |
+| [Admin Session Invalidation](Admin_Session_Invalidation.md) | `session_version` column, `publishRoleChangeEvent`, SSE stream events, `useSessionInvalidation` hook, `SessionGuard` component, security notes                                   |
 
-- Lock conflict handling returns proper HTTP 409 status
-- Realtime publishing never fails user operations
-- All API responses now capture and return necessary fields for realtime events
-- Improved type safety with `LockOwnershipError` class
-- Enhanced accessibility in UI components
+---
 
-### Database Migration
+### API Reference
 
-- `0006_admin_realtime_concurrency.sql` upgraded with:
-  - Batched backfill to avoid locking entire tables
-  - Explicit Phase 1/2/3 approach for safety
-  - Applied to `borrow_records`, `books`, and `users` tables
+| Document                          | What it covers                                                                                                                                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [API Reference](API_Reference.md) | Complete endpoint catalogue: setup, auth, borrowing, book stream, cron, user, admin dashboard, admin session, admin realtime, admin book/user server actions, receipts, status types, rate limit summary |
 
-## 🎯 By Use Case
+---
 
-### "I want to understand how realtime works in BookWise"
+### System Setup
 
-→ Start with [Realtime_System_Guide.md](Realtime_System_Guide.md)
+| Document                                                                 | What it covers                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Bookwise Setup Feature](Bookwise_Setup_Feature.md)                      | One-time initialization flow, `/account` + `/setup` pages, `POST /api/setup`, CTE transaction stages, `app_settings` schema summary, security model, avatar upload in setup context                                                                            |
+| [Components, Actions & Client Systems](Bookwise_Global_Configuration.md) | `AdminAuthForm`, `ImageCropper`, `AvatarUploadControls`, `UserProfile`, `ReceiptModal`, `SystemConfigProvider`, `Sidebar`, `useAvatarUpload` hook, `systemConfigStore`, all server actions (`borrowBook`, `generateReceipt`, user management), `getCroppedImg` |
 
-### "I'm debugging SSE connection issues"
+---
 
-→ See [Realtime_Client_SSE.md](Realtime_Client_SSE.md) → Troubleshooting section
+### Performance
 
-### "I need to implement row locking"
+| Document                                                        | What it covers                                                                                                                                                       |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Performance Improvements](Performance_Improvements.md)         | Bundle splitting (lazy components), `PrefetchOnIntentLink`, LCP image size constants, search/pagination URL helpers, borrow status CTE compatibility, impact summary |
+| [Cache and Search Consistency](Cache_and_Search_Consistency.md) | `CACHE_TAGS`, all cached query helpers, complete revalidation call-site tables, search query routing, `SearchFilter` URL pattern, admin dashboard parallel queries   |
+| [Top Loader Navigation](Top_Loader_Navigation.md)               | `nprogress` integration with App Router, click detection, route-change synchronisation, `navigateWithTopLoader`, edge cases, maintenance notes                       |
 
-→ Read [Admin_Row_Concurrency.md](Admin_Row_Concurrency.md) → Now includes error handling patterns
+---
 
-### "I'm building a realtime table component"
+### Rate Limiting
 
-→ Use [Realtime_Hooks.md](Realtime_Hooks.md) → Updated with `items` prop requirements
+| Document                          | What it covers                                                                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Rate Limiting](Rate_Limiting.md) | All rate limit instances and configurations, identity model, SSE connection leases, algorithm selection rationale, `SKIP_RATE_LIMIT` warning, response headers, best practices |
 
-### "I want to integrate public book availability updates"
+---
 
-→ Follow [Book_Availability_Realtime.md](Book_Availability_Realtime.md)
+### Testing
 
-### "I need API endpoint documentation"
+| Document                                                        | What it covers                                                                                                                                                        |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [TESTING](TESTING.md)                                           | Playwright E2E: philosophy, architecture, fixture inheritance, mocking strategy, all critical user journeys, best practices, CI/CD workflow, debugging, anti-patterns |
+| [UNIT AND INTEGRATION TESTING](UNIT_AND_INTEGRATION_TESTING.md) | Vitest unit + integration: test pyramid, configuration, `InMemoryDb` mock, fixture factories, assertion helpers, all test file deep dives, CI/CD integration          |
 
-→ Check [Admin_Realtime_API_Routes.md](Admin_Realtime_API_Routes.md) → Now documents 409 Conflict responses
+---
 
-### "I'm troubleshooting admin dashboard refresh"
+## By Use Case
 
-→ See [Admin_Dashboard_Realtime.md](Admin_Dashboard_Realtime.md)
+### "I want to understand how the system works end-to-end"
 
-### "I'm implementing user-facing features"
+→ [Architecture](Architecture.md) → [Database](Database.md) → [Borrowing System](Borrowing_System.md)
 
-→ See [Authentication.md](Authentication.md), [User_Profile.md](User_Profile.md), [Borrowing_System.md](Borrowing_System.md)
+### "I'm setting up the project for the first time"
 
-## 📋 File Naming Convention
+→ [Deployment](Deployment.md) → [Bookwise Setup Feature](Bookwise_Setup_Feature.md)
 
-All new realtime documentation follows clear naming:
+### "I'm debugging a realtime / SSE issue"
+
+→ [Realtime System Guide](Realtime_System_Guide.md) → [Realtime Client SSE](Realtime_Client_SSE.md) (Troubleshooting section)
+
+### "I need to understand the admin row locking system"
+
+→ [Admin Row Concurrency](Admin_Row_Concurrency.md) → [Admin Realtime API Routes](Admin_Realtime_API_Routes.md)
+
+### "I'm building a new admin table component"
+
+→ [Realtime Hooks](Realtime_Hooks.md) → [Admin Realtime Events](Admin_Realtime_Events.md) → [Admin Dashboard](Admin_Dashboard.md)
+
+### "I need to add a new API endpoint"
+
+→ [API Reference](API_Reference.md) → [Authorization](Authorization.md) → [Rate Limiting](Rate_Limiting.md)
+
+### "I'm investigating a database / inventory inconsistency"
+
+→ [Database](Database.md) → [Borrowing System](Borrowing_System.md)
+
+### "I need to work on the avatar upload flow"
+
+→ [File Uploads](File_Uploads.md) → [Components, Actions & Client Systems](Bookwise_Global_Configuration.md#useavatarupload)
+
+### "I'm implementing or debugging session invalidation"
+
+→ [Admin Session Invalidation](Admin_Session_Invalidation.md) → [Authentication](Authentication.md#real-time-session-invalidation)
+
+### "I'm working on the public book availability stream"
+
+→ [Book Availability Realtime](Book_Availability_Realtime.md) → [Realtime Book Availability](Realtime_Book_Availability.md)
+
+### "I'm writing or debugging tests"
+
+→ [TESTING](TESTING.md) (E2E) or [UNIT AND INTEGRATION TESTING](UNIT_AND_INTEGRATION_TESTING.md) (unit/integration)
+
+### "I need to troubleshoot the admin dashboard not refreshing"
+
+→ [Admin Dashboard Realtime](Admin_Dashboard_Realtime.md) (Troubleshooting section)
+
+---
+
+## Key Concepts Map
 
 ```
-Realtime_*           → Client/connection layer
-Admin_*              → Admin-specific features
-Book_Availability_*  → Public inventory stream
-Authentication_*     → Auth & account management
-User_*              → User-facing features
-DOCUMENTATION_*     → Index and reference
+Architecture (overview)
+    ├── Database (schema + queries)
+    ├── Authentication (session + JWT)
+    ├── Authorization (RBAC + locks)
+    │
+    ├── Borrowing System (core domain)
+    │       ├── Book Catalog (inventory model)
+    │       ├── Receipt Generation
+    │       └── Email Notifications
+    │
+    ├── Admin Dashboard
+    │       ├── Admin Dashboard Optimization
+    │       └── Admin Dashboard Realtime
+    │
+    ├── Realtime System Guide (overview)
+    │       ├── Realtime Client SSE
+    │       ├── Admin Row Concurrency
+    │       ├── Admin Realtime Events
+    │       ├── Admin Realtime API Routes
+    │       ├── Realtime Hooks
+    │       ├── Book Availability Realtime
+    │       └── Admin Session Invalidation
+    │
+    ├── Performance
+    │       ├── Performance Improvements
+    │       ├── Cache and Search Consistency
+    │       └── Top Loader Navigation
+    │
+    └── Setup
+            ├── Bookwise Setup Feature
+            └── Components, Actions & Client Systems
 ```
 
-## 🔗 Key Concepts Map
+---
+
+## Document File Naming Convention
 
 ```
-Realtime_System_Guide (Overview)
-    ├─ Realtime_Client_SSE (Low-level connection)
-    ├─ Admin_Row_Concurrency (Locking + error handling)
-    ├─ Admin_Realtime_Events (Event schema)
-    ├─ Admin_Realtime_API_Routes (API endpoints)
-    ├─ Realtime_Hooks (React hooks)
-    ├─ Book_Availability_Realtime (Public stream)
-    └─ Admin_Dashboard (UI patterns)
+Architecture_*.md        → System-wide architecture documents
+Admin_*.md               → Admin-specific features and infrastructure
+Realtime_*.md            → Client/connection realtime layer
+Book_*.md                → Book catalog and availability
+Bookwise_*.md            → Application-wide configuration and setup
+TESTING.md               → E2E test guide (Playwright)
+UNIT_AND_INTEGRATION_TESTING.md → Unit/integration test guide (Vitest)
 ```
 
-## 📊 Document Statistics
+---
 
-| File                          | Focus             | Status      |
-| ----------------------------- | ----------------- | ----------- |
-| Realtime_System_Guide.md      | Complete overview | Complete    |
-| Realtime_Client_SSE.md        | SSE connection    | Complete    |
-| Admin_Row_Concurrency.md      | Locking system    | **Updated** |
-| Admin_Realtime_Events.md      | Event schema      | Complete    |
-| Admin_Realtime_API_Routes.md  | API endpoints     | **Updated** |
-| Realtime_Hooks.md             | React hooks       | **Updated** |
-| Book_Availability_Realtime.md | Public stream     | **Updated** |
-| Admin_Dashboard.md            | UI patterns       | **Updated** |
-| Admin_Dashboard_Optimization  | Cron jobs         | **Updated** |
-| Authentication.md             | Auth flow         | **Updated** |
-| Borrowing_System.md           | Borrow logic      | **Updated** |
-| User_Profile.md               | User avatar       | **Updated** |
+## Document Health
 
-## 🔍 What's Documented
+All documents were audited against source code in June 2026. The following known gaps are tracked for future resolution:
 
-✅ Singleton EventSource implementation
-✅ Reference counting for multiple consumers
-✅ Exponential backoff reconnection strategy
-✅ Heartbeat-based stale detection
-✅ **Lock ownership errors with type safety**
-✅ **Best-effort realtime event publishing**
-✅ **Graceful lock cleanup and error recovery**
-✅ Redis-backed distributed locking
-✅ Version-based conflict detection
-✅ Optimistic updates with rollback
-✅ Event replay for late subscribers
-✅ Rate limiting per IP
-✅ Type guards and validation
-✅ All API endpoints
-✅ All React hooks
-✅ Error handling strategies (NEW)
-✅ Troubleshooting guides
-✅ Best practices
-✅ Performance considerations
-✅ Complete code examples
-✅ Accessibility improvements (NEW)
-
-## 🚀 Implementation Guide
-
-### To Implement Admin Row Realtime
-
-1. Read [Admin_Row_Concurrency.md](Admin_Row_Concurrency.md) for locking concept + error handling
-2. Review [Realtime_Hooks.md](Realtime_Hooks.md) for hook usage with `items` prop
-3. Check [Admin_Realtime_API_Routes.md](Admin_Realtime_API_Routes.md) for endpoints and error codes
-4. Review [Admin_Dashboard.md](Admin_Dashboard.md) for UI component patterns
-5. Implement with error handling from [Authentication.md](Authentication.md), [Borrowing_System.md](Borrowing_System.md)
-
-## 🔄 Migration Notes
-
-### v2.0 - Lock Error Handling
-
-**Before**:
-
-```typescript
-await assertLockOwnership(...);  // Throws generic Error
-```
-
-**After**:
-
-```typescript
-try {
-  await assertLockOwnership(...);
-} catch (error) {
-  if (error instanceof LockOwnershipError) {
-    return NextResponse.json({ error: error.message }, { status: 409 });
-  }
-  throw error;
-}
-```
-
-### v2.0 - useRealtimeUpdates items prop
-
-**Before** (optional):
-
-```typescript
-useRealtimeUpdates({
-  entity: "books",
-  setItems: setSortedData,
-  // ...
-});
-```
-
-**After** (required):
-
-```typescript
-useRealtimeUpdates({
-  entity: "books",
-  items: sortedData, // NOW REQUIRED
-  setItems: setSortedData,
-  // ...
-});
-```
-
-### v2.0 - Avatar Update Response
-
-**Before**:
-
-```typescript
-await db.update(users).set({...});  // Returned void
-```
-
-**After**:
-
-```typescript
-const [updatedUser] = await db
-  .update(users)
-  .set({...})
-  .returning({ status: users.status });  // Capture status for routing
-```
-
+| Item                                                                           | Status                                                                   |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Migration files `0001`–`0003` contents                                         | Not documented — Verification Required                                   |
+| `GET /api/user/profile` / `PUT /api/user/profile` — API route vs server action | Verification Required; noted in `API_Reference.md` and `User_Profile.md` |
+| QStash retry policy configuration                                              | Configured in Upstash dashboard; noted in `Email_Notifications.md`       |

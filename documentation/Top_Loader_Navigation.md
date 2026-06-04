@@ -1,184 +1,223 @@
 # Top Loader Navigation
 
-This document explains the App Router top loading bar behavior built with `nprogress` for BookWise.
+This document explains the app-wide top loading bar built with `nprogress` for BookWise. The loader is part of the broader performance layer described in [Performance Improvements](Performance_Improvements.md). For intent-based route prefetching (which pairs with the loader), see the `PrefetchOnIntentLink` section in [Performance Improvements](Performance_Improvements.md#intent-based-route-prefetching).
+
+---
 
 ## Overview
 
 The top loader is designed to feel immediate and smooth during client-side navigation:
 
-- Start on link click before the route transition begins
-- Keep progressing while navigation is in flight
-- Finish only after the destination route has committed and the new UI has painted
-- Avoid restarting on repeated clicks or same-route navigations
-- Handle browser back and forward navigation
+- Starts on link click **before** the route transition begins
+- Keeps progressing while navigation is in flight
+- Finishes only after the destination route has committed and the new UI has painted
+- Avoids restarting on repeated clicks or same-route navigations
+- Handles browser back and forward navigation
+
+---
 
 ## Files Involved
 
-- `components/TopLoader.tsx`
-  - Global client-side observer for click, route-change, and history navigation events
-- `lib/performance/top-loader.ts`
-  - Shared NProgress controller and navigation helper utilities
-- `lib/performance/PrefetchOnIntentLink.tsx`
-  - Reusable internal link wrapper that prefetches routes on user intent
-- `components/SearchFilter.tsx`
-  - Uses the shared loader helper for query-string route replacement
-- `components/AuthForm.tsx`
-  - Uses the shared loader helper for post-login navigation and loader-aware links
-- `components/admin/forms/BookForm.tsx`
-  - Uses the shared loader helper for post-submit route navigation
-- `app/(root)/layout.tsx`
-  - Mounts the `TopLoader` component in the main protected app layout
-- `app/styles/globals.css`
-  - Customizes the `nprogress` bar appearance
+| File | Role |
+|---|---|
+| `components/TopLoader.tsx` | Global client-side observer for click, route-change, and history events |
+| `lib/performance/top-loader.ts` | Shared NProgress controller and navigation helper utilities |
+| `lib/performance/PrefetchOnIntentLink.tsx` | Reusable internal link wrapper that prefetches on hover/focus/touch intent |
+| `components/SearchFilter.tsx` | Uses `navigateWithTopLoader` for query-string route replacement |
+| `components/AuthForm.tsx` | Uses `navigateWithTopLoader` for post-login navigation |
+| `components/admin/forms/BookForm.tsx` | Uses `navigateWithTopLoader` for post-submit route navigation |
+| `app/(root)/layout.tsx` | Mounts `<TopLoader />` in the main protected app layout |
+| `app/styles/globals.css` | Customises the `nprogress` bar appearance |
 
-## Synchronization Model
+---
 
-### 1. Click start
+## Synchronisation Model
 
-`components/TopLoader.tsx` listens for document-level anchor clicks in the capture phase.
+### 1. Click Detection
+
+`components/TopLoader.tsx` listens for document-level anchor clicks in the **capture phase** (before any element handler fires).
 
 Before starting the loader, it checks:
 
-- The click is a primary left-click
-- No modifier keys are pressed
-- The link is internal
-- The link is not a download
-- The link target is not opening in a new tab/window
-- The destination is different from the current route
+- The click is a primary left-click (button 0)
+- No modifier keys are held (`Ctrl`, `Shift`, `Meta`, `Alt`)
+- The link is internal (same origin)
+- The link is not a download (`download` attribute absent)
+- The link target is not opening in a new tab/window (`target !== "_blank"`)
+- The destination differs from the current route (same-route navigations are skipped)
 
-If the navigation is valid, the loader starts immediately through `startTopLoaderForHref()`.
+If all checks pass, `startTopLoaderForHref()` is called immediately on click.
 
-### 2. Route change
+### 2. Route Change Detection
 
-`TopLoader` also watches:
+`TopLoader` also subscribes to:
 
-- `usePathname()`
-- `useSearchParams()`
+- `usePathname()` — detects `pathname` changes
+- `useSearchParams()` — detects query string changes
 
-When either changes, a route key is rebuilt from:
+When either changes, a composite route key (`pathname + searchParams`) is rebuilt. A change in this key signals that navigation has committed. At that point:
 
-```ts
-pathname + searchParams
-```
+- `bumpTopLoaderForRouteCommit()` advances the bar toward completion
+- `completeTopLoader()` is scheduled to finish the bar
 
-That route key is used to signal that navigation has committed. At that point:
+### 3. Render Completion Timing
 
-- progress is bumped forward with `bumpTopLoaderForRouteCommit()`
-- the loader is prepared to finish with `completeTopLoader()`
+`completeTopLoader()` does not finish the bar immediately when the URL changes. It waits for:
 
-### 3. Render completion
+- Two `requestAnimationFrame()` cycles (ensures the new route's content has had a chance to paint)
+- A minimum visible duration (prevents the bar from disappearing before the user notices it)
+- A small finish delay (smooths the visual transition)
 
-The loader does not complete immediately when the URL changes.
+This sequence ensures the bar finishes **after** the new UI renders, rather than the moment the URL updates.
 
-Instead, `completeTopLoader()` waits for:
-
-- two `requestAnimationFrame()` cycles
-- a minimum visible duration
-- a small finish delay
-
-This ensures the bar finishes after the new UI has had a chance to paint, which makes the transition feel much more natural.
+---
 
 ## Shared Controller
 
-`lib/performance/top-loader.ts` centralizes all NProgress state so multiple navigation sources stay consistent.
+`lib/performance/top-loader.ts` centralises all NProgress state so that multiple navigation sources (link clicks, form submissions, filter changes) remain consistent.
 
-### Key behaviors
+### Key Behaviours
 
-- Configures `nprogress` once
-- Tracks whether a navigation is already active
-- Prevents duplicate starts
-- Adds a small progress bump on rapid repeated clicks
-- Cancels any pending completion if a newer navigation begins
-- Supports both click-driven and imperative router navigation
+- Configures `nprogress` once at module load time
+- Tracks whether a navigation is already active to prevent duplicate starts
+- Adds a small progress bump on rapid repeated clicks (instead of restarting)
+- Cancels any pending completion if a newer navigation begins mid-flight
+- Supports both click-driven and imperative `router.push` / `router.replace` navigation
 
-### Main exported helpers
+### Exported Helpers
 
-- `shouldStartProgressForAnchorClick()`
-  - Guards whether a clicked anchor should start the loader
-- `startTopLoader()`
-  - Starts the loader for generic navigations such as `popstate`
-- `startTopLoaderForHref()`
-  - Starts the loader for a specific internal href
-- `bumpTopLoaderForRouteCommit()`
-  - Advances progress after the new route has committed
-- `completeTopLoader()`
-  - Finishes the loader after paint and smoothing delays
-- `navigateWithTopLoader()`
-  - Wrapper around `router.push()` and `router.replace()`
+```typescript
+// Guards whether a clicked anchor should start the loader
+shouldStartProgressForAnchorClick(event: MouseEvent, href: string): boolean
+
+// Starts the loader for a specific internal href (link clicks)
+startTopLoaderForHref(href: string): void
+
+// Starts the loader for generic navigations (popstate / back-forward)
+startTopLoader(): void
+
+// Advances progress after the new route has committed
+bumpTopLoaderForRouteCommit(): void
+
+// Finishes the loader after paint and smoothing delays
+completeTopLoader(): void
+
+// Wrapper around router.push() / router.replace() that also starts the loader
+navigateWithTopLoader(
+  router: AppRouterInstance,
+  method: "push" | "replace",
+  href: string,
+  options?: NavigateOptions,
+): void
+```
+
+---
 
 ## Reusable Link Pattern
 
-`lib/performance/PrefetchOnIntentLink.tsx` remains the reusable link wrapper for internal navigation.
+`lib/performance/PrefetchOnIntentLink.tsx` is the standard internal link wrapper for the application. Its responsibilities are:
 
-Its job is to prefetch routes on:
+- **Prefetching** — calls `router.prefetch(href)` on hover, focus, or touch start
+- **Loader start** — delegates to `startTopLoaderForHref()` on click via `TopLoader`'s document-level listener (no duplication — `PrefetchOnIntentLink` does not start the loader itself)
 
-- hover
-- focus
-- touch start
+This separation keeps link behaviour consistent: prefetching is handled by the link component; loader control is handled globally by `TopLoader`.
 
-This keeps link behavior reusable while the loader start logic stays global in `TopLoader`, giving consistent behavior even if a route is triggered from different internal link shapes.
+---
 
-## Imperative Navigation Support
+## Imperative Navigation
 
-Not all navigations come from links. Some come from form submissions or filter changes.
+Not all navigations originate from anchor clicks. Some come from form submissions, filter changes, and programmatic redirects. These use `navigateWithTopLoader`:
 
-Those flows use:
+```typescript
+// components/SearchFilter.tsx — filter change
+navigateWithTopLoader(router, "replace", newHref);
 
-```ts
-navigateWithTopLoader(router, "push" | "replace", href, options)
+// components/AuthForm.tsx — post-login redirect
+navigateWithTopLoader(router, "push", "/");
+
+// components/admin/forms/BookForm.tsx — post-submit redirect
+navigateWithTopLoader(router, "push", "/admin/books");
 ```
 
-This keeps imperative navigations aligned with link-based navigations so the loading bar behavior stays consistent across the app.
+Using `navigateWithTopLoader` keeps all imperative navigations aligned with link-based navigations so the bar behaviour is consistent regardless of how the route change is triggered.
+
+---
 
 ## Edge Cases Handled
 
-### Rapid multiple clicks
+### Rapid Multiple Clicks
 
-If the loader is already active, it does not restart. Instead, it increments slightly to preserve forward momentum.
+If the loader is already active when a second click arrives, it does not restart. Instead it increments slightly to preserve forward momentum and avoid a jarring reset.
 
-### Same route navigation
+### Same-Route Navigation
 
-If the clicked href resolves to the current pathname and search string, the loader does not start.
+If the clicked `href` resolves to the current `pathname + searchParams`, the loader does not start. `shouldStartProgressForAnchorClick` returns `false` for this case.
 
-### Back and forward navigation
+### Back and Forward Navigation
 
-`TopLoader` listens to `popstate` and starts the loader immediately for browser history navigation.
+`TopLoader` listens for the `popstate` event and calls `startTopLoader()` immediately, so browser history navigation also gets the loading bar treatment.
 
-### External links and new tabs
+### External Links and New Tabs
 
 The loader is skipped for:
 
-- external origins
-- modified clicks
-- non-primary clicks
-- links with `target` other than `_self`
-- download links
+- Links with a different origin
+- Clicks with modifier keys held
+- Non-primary-button clicks
+- Links with `target` other than `_self`
+- Links with the `download` attribute
+
+---
 
 ## Styling
 
 The `nprogress` bar is styled in `app/styles/globals.css`.
 
-Current styling includes:
+Current styling:
 
-- 4px top bar height
-- warm orange gradient
-- glowing peg
-- pointer-events disabled
-- smoother transform and opacity transitions
+- **Height:** 4px top bar
+- **Color:** warm orange gradient
+- **Peg:** glowing right-edge indicator
+- **Pointer events:** disabled (bar does not intercept clicks)
+- **Transitions:** smooth transform and opacity easing
 
-## Why This Works Well With App Router
+---
 
-The Next.js App Router does not expose `router.events`, so the loader is synchronized by combining:
+## Why This Works with App Router
 
-- immediate click intent detection
-- route key observation using `usePathname()` and `useSearchParams()`
-- post-paint completion timing
+The Next.js App Router does not expose `router.events` (which existed in the Pages Router). The top loader is synchronised instead by combining:
 
-This gives a responsive loading experience without relying on APIs that are unavailable in the App Router.
+1. **Immediate click intent detection** — capture-phase listener starts the bar before the transition begins
+2. **Route key observation** — `usePathname` + `useSearchParams` detects when navigation has committed
+3. **Post-paint completion timing** — `requestAnimationFrame` + delays finish the bar after content renders
+
+This gives a responsive, accurate loading experience without relying on any APIs that are unavailable in App Router.
+
+---
 
 ## Maintenance Notes
 
-- Keep `TopLoader` mounted at a shared layout level where it can observe route changes globally.
-- Use `PrefetchOnIntentLink` for internal links when possible.
-- Use `navigateWithTopLoader()` for imperative client-side navigations.
-- If additional route transitions are introduced, wire them through the shared helper rather than calling `NProgress` directly.
+- Mount `<TopLoader />` at a shared layout level (currently `app/(root)/layout.tsx`) so it can observe route changes across all protected pages.
+- Use `PrefetchOnIntentLink` for internal navigation links wherever possible.
+- Use `navigateWithTopLoader(router, "push" | "replace", href)` for all programmatic client-side navigations — never call `router.push` or `router.replace` directly in components that should show the loading bar.
+- If new route groups are added, verify `TopLoader` is mounted in their layout if they contain client-navigable content.
+- Do not call `NProgress` methods directly from components — always go through the shared helpers in `lib/performance/top-loader.ts` to keep state consistent.
+
+---
+
+## Related Documentation
+
+- [Performance Improvements](Performance_Improvements.md) — bundle splitting, LCP, and prefetch link
+- [Cache and Search Consistency](Cache_and_Search_Consistency.md) — `SearchFilter` uses `navigateWithTopLoader` alongside `router.replace`
+- [Architecture](Architecture.md) — `TopLoader` listed in the components tree under `components/TopLoader.tsx`
+
+## Related Files
+
+- `components/TopLoader.tsx`
+- `lib/performance/top-loader.ts`
+- `lib/performance/PrefetchOnIntentLink.tsx`
+- `components/SearchFilter.tsx`
+- `components/AuthForm.tsx`
+- `components/admin/forms/BookForm.tsx`
+- `app/(root)/layout.tsx`
+- `app/styles/globals.css`
